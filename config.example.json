@@ -1,0 +1,33 @@
+{
+  "irc": {
+    "host": "0.0.0.0",
+    "port": 6667,
+    "server_name": "peerchat.ea.com"
+  },
+  "fesl": {
+    "host": "0.0.0.0",
+    "port": 18800
+  },
+  "gp": {
+    "host": "0.0.0.0",
+    "port": 29900
+  },
+  "natneg": {
+    "host": "0.0.0.0",
+    "port": 27901,
+    "enabled": true,
+    "force_lan_mode": true
+  },
+  "master": {
+    "host": "0.0.0.0",
+    "port": 28910,
+    "udp_port": 27900,
+    "enabled": true
+  },
+  "game": {
+    "gamekey": "YOUR_GAME_KEY"
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}
