@@ -28,7 +28,7 @@ sqlmodel==0.0.24
 starlette==0.46.2
 typing-inspection==0.4.1
 typing_extensions==4.14.0
-uvicorn==0.34.3
+uvicorn[standard]==0.34.3
 pytest==8.2.2
 pytest-cov==6.0.0
 pyinstaller>=6.1.0,<7.0.0

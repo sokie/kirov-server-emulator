@@ -117,11 +117,12 @@ app.include_router(rest_router, prefix="/api/rest")
 # Mount the SOAP router (native FastAPI integration)
 app.include_router(soap_router)
 
-# Mount the static files directory
-static_path = os.path.join(get_base_path(), "static")
-app.mount("/", StaticFiles(directory=static_path), name="static")
-
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+# Mount the static files directory LAST (it's a catch-all for `/`)
+static_path = os.path.join(get_base_path(), "static")
+app.mount("/", StaticFiles(directory=static_path, html=True), name="static")

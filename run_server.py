@@ -19,11 +19,14 @@ def main():
     from app.main import app
 
     # Run the server
+    # Use httptools instead of h11 to avoid h11 state machine issues
+    # (h11 0.16.0 has stricter state handling that can cause errors)
     uvicorn.run(
         app,
         host="0.0.0.0",
         port=80,
         log_level="info",
+        http="httptools",
     )
 
 
