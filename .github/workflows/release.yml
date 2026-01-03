@@ -22,11 +22,11 @@ jobs:
             artifact_name: kirov-server-windows-amd64
             executable_name: kirov-server.exe
             archive_ext: zip
-          - os: macos-13
+          - os: macos-15-intel
             artifact_name: kirov-server-macos-intel
             executable_name: kirov-server
             archive_ext: tar.gz
-          - os: macos-14
+          - os: macos-15
             artifact_name: kirov-server-macos-arm64
             executable_name: kirov-server
             archive_ext: tar.gz
