@@ -15,8 +15,8 @@ class PeerchatCipher:
     def makeChallenge():
         ## from ';' to '~' -- this is pretty close to exact range.
         ## ':' at the beginning is def. not included (IRC significance)
-        alphabet = ''.join(chr(i) for i in range(ord(';'), ord('~')))
-        return ''.join(random.choice(alphabet) for _ in range(16))
+        alphabet = "".join(chr(i) for i in range(ord(";"), ord("~")))
+        return "".join(random.choice(alphabet) for _ in range(16))
 
     def __init__(self, challenge, gamekey):
         self.challenge = challenge
@@ -26,7 +26,7 @@ class PeerchatCipher:
         gamekey = [ord(x) for x in gamekey]
         chall = [ord(challenge[i]) ^ gamekey[i % len(gamekey)] for i in range(len(challenge))]
 
-        self.table = [x for x in reversed(range(256))]
+        self.table = list(reversed(range(256)))
         # scramble up the table based on challenge
         tmp = 0
         for i in range(len(self.table)):
@@ -38,7 +38,7 @@ class PeerchatCipher:
             self.table[i] = tmp2
 
     def crypt(self, data):
-        outdata = array('B')
+        outdata = array("B")
 
         for datum in data:
             self.pc1 = (self.pc1 + 1) & 0xFF
@@ -69,11 +69,10 @@ class PeerchatCipher:
 # --- For unit testing ---
 if __name__ == "__main__":
     from app.config.app_settings import app_config
+
     game_key = app_config.game.gamekey
 
-    client_challenge = 'bUjvfmi]RSITUbC?'
-    server_challenge = 'p^uHZUJDnDAhvOUP'
+    client_challenge = "bUjvfmi]RSITUbC?"
+    server_challenge = "p^uHZUJDnDAhvOUP"
     client_cipher = PeerchatCipher(client_challenge, game_key)
     server_cipher = PeerchatCipher(server_challenge, game_key)
-
-    

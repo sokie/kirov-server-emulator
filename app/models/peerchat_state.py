@@ -7,7 +7,7 @@ Extracted to break circular import between those modules.
 """
 
 import threading
-from typing import Dict, Any
+from typing import Any
 
 from app.models.irc_types import IRCChannel
 from app.util.logging_helper import get_logger
@@ -16,8 +16,8 @@ logger = get_logger(__name__)
 
 
 # Global state (thread-safe with locks)
-irc_channels: Dict[str, IRCChannel] = {}  # channel_name -> IRCChannel
-irc_clients: Dict[str, Any] = {}  # nickname -> IRCClient (Any to avoid circular import)
+irc_channels: dict[str, IRCChannel] = {}  # channel_name -> IRCChannel
+irc_clients: dict[str, Any] = {}  # nickname -> IRCClient (Any to avoid circular import)
 irc_clients_lock = threading.Lock()
 
 

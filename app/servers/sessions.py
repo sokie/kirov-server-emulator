@@ -11,18 +11,18 @@ import asyncio
 import socket
 import struct
 import time
-from typing import Dict, Optional, Tuple, Callable, Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-
-from app.servers.query_master_parsing import GameEntry
+from typing import Optional
 
 from app.models.natneg_types import (
-    NatNegSession,
     NatNegClient,
     NatNegClientConnection,
     NatNegClientIndex,
     NatNegPortType,
+    NatNegSession,
 )
+from app.servers.query_master_parsing import GameEntry
 from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
@@ -53,9 +53,9 @@ class SessionManager:
 
     def __init__(self):
         # Maps sesskey -> protocol_instance
-        self.active_users: Dict[str, asyncio.Protocol] = {}
+        self.active_users: dict[str, asyncio.Protocol] = {}
         # Maps persona_id -> protocol_instance (for buddy lookups)
-        self.users_by_persona: Dict[int, asyncio.Protocol] = {}
+        self.users_by_persona: dict[int, asyncio.Protocol] = {}
         logger.debug("Session Manager initialized")
 
     def register_user(self, sesskey: str, protocol_instance: asyncio.Protocol):
@@ -63,7 +63,7 @@ class SessionManager:
         self.active_users[sesskey] = protocol_instance
 
         # Also register by persona_id if available
-        if hasattr(protocol_instance, 'persona_id') and protocol_instance.persona_id:
+        if hasattr(protocol_instance, "persona_id") and protocol_instance.persona_id:
             self.users_by_persona[protocol_instance.persona_id] = protocol_instance
 
         logger.debug("User '%s' registered. Total active users: %d", sesskey, len(self.active_users))
@@ -73,13 +73,13 @@ class SessionManager:
         protocol_instance = self.active_users.get(sesskey)
         if protocol_instance:
             # Remove from persona mapping
-            if hasattr(protocol_instance, 'persona_id') and protocol_instance.persona_id:
+            if hasattr(protocol_instance, "persona_id") and protocol_instance.persona_id:
                 self.users_by_persona.pop(protocol_instance.persona_id, None)
 
             del self.active_users[sesskey]
             logger.debug("User '%s' unregistered. Total active users: %d", sesskey, len(self.active_users))
 
-    def get_user_by_persona_id(self, persona_id: int) -> Optional[asyncio.Protocol]:
+    def get_user_by_persona_id(self, persona_id: int) -> asyncio.Protocol | None:
         """Gets a user's protocol instance by their persona ID."""
         return self.users_by_persona.get(persona_id)
 
@@ -102,7 +102,7 @@ class SessionManager:
     async def send_to_persona(self, persona_id: int, message: str) -> bool:
         """Sends a message to a user by their persona ID."""
         protocol_instance = self.users_by_persona.get(persona_id)
-        if protocol_instance and hasattr(protocol_instance, 'transport'):
+        if protocol_instance and hasattr(protocol_instance, "transport"):
             protocol_instance.transport.write(message.encode("utf-8"))
             return True
         return False
@@ -116,6 +116,7 @@ class SessionManager:
 @dataclass
 class ClientEndpoint:
     """Represents a client's network endpoint."""
+
     ip: str
     port: int
 
@@ -140,16 +141,16 @@ class NatNegSessionManager:
 
     def __init__(self):
         # Session ID -> NatNegSession
-        self._sessions: Dict[int, NatNegSession] = {}
+        self._sessions: dict[int, NatNegSession] = {}
 
         # Client endpoint -> (session_id, client_index) for reverse lookup
-        self._client_endpoints: Dict[ClientEndpoint, Tuple[int, NatNegClientIndex]] = {}
+        self._client_endpoints: dict[ClientEndpoint, tuple[int, NatNegClientIndex]] = {}
 
         # Lock for thread safety
         self._lock = asyncio.Lock()
 
         # Callback for when session is ready (both clients registered)
-        self._on_session_ready: Optional[Callable[[NatNegSession], Awaitable[None]]] = None
+        self._on_session_ready: Callable[[NatNegSession], Awaitable[None]] | None = None
 
     def set_on_session_ready(self, callback: Callable[[NatNegSession], Awaitable[None]]):
         """Set callback to be called when a session has both clients ready."""
@@ -164,7 +165,7 @@ class NatNegSessionManager:
         public_port: int,
         local_ip: str,
         local_port: int,
-        game_name: str
+        game_name: str,
     ) -> NatNegSession:
         """
         Register a client connection for NAT negotiation.
@@ -192,42 +193,27 @@ class NatNegSessionManager:
                 public_port=public_port,
                 local_ip=local_ip,
                 local_port=local_port,
-                port_type=port_type
+                port_type=port_type,
             )
 
             endpoint = ClientEndpoint(public_ip, public_port)
 
             # Get or create session
             if session_id not in self._sessions:
-                session = NatNegSession(
-                    session_id=session_id,
-                    game_name=game_name,
-                    created_at=time.time()
-                )
+                session = NatNegSession(session_id=session_id, game_name=game_name, created_at=time.time())
                 self._sessions[session_id] = session
-                logger.info(
-                    "Created new NAT session %08X for game %s",
-                    session_id, game_name
-                )
+                logger.info("Created new NAT session %08X for game %s", session_id, game_name)
             else:
                 session = self._sessions[session_id]
 
             # Get or create client for this role (host/guest)
             if client_index == NatNegClientIndex.HOST:
                 if session.host is None:
-                    session.host = NatNegClient(
-                        session_id=session_id,
-                        client_index=client_index,
-                        game_name=game_name
-                    )
+                    session.host = NatNegClient(session_id=session_id, client_index=client_index, game_name=game_name)
                 client = session.host
             else:
                 if session.guest is None:
-                    session.guest = NatNegClient(
-                        session_id=session_id,
-                        client_index=client_index,
-                        game_name=game_name
-                    )
+                    session.guest = NatNegClient(session_id=session_id, client_index=client_index, game_name=game_name)
                 client = session.guest
 
             # Add this connection to the client
@@ -235,8 +221,13 @@ class NatNegSessionManager:
 
             logger.debug(
                 "Session %08X %s port_type=%d: %s:%d (local: %s:%d)",
-                session_id, client_index.name, port_type,
-                public_ip, public_port, local_ip, local_port
+                session_id,
+                client_index.name,
+                port_type,
+                public_ip,
+                public_port,
+                local_ip,
+                local_port,
             )
 
             # Track endpoint for reverse lookup
@@ -245,20 +236,23 @@ class NatNegSessionManager:
             # Check if session is ready (both clients have valid connections)
             if session.is_ready() and not session.connect_sent:
                 logger.info(
-                    "Session %08X is ready! Both clients registered. Same LAN: %s",
-                    session_id, session.are_same_lan()
+                    "Session %08X is ready! Both clients registered. Same LAN: %s", session_id, session.are_same_lan()
                 )
                 logger.info(
                     "Session %08X - Host best conn: %s:%d (local: %s:%d)",
                     session_id,
-                    session.host.public_ip, session.host.public_port,
-                    session.host.local_ip, session.host.local_port
+                    session.host.public_ip,
+                    session.host.public_port,
+                    session.host.local_ip,
+                    session.host.local_port,
                 )
                 logger.info(
                     "Session %08X - Guest best conn: %s:%d (local: %s:%d)",
                     session_id,
-                    session.guest.public_ip, session.guest.public_port,
-                    session.guest.local_ip, session.guest.local_port
+                    session.guest.public_ip,
+                    session.guest.public_port,
+                    session.guest.local_ip,
+                    session.guest.local_port,
                 )
                 session.connect_sent = True
 
@@ -274,16 +268,12 @@ class NatNegSessionManager:
         if self._on_session_ready:
             await self._on_session_ready(session)
 
-    async def get_session(self, session_id: int) -> Optional[NatNegSession]:
+    async def get_session(self, session_id: int) -> NatNegSession | None:
         """Get a session by its ID."""
         async with self._lock:
             return self._sessions.get(session_id)
 
-    async def get_session_by_endpoint(
-        self,
-        ip: str,
-        port: int
-    ) -> Optional[Tuple[NatNegSession, NatNegClientIndex]]:
+    async def get_session_by_endpoint(self, ip: str, port: int) -> tuple[NatNegSession, NatNegClientIndex] | None:
         """
         Get a session by client endpoint.
 
@@ -303,11 +293,7 @@ class NatNegSessionManager:
 
             return session, client_index
 
-    async def mark_connect_acked(
-        self,
-        session_id: int,
-        client_index: NatNegClientIndex
-    ):
+    async def mark_connect_acked(self, session_id: int, client_index: NatNegClientIndex):
         """Mark that a client has acknowledged the CONNECT packet."""
         async with self._lock:
             session = self._sessions.get(session_id)
@@ -322,8 +308,7 @@ class NatNegSessionManager:
                 logger.debug("Session %08X GUEST acknowledged CONNECT", session_id)
 
             # Check if both have acked
-            if (session.host and session.host.connect_acked and
-                session.guest and session.guest.connect_acked):
+            if session.host and session.host.connect_acked and session.guest and session.guest.connect_acked:
                 session.completed = True
                 logger.info("Session %08X completed successfully", session_id)
 
@@ -358,10 +343,7 @@ class NatNegSessionManager:
             for session_id in expired:
                 session = self._sessions.pop(session_id, None)
                 if session:
-                    logger.warning(
-                        "Session %08X expired (age: %.1fs)",
-                        session_id, now - session.created_at
-                    )
+                    logger.warning("Session %08X expired (age: %.1fs)", session_id, now - session.created_at)
                     # Clean up endpoint mappings
                     if session.host:
                         endpoint = ClientEndpoint(session.host.public_ip, session.host.public_port)
@@ -398,7 +380,7 @@ class GameSessionRegistry:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._sessions: Dict[int, GameEntry] = {}  # client_id -> GameEntry
+            cls._instance._sessions: dict[int, GameEntry] = {}  # client_id -> GameEntry
         return cls._instance
 
     @classmethod
@@ -450,7 +432,10 @@ class GameSessionRegistry:
         self._sessions[client_id] = game
         logger.info(
             "Registered game: client_id=%d, host=%s:%d, hostname=%s",
-            client_id, public_ip, public_port, info.get("hostname", "unknown")
+            client_id,
+            public_ip,
+            public_port,
+            info.get("hostname", "unknown"),
         )
 
     def unregister_game(self, client_id: int):
@@ -463,7 +448,7 @@ class GameSessionRegistry:
         """Get all registered games as a list of GameEntry objects."""
         return list(self._sessions.values())
 
-    def get_game(self, client_id: int) -> Optional[GameEntry]:
+    def get_game(self, client_id: int) -> GameEntry | None:
         """Get a specific game by client ID."""
         return self._sessions.get(client_id)
 

@@ -2,13 +2,13 @@ import struct
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
-from typing import Dict, Any
+from typing import Any
 
 
 @dataclass
 class FeslBaseModel:
     """Base class for data models to ensure a consistent interface."""
+
     txn: str
 
     def to_key_value_string(self):
@@ -28,18 +28,18 @@ class HelloClient(FeslBaseModel):
     clientType: str = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'HelloClient':
+    def from_dict(cls, data: dict[str, Any]) -> "HelloClient":
         return cls(
-            txn=data.get('TXN'),
-            clientString=data.get('clientString'),
-            sku=data.get('sku'),
-            locale=data.get('locale'),
-            clientPlatform=data.get('clientPlatform'),
-            clientVersion=data.get('clientVersion'),
-            SDKVersion=data.get('SDKVersion'),
-            protocolVersion=data.get('protocolVersion'),
-            fragmentSize=data.get('fragmentSize'),
-            clientType=data.get('clientType')
+            txn=data.get("TXN"),
+            clientString=data.get("clientString"),
+            sku=data.get("sku"),
+            locale=data.get("locale"),
+            clientPlatform=data.get("clientPlatform"),
+            clientVersion=data.get("clientVersion"),
+            SDKVersion=data.get("SDKVersion"),
+            protocolVersion=data.get("protocolVersion"),
+            fragmentSize=data.get("fragmentSize"),
+            clientType=data.get("clientType"),
         )
 
     def to_key_value_string(self) -> str:
@@ -75,19 +75,20 @@ class HelloServer(FeslBaseModel):
     domainPartition: DomainPartition
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'HelloServer':
-        domainPartition = DomainPartition(domain=data.get('domainPartition.domain'),
-                                          subDomain=data.get('domainPartition.subDomain'))
+    def from_dict(cls, data: dict[str, Any]) -> "HelloServer":
+        domainPartition = DomainPartition(
+            domain=data.get("domainPartition.domain"), subDomain=data.get("domainPartition.subDomain")
+        )
 
         return cls(
-            txn=data.get('TXN'),
-            theaterPort=data.get('theaterPort'),
-            messengerIp=data.get('messengerIp'),
-            messengerPort=data.get('messengerPort'),
-            activityTimeoutSecs=data.get('activityTimeoutSecs'),
-            curTime=data.get('curTime'),
-            theaterIp=data.get('theaterIp'),
-            domainPartition=domainPartition
+            txn=data.get("TXN"),
+            theaterPort=data.get("theaterPort"),
+            messengerIp=data.get("messengerIp"),
+            messengerPort=data.get("messengerPort"),
+            activityTimeoutSecs=data.get("activityTimeoutSecs"),
+            curTime=data.get("curTime"),
+            theaterIp=data.get("theaterIp"),
+            domainPartition=domainPartition,
         )
 
     def to_key_value_string(self) -> str:
@@ -97,7 +98,7 @@ class HelloServer(FeslBaseModel):
         output_lines.append(f"messengerIp={self.messengerIp}")
         output_lines.append(f"messengerPort={self.messengerPort}")
         output_lines.append(f"activityTimeoutSecs={self.activityTimeoutSecs}")
-        output_lines.append(f"curTime=\"{self.curTime}\"")
+        output_lines.append(f'curTime="{self.curTime}"')
         output_lines.append(f"theaterIp={self.theaterIp}")
         output_lines.append(f"domainPartition.domain={self.domainPartition.domain}")
         output_lines.append(f"domainPartition.subDomain={self.domainPartition.subDomain}")
@@ -112,13 +113,8 @@ class MemcheckServer(FeslBaseModel):
     memcheck: int = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MemcheckServer':
-        return cls(
-            txn=data.get('TXN'),
-            type=data.get('type'),
-            salt=data.get('salt'),
-            memcheck=data.get('memcheck')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "MemcheckServer":
+        return cls(txn=data.get("TXN"), type=data.get("type"), salt=data.get("salt"), memcheck=data.get("memcheck"))
 
     def to_key_value_string(self) -> str:
         output_lines = [f"TXN={self.txn}"]
@@ -126,7 +122,7 @@ class MemcheckServer(FeslBaseModel):
         output_lines.append(f"type={self.type}")
         output_lines.append(f"salt={self.salt}")
         # not handled more for now1
-        output_lines.append(f"memcheck.[]=0")
+        output_lines.append("memcheck.[]=0")
 
         return "\n".join(output_lines)
 
@@ -136,11 +132,8 @@ class MemcheckClient(FeslBaseModel):
     result: str = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MemcheckClient':
-        return cls(
-            txn=data.get('TXN'),
-            result=data.get('result')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "MemcheckClient":
+        return cls(txn=data.get("TXN"), result=data.get("result"))
 
     def to_key_value_string(self) -> str:
         output_lines = [f"TXN={self.txn}"]
@@ -158,12 +151,9 @@ class NuLoginClient(FeslBaseModel):
     macAddr: str = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuLoginClient':
+    def from_dict(cls, data: dict[str, Any]) -> "NuLoginClient":
         return cls(
-            txn=data.get('TXN'),
-            nuid=data.get('nuid'),
-            password=data.get('password'),
-            macAddr=data.get('macAddr')
+            txn=data.get("TXN"), nuid=data.get("nuid"), password=data.get("password"), macAddr=data.get("macAddr")
         )
 
     def to_key_value_string(self) -> str:
@@ -181,10 +171,11 @@ class EntitledGameFeatureWrapper:
     """
     Represents a single entitled game feature.
     """
+
     gameFeatureId: int
     entitlementExpirationDays: int = -1
-    entitlementExpirationDate: Optional[str] = ""
-    message: Optional[str] = ""
+    entitlementExpirationDate: str | None = ""
+    message: str | None = ""
     status: int = 0  # 0 = active
 
 
@@ -199,17 +190,17 @@ class NuLoginServer(FeslBaseModel):
     Contains a list of EntitledGameFeatureWrapper objects and can generate
     the key-value string format.
     """
-    entitledGameFeatureWrappers: List[EntitledGameFeatureWrapper] = field(default_factory=list)
+    entitledGameFeatureWrappers: list[EntitledGameFeatureWrapper] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuLoginServer':
+    def from_dict(cls, data: dict[str, Any]) -> "NuLoginServer":
         return cls(
-            txn=data.get('TXN'),
-            nuid=data.get('nuid'),
-            profileId=data.get('profileId'),
-            userId=data.get('userId'),
-            displayName=data.get('displayName'),
-            lkey=data.get('lkey'),
+            txn=data.get("TXN"),
+            nuid=data.get("nuid"),
+            profileId=data.get("profileId"),
+            userId=data.get("userId"),
+            displayName=data.get("displayName"),
+            lkey=data.get("lkey"),
         )
 
     def to_key_value_string(self) -> str:
@@ -250,11 +241,8 @@ class NuGetPersonasClient(FeslBaseModel):
     namespace: str = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuGetPersonasClient':
-        return cls(
-            txn=data.get('TXN'),
-            namespace=data.get('namespace')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "NuGetPersonasClient":
+        return cls(txn=data.get("TXN"), namespace=data.get("namespace"))
 
     def to_key_value_string(self) -> str:
         output_lines = [f"TXN={self.txn}"]
@@ -265,13 +253,11 @@ class NuGetPersonasClient(FeslBaseModel):
 
 @dataclass
 class NuGetPersonasServer(FeslBaseModel):
-    personas: List[str] = field(default_factory=list)
+    personas: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuGetPersonasServer':
-        return cls(
-            txn=data.get('TXN')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "NuGetPersonasServer":
+        return cls(txn=data.get("TXN"))
 
     def to_key_value_string(self) -> str:
         personas_count = len(self.personas)
@@ -292,11 +278,8 @@ class NuLoginPersonaClient(FeslBaseModel):
     name: str = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuLoginPersonaClient':
-        return cls(
-            txn=data.get('TXN'),
-            name=data.get('name')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "NuLoginPersonaClient":
+        return cls(txn=data.get("TXN"), name=data.get("name"))
 
     def to_key_value_string(self) -> str:
         output_lines = [f"TXN={self.txn}"]
@@ -312,12 +295,9 @@ class NuLoginPersonaServer(FeslBaseModel):
     profileId: int = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuLoginPersonaServer':
+    def from_dict(cls, data: dict[str, Any]) -> "NuLoginPersonaServer":
         return cls(
-            txn=data.get('TXN'),
-            userId=data.get('userId'),
-            lkey=data.get('lkey'),
-            profileId=data.get('profileId')
+            txn=data.get("TXN"), userId=data.get("userId"), lkey=data.get("lkey"), profileId=data.get("profileId")
         )
 
     def to_key_value_string(self) -> str:
@@ -331,12 +311,10 @@ class NuLoginPersonaServer(FeslBaseModel):
 
 @dataclass
 class GameSpyPreAuthClient(FeslBaseModel):
-
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'GameSpyPreAuthClient':
+    def from_dict(cls, data: dict[str, Any]) -> "GameSpyPreAuthClient":
         return cls(
-            txn=data.get('TXN'),
-
+            txn=data.get("TXN"),
         )
 
     def to_key_value_string(self) -> str:
@@ -351,12 +329,8 @@ class GameSpyPreAuthServer(FeslBaseModel):
     ticket: str = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'GameSpyPreAuthServer':
-        return cls(
-            txn=data.get('TXN'),
-            challenge=data.get('challenge'),
-            ticket=data.get('ticket')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "GameSpyPreAuthServer":
+        return cls(txn=data.get("TXN"), challenge=data.get("challenge"), ticket=data.get("ticket"))
 
     def to_key_value_string(self) -> str:
         output_lines = [f"TXN={self.txn}"]
@@ -371,11 +345,8 @@ class NuAddPersonaClient(FeslBaseModel):
     name: str = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuAddPersonaClient':
-        return cls(
-            txn=data.get('TXN'),
-            name=data.get('name')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "NuAddPersonaClient":
+        return cls(txn=data.get("TXN"), name=data.get("name"))
 
     def to_key_value_string(self) -> str:
         output_lines = [f"TXN={self.txn}"]
@@ -386,12 +357,9 @@ class NuAddPersonaClient(FeslBaseModel):
 
 @dataclass
 class NuAddPersonaServer(FeslBaseModel):
-
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NuAddPersonaServer':
-        return cls(
-            txn=data.get('TXN')
-        )
+    def from_dict(cls, data: dict[str, Any]) -> "NuAddPersonaServer":
+        return cls(txn=data.get("TXN"))
 
     def to_key_value_string(self) -> str:
         output_lines = [f"TXN={self.txn}"]
@@ -404,6 +372,7 @@ class FeslType(Enum):
     Enumeration for FeslType as per the data specification.
     These values identify the nature of the FESL packet.
     """
+
     TAG_SINGLE_CLIENT = 0xC0
     TAG_SINGLE_SERVER = 0x80
     TAG_MULTI_CLIENT = 0xF0
@@ -416,7 +385,8 @@ class FeslHeader:
     Represents the FeslHeader structure and provides methods for parsing.
     The header is a fixed 12-byte structure at the beginning of the packet.
     """
-    HEADER_FORMAT = '>4sII'  # Format string for struct unpacking:
+
+    HEADER_FORMAT = ">4sII"  # Format string for struct unpacking:
     # >: big-endian
     # 4s: 4-byte string for FeslCommand
     # I: 4-byte unsigned int for FeslTypeAndNumber
@@ -446,7 +416,7 @@ class FeslHeader:
             print("Error: Data is too short to contain a FeslHeader.")
             return None, -1
 
-        header_data = data[:cls.HEADER_SIZE]
+        header_data = data[: cls.HEADER_SIZE]
         try:
             fesl_command, fesl_type_and_number, packet_size = struct.unpack(cls.HEADER_FORMAT, header_data)
         except struct.error as e:
@@ -467,7 +437,7 @@ class FeslHeader:
         # The data size is therefore packet_size - 12.
         expected_data_size = packet_size - cls.HEADER_SIZE
 
-        return cls(fesl_command.decode('utf-8', 'ignore'), fesl_type, packet_number, packet_size), expected_data_size
+        return cls(fesl_command.decode("utf-8", "ignore"), fesl_type, packet_number, packet_size), expected_data_size
 
     def __repr__(self):
         """Provides a developer-friendly string representation of the header."""
@@ -482,4 +452,4 @@ class FeslHeader:
 
 
 # 1. Define a ContextVar
-client_data_var = ContextVar('client_data', default={})
+client_data_var = ContextVar("client_data", default={})

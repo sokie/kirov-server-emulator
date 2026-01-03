@@ -13,8 +13,7 @@ Protocol reference:
 import struct
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Optional, Tuple
-
+from typing import Optional
 
 # GameSpy NAT negotiation magic bytes (6 bytes)
 NATNEG_MAGIC = bytes([0xFD, 0xFC, 0x1E, 0x66, 0x6A, 0xB2])
@@ -29,23 +28,24 @@ class NatNegRecordType(IntEnum):
 
     These define the message type in byte offset 7 of the packet.
     """
-    INIT = 0x00           # Client -> Server: Initialize connection
-    INIT_ACK = 0x01       # Server -> Client: Acknowledge initialization
-    ERT_TEST = 0x02       # Server -> Client: NAT type testing (STUN-like)
-    ERT_ACK = 0x03        # Client -> Server: Test acknowledgement
-    STATE_UPDATE = 0x04   # Bidirectional: State synchronization
-    CONNECT = 0x05        # Server -> Client: Peer connection information
-    CONNECT_ACK = 0x06    # Client -> Server: Connection acknowledged
-    CONNECT_PING = 0x07   # Client <-> Client: Direct peer keep-alive
-    BACKUP_TEST = 0x08    # Client -> Server: Backup connectivity test
-    BACKUP_ACK = 0x09     # Server -> Client: Backup test response
+
+    INIT = 0x00  # Client -> Server: Initialize connection
+    INIT_ACK = 0x01  # Server -> Client: Acknowledge initialization
+    ERT_TEST = 0x02  # Server -> Client: NAT type testing (STUN-like)
+    ERT_ACK = 0x03  # Client -> Server: Test acknowledgement
+    STATE_UPDATE = 0x04  # Bidirectional: State synchronization
+    CONNECT = 0x05  # Server -> Client: Peer connection information
+    CONNECT_ACK = 0x06  # Client -> Server: Connection acknowledged
+    CONNECT_PING = 0x07  # Client <-> Client: Direct peer keep-alive
+    BACKUP_TEST = 0x08  # Client -> Server: Backup connectivity test
+    BACKUP_ACK = 0x09  # Server -> Client: Backup test response
     ADDRESS_CHECK = 0x0A  # Client -> Server: Request public address detection
     ADDRESS_REPLY = 0x0B  # Server -> Client: Public address response
-    NATIFY_REQUEST = 0x0C # Client -> Server: NAT detection request
-    REPORT = 0x0D         # Client -> Server: Connection status report
-    REPORT_ACK = 0x0E     # Server -> Client: Report acknowledgement
-    PREINIT = 0x0F        # Client -> Server: Pre-initialization (v4 only)
-    PREINIT_ACK = 0x10    # Server -> Client: Pre-init acknowledgement (v4 only)
+    NATIFY_REQUEST = 0x0C  # Client -> Server: NAT detection request
+    REPORT = 0x0D  # Client -> Server: Connection status report
+    REPORT_ACK = 0x0E  # Server -> Client: Report acknowledgement
+    PREINIT = 0x0F  # Client -> Server: Pre-initialization (v4 only)
+    PREINIT_ACK = 0x10  # Server -> Client: Pre-init acknowledgement (v4 only)
 
 
 class NatNegPortType(IntEnum):
@@ -54,18 +54,20 @@ class NatNegPortType(IntEnum):
 
     Indicates which connection this packet belongs to.
     """
-    GP = 0x00      # GameSpy Protocol connection
-    NN1 = 0x01     # NAT Negotiation port 1 (primary)
-    NN2 = 0x02     # NAT Negotiation port 2 (STUN)
-    NN3 = 0x03     # NAT Negotiation port 3 (STUN)
+
+    GP = 0x00  # GameSpy Protocol connection
+    NN1 = 0x01  # NAT Negotiation port 1 (primary)
+    NN2 = 0x02  # NAT Negotiation port 2 (STUN)
+    NN3 = 0x03  # NAT Negotiation port 3 (STUN)
 
 
 class NatNegClientIndex(IntEnum):
     """
     Client index indicating role in NAT negotiation.
     """
-    GUEST = 0x00   # Client/guest initiating connection
-    HOST = 0x01    # Server/host accepting connection
+
+    GUEST = 0x00  # Client/guest initiating connection
+    HOST = 0x01  # Server/host accepting connection
 
 
 @dataclass
@@ -81,6 +83,7 @@ class NatNegHeader:
     - Byte 12: Port type
     - Byte 13: Client index (0=guest, 1=host)
     """
+
     version: int
     record_type: NatNegRecordType
     session_id: int  # Cookie shared between host and guest
@@ -88,10 +91,10 @@ class NatNegHeader:
     client_index: NatNegClientIndex
 
     HEADER_SIZE = 14
-    HEADER_FORMAT = '>6sBBIBB'  # magic(6) + version(1) + type(1) + session(4) + port(1) + index(1)
+    HEADER_FORMAT = ">6sBBIBB"  # magic(6) + version(1) + type(1) + session(4) + port(1) + index(1)
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> Optional['NatNegHeader']:
+    def from_bytes(cls, data: bytes) -> Optional["NatNegHeader"]:
         """
         Parse a NAT negotiation header from raw bytes.
 
@@ -110,7 +113,7 @@ class NatNegHeader:
 
         try:
             magic, version, record_type, session_id, port_type, client_index = struct.unpack(
-                cls.HEADER_FORMAT, data[:cls.HEADER_SIZE]
+                cls.HEADER_FORMAT, data[: cls.HEADER_SIZE]
             )
 
             return cls(
@@ -118,7 +121,7 @@ class NatNegHeader:
                 record_type=NatNegRecordType(record_type),
                 session_id=session_id,
                 port_type=NatNegPortType(port_type) if port_type <= 3 else NatNegPortType.NN1,
-                client_index=NatNegClientIndex(client_index) if client_index <= 1 else NatNegClientIndex.GUEST
+                client_index=NatNegClientIndex(client_index) if client_index <= 1 else NatNegClientIndex.GUEST,
             )
         except (struct.error, ValueError):
             return None
@@ -132,7 +135,7 @@ class NatNegHeader:
             self.record_type,
             self.session_id,
             self.port_type,
-            self.client_index
+            self.client_index,
         )
 
 
@@ -147,6 +150,7 @@ class NatNegInitPacket:
     - Bytes 19-20: Local port (2 bytes, big-endian)
     - Bytes 21+: Game name (null-terminated string)
     """
+
     header: NatNegHeader
     use_game_port: bool
     local_ip: str  # Dotted decimal string
@@ -154,7 +158,7 @@ class NatNegInitPacket:
     game_name: str
 
     @classmethod
-    def from_bytes(cls, data: bytes, header: NatNegHeader) -> Optional['NatNegInitPacket']:
+    def from_bytes(cls, data: bytes, header: NatNegHeader) -> Optional["NatNegInitPacket"]:
         """Parse INIT packet from raw bytes."""
         if len(data) < NatNegHeader.HEADER_SIZE + 7:  # header + flag + ip + port
             return None
@@ -165,27 +169,23 @@ class NatNegInitPacket:
         offset += 1
 
         # Parse IP address (4 bytes)
-        ip_bytes = data[offset:offset + 4]
-        local_ip = '.'.join(str(b) for b in ip_bytes)
+        ip_bytes = data[offset : offset + 4]
+        local_ip = ".".join(str(b) for b in ip_bytes)
         offset += 4
 
         # Parse port (2 bytes, big-endian)
-        local_port = struct.unpack('>H', data[offset:offset + 2])[0]
+        local_port = struct.unpack(">H", data[offset : offset + 2])[0]
         offset += 2
 
         # Parse game name (null-terminated)
-        game_name_end = data.find(b'\x00', offset)
+        game_name_end = data.find(b"\x00", offset)
         if game_name_end == -1:
-            game_name = data[offset:].decode('ascii', errors='ignore')
+            game_name = data[offset:].decode("ascii", errors="ignore")
         else:
-            game_name = data[offset:game_name_end].decode('ascii', errors='ignore')
+            game_name = data[offset:game_name_end].decode("ascii", errors="ignore")
 
         return cls(
-            header=header,
-            use_game_port=use_game_port,
-            local_ip=local_ip,
-            local_port=local_port,
-            game_name=game_name
+            header=header, use_game_port=use_game_port, local_ip=local_ip, local_port=local_port, game_name=game_name
         )
 
 
@@ -211,6 +211,7 @@ class NatNegConnectPacket:
 
     Total: 20 bytes
     """
+
     session_id: int
     peer_ip: str  # Dotted decimal string
     peer_port: int
@@ -223,20 +224,14 @@ class NatNegConnectPacket:
     def to_bytes(self) -> bytes:
         """Serialize CONNECT packet to bytes."""
         # Build minimal header for CONNECT (no port_type/client_index)
-        header = struct.pack(
-            '>6sBBI',
-            NATNEG_MAGIC,
-            NATNEG_VERSION,
-            NatNegRecordType.CONNECT,
-            self.session_id
-        )
+        header = struct.pack(">6sBBI", NATNEG_MAGIC, NATNEG_VERSION, NatNegRecordType.CONNECT, self.session_id)
 
         # Convert IP string to bytes
-        ip_parts = [int(x) for x in self.peer_ip.split('.')]
+        ip_parts = [int(x) for x in self.peer_ip.split(".")]
         ip_bytes = bytes(ip_parts)
 
         # Pack port as big-endian
-        port_bytes = struct.pack('>H', self.peer_port)
+        port_bytes = struct.pack(">H", self.peer_port)
 
         # Got data flag (0x42 = 'B' if data valid, 0x00 otherwise)
         got_data_byte = 0x42 if self.got_data else 0x00
@@ -249,7 +244,7 @@ class NatNegConnectPacket:
         return header + ip_bytes + port_bytes + bytes([got_data_byte, finished_byte])
 
     @classmethod
-    def from_bytes(cls, data: bytes, header: NatNegHeader) -> Optional['NatNegConnectPacket']:
+    def from_bytes(cls, data: bytes, header: NatNegHeader) -> Optional["NatNegConnectPacket"]:
         """Parse CONNECT packet from raw bytes."""
         if len(data) < NatNegHeader.HEADER_SIZE + 8:  # header + ip(4) + port(2) + flags(2)
             return None
@@ -257,25 +252,19 @@ class NatNegConnectPacket:
         offset = NatNegHeader.HEADER_SIZE
 
         # Parse IP address
-        ip_bytes = data[offset:offset + 4]
-        peer_ip = '.'.join(str(b) for b in ip_bytes)
+        ip_bytes = data[offset : offset + 4]
+        peer_ip = ".".join(str(b) for b in ip_bytes)
         offset += 4
 
         # Parse port
-        peer_port = struct.unpack('>H', data[offset:offset + 2])[0]
+        peer_port = struct.unpack(">H", data[offset : offset + 2])[0]
         offset += 2
 
         # Parse flags
         got_data = data[offset] == 0x42 if len(data) > offset else False
         finished = data[offset + 1] != 0 if len(data) > offset + 1 else False
 
-        return cls(
-            header=header,
-            peer_ip=peer_ip,
-            peer_port=peer_port,
-            got_data=got_data,
-            finished=finished
-        )
+        return cls(header=header, peer_ip=peer_ip, peer_port=peer_port, got_data=got_data, finished=finished)
 
 
 @dataclass
@@ -291,6 +280,7 @@ class NatNegReportPacket:
     - Byte 16: Mapping scheme
     - Bytes 17+: Game name (null-terminated)
     """
+
     header: NatNegHeader
     port_type: int
     nat_type: int
@@ -298,7 +288,7 @@ class NatNegReportPacket:
     game_name: str
 
     @classmethod
-    def from_bytes(cls, data: bytes, header: NatNegHeader) -> Optional['NatNegReportPacket']:
+    def from_bytes(cls, data: bytes, header: NatNegHeader) -> Optional["NatNegReportPacket"]:
         """Parse REPORT packet from raw bytes."""
         if len(data) < NatNegHeader.HEADER_SIZE + 3:
             return None
@@ -311,18 +301,14 @@ class NatNegReportPacket:
         offset += 3
 
         # Parse game name
-        game_name_end = data.find(b'\x00', offset)
+        game_name_end = data.find(b"\x00", offset)
         if game_name_end == -1:
-            game_name = data[offset:].decode('ascii', errors='ignore')
+            game_name = data[offset:].decode("ascii", errors="ignore")
         else:
-            game_name = data[offset:game_name_end].decode('ascii', errors='ignore')
+            game_name = data[offset:game_name_end].decode("ascii", errors="ignore")
 
         return cls(
-            header=header,
-            port_type=port_type,
-            nat_type=nat_type,
-            mapping_scheme=mapping_scheme,
-            game_name=game_name
+            header=header, port_type=port_type, nat_type=nat_type, mapping_scheme=mapping_scheme, game_name=game_name
         )
 
 
@@ -333,6 +319,7 @@ class NatNegClientConnection:
 
     Each client sends multiple INIT packets with different port_types (0-3).
     """
+
     # Public address (as seen by server)
     public_ip: str
     public_port: int
@@ -357,6 +344,7 @@ class NatNegClient:
     Tracks all port_type connections from this client.
     A client typically sends 4 INIT packets with port_types 0-3.
     """
+
     # Session info
     session_id: int  # Cookie
     client_index: NatNegClientIndex
@@ -373,7 +361,7 @@ class NatNegClient:
         self.connections[conn.port_type] = conn
         self.init_received = True
 
-    def get_best_connection(self) -> Optional[NatNegClientConnection]:
+    def get_best_connection(self) -> NatNegClientConnection | None:
         """
         Get the best connection to use for P2P.
 
@@ -393,25 +381,25 @@ class NatNegClient:
         return None
 
     @property
-    def public_ip(self) -> Optional[str]:
+    def public_ip(self) -> str | None:
         """Get public IP from best connection."""
         conn = self.get_best_connection()
         return conn.public_ip if conn else None
 
     @property
-    def public_port(self) -> Optional[int]:
+    def public_port(self) -> int | None:
         """Get public port from best connection."""
         conn = self.get_best_connection()
         return conn.public_port if conn else None
 
     @property
-    def local_ip(self) -> Optional[str]:
+    def local_ip(self) -> str | None:
         """Get local IP from best connection."""
         conn = self.get_best_connection()
         return conn.local_ip if conn else None
 
     @property
-    def local_port(self) -> Optional[int]:
+    def local_port(self) -> int | None:
         """Get local port from best connection."""
         conn = self.get_best_connection()
         return conn.local_port if conn else None
@@ -419,9 +407,9 @@ class NatNegClient:
 
 def _get_subnet(ip: str) -> str:
     """Get the /24 subnet (first 3 octets) from an IP address."""
-    parts = ip.split('.')
+    parts = ip.split(".")
     if len(parts) >= 3:
-        return '.'.join(parts[:3])
+        return ".".join(parts[:3])
     return ip
 
 
@@ -433,12 +421,13 @@ class NatNegSession:
     A session is identified by a shared cookie (session_id) and matches
     one host (client_index=1) with one guest (client_index=0).
     """
+
     session_id: int  # Cookie shared by both clients
     game_name: str
 
     # The two clients in this session
-    host: Optional[NatNegClient] = None  # client_index = 1
-    guest: Optional[NatNegClient] = None  # client_index = 0
+    host: NatNegClient | None = None  # client_index = 1
+    guest: NatNegClient | None = None  # client_index = 0
 
     # Session state
     created_at: float = 0.0  # Timestamp
@@ -455,8 +444,7 @@ class NatNegSession:
 
         Port types 2 and 3 contain the actual game port (local_port != 0).
         """
-        if not (self.host and self.guest and
-                self.host.init_received and self.guest.init_received):
+        if not (self.host and self.guest and self.host.init_received and self.guest.init_received):
             return False
 
         # Check that both clients have sent port_type 3 (the last one)

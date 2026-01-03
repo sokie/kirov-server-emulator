@@ -6,20 +6,15 @@ Implements a standard IRC server with GameSpy extensions for Red Alert 3.
 import asyncio
 import threading
 import time
-from typing import Dict, Optional, List
-from contextvars import ContextVar
 
 from app.models.irc_types import (
-    IRCMessage, IRCUser, IRCChannel, IRCNumeric,
-    IRCCommand, GameSpyCommand, irc_client_data_var
+    IRCMessage,
+    IRCUser,
+    irc_client_data_var,
 )
-from app.models.peerchat_state import (
-    irc_channels, irc_clients, irc_clients_lock,
-    join_channel, part_channel
-)
-from app.util.peerchat_crypt import PeerchatCipherFactory
-from app.config.app_settings import app_config
+from app.models.peerchat_state import irc_channels, irc_clients, irc_clients_lock, part_channel
 from app.util.logging_helper import get_logger
+from app.util.peerchat_crypt import PeerchatCipherFactory
 
 logger = get_logger(__name__)
 
@@ -36,7 +31,7 @@ class IRCClient:
         self.user = IRCUser(hostname=addr[0])
 
         # Encryption state (GameSpy)
-        self.cipher_factory: Optional[PeerchatCipherFactory] = None
+        self.cipher_factory: PeerchatCipherFactory | None = None
         self.send_cipher = None  # Server-to-client cipher
         self.recv_cipher = None  # Client-to-server cipher
         self.encryption_enabled = False
@@ -54,8 +49,8 @@ class IRCClient:
             message: IRCMessage to send
         """
         try:
-            line = message.serialize() + '\r\n'
-            data = line.encode('utf-8')
+            line = message.serialize() + "\r\n"
+            data = line.encode("utf-8")
 
             # Apply encryption if enabled
             if self.encryption_enabled and self.send_cipher:
@@ -69,7 +64,7 @@ class IRCClient:
             logger.error(f"Error sending message to {self.addr}: {e}")
             raise
 
-    async def send_numeric(self, code: str, *params: str, prefix: Optional[str] = None):
+    async def send_numeric(self, code: str, *params: str, prefix: str | None = None):
         """
         Send a numeric reply to this client.
 
@@ -79,14 +74,10 @@ class IRCClient:
             prefix: Optional server prefix
         """
         if prefix is None:
-            prefix = 's'  # GameSpy uses short server name
+            prefix = "s"  # GameSpy uses short server name
 
-        target = self.user.nickname or '*'
-        message = IRCMessage(
-            command=code,
-            params=[target] + list(params),
-            prefix=prefix
-        )
+        target = self.user.nickname or "*"
+        message = IRCMessage(command=code, params=[target] + list(params), prefix=prefix)
         await self.send_message(message)
 
     async def broadcast_to_channel(self, channel_name: str, message: IRCMessage, exclude_self: bool = True):
@@ -127,21 +118,17 @@ async def handle_irc_client(reader: asyncio.StreamReader, writer: asyncio.Stream
         reader: AsyncIO stream reader
         writer: AsyncIO stream writer
     """
-    addr = writer.get_extra_info('peername')
+    addr = writer.get_extra_info("peername")
     logger.info(f"IRC connection from {addr}")
 
     client = IRCClient(reader, writer, addr)
 
     # Set context variable
-    client_data = {
-        "address": addr,
-        "writer": writer,
-        "client": client
-    }
+    client_data = {"address": addr, "writer": writer, "client": client}
     token = irc_client_data_var.set(client_data)
 
     # Buffer for encrypted data that may contain multiple commands
-    data_buffer = b''
+    data_buffer = b""
 
     try:
         while client.connected:
@@ -162,10 +149,10 @@ async def handle_irc_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                         continue
 
                     # Process complete lines from buffer
-                    while b'\n' in data_buffer:
-                        line_bytes, data_buffer = data_buffer.split(b'\n', 1)
+                    while b"\n" in data_buffer:
+                        line_bytes, data_buffer = data_buffer.split(b"\n", 1)
                         try:
-                            line = line_bytes.decode('utf-8').strip()
+                            line = line_bytes.decode("utf-8").strip()
                         except UnicodeDecodeError as e:
                             logger.error(f"Error decoding line from {addr}: {e}")
                             continue
@@ -179,6 +166,7 @@ async def handle_irc_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                         try:
                             message = IRCMessage.parse(line)
                             from app.servers.peerchat_handlers import IRCFactory
+
                             await IRCFactory.handle(client, message)
                         except Exception as e:
                             logger.error(f"Error handling message from {addr}: {e}")
@@ -192,7 +180,7 @@ async def handle_irc_client(reader: asyncio.StreamReader, writer: asyncio.Stream
 
                     # Decode and parse
                     try:
-                        line = line_bytes.decode('utf-8').strip()
+                        line = line_bytes.decode("utf-8").strip()
                     except UnicodeDecodeError as e:
                         logger.error(f"Error decoding line from {addr}: {e}")
                         continue
@@ -206,6 +194,7 @@ async def handle_irc_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                     try:
                         message = IRCMessage.parse(line)
                         from app.servers.peerchat_handlers import IRCFactory
+
                         await IRCFactory.handle(client, message)
                     except Exception as e:
                         logger.error(f"Error handling message from {addr}: {e}")
@@ -269,7 +258,7 @@ def ping_sender(loop: asyncio.AbstractEventLoop):
             logger.debug("Sending periodic PING to all IRC clients...")
 
             with irc_clients_lock:
-                clients_to_remove: List[IRCClient] = []
+                clients_to_remove: list[IRCClient] = []
 
                 for nickname, client in list(irc_clients.items()):
                     try:
@@ -280,19 +269,14 @@ def ping_sender(loop: asyncio.AbstractEventLoop):
                             continue
 
                         # Send PING
-                        ping_message = IRCMessage(
-                            command='PING',
-                            params=['s']
-                        )
+                        ping_message = IRCMessage(command="PING", params=["s"])
 
-                        future = asyncio.run_coroutine_threadsafe(
-                            client.send_message(ping_message), loop
-                        )
+                        future = asyncio.run_coroutine_threadsafe(client.send_message(ping_message), loop)
 
                         try:
                             future.result(timeout=2)
                             client.last_ping_time = time.time()
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             logger.warning(f"Timeout sending PING to {nickname}")
                             clients_to_remove.append(client)
                         except Exception as e:
@@ -315,7 +299,7 @@ def ping_sender(loop: asyncio.AbstractEventLoop):
             time.sleep(1)
 
 
-async def start_irc_server(host: str = '0.0.0.0', port: int = 6667) -> asyncio.Server:
+async def start_irc_server(host: str = "0.0.0.0", port: int = 6667) -> asyncio.Server:
     """
     Start the IRC server.
 
@@ -329,7 +313,7 @@ async def start_irc_server(host: str = '0.0.0.0', port: int = 6667) -> asyncio.S
     server = await asyncio.start_server(handle_irc_client, host, port)
 
     addr = server.sockets[0].getsockname()
-    logger.info(f'IRC server serving on {addr}')
+    logger.info(f"IRC server serving on {addr}")
 
     # Get the current event loop for the ping thread
     loop = asyncio.get_running_loop()

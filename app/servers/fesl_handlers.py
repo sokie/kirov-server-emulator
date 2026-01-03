@@ -8,38 +8,38 @@ This module processes both 'fsys' (system) and 'acct' (account) commands:
 
 import random
 import time
-from typing import TypeVar, Optional
+from typing import TypeVar
 
 from app.db.crud import (
-    get_user_by_username_and_password,
+    create_fesl_session,
+    create_persona_for_user,
+    create_preauth_ticket,
     get_persona_by_name,
     get_personas_for_user,
+    get_user_by_username_and_password,
     get_user_entitlements,
-    create_fesl_session,
     update_fesl_session_persona,
-    create_preauth_ticket,
     update_user_mac_addr,
-    create_persona_for_user,
 )
 from app.db.database import get_session
 from app.models.fesl_types import (
+    DomainPartition,
+    EntitledGameFeatureWrapper,
     FeslBaseModel,
     FeslHeader,
+    GameSpyPreAuthClient,
+    GameSpyPreAuthServer,
     HelloClient,
     HelloServer,
     MemcheckServer,
-    DomainPartition,
-    NuLoginClient,
-    NuLoginServer,
-    EntitledGameFeatureWrapper,
-    NuGetPersonasClient,
-    NuGetPersonasServer,
-    NuLoginPersonaClient,
-    NuLoginPersonaServer,
     NuAddPersonaClient,
     NuAddPersonaServer,
-    GameSpyPreAuthClient,
-    GameSpyPreAuthServer,
+    NuGetPersonasClient,
+    NuGetPersonasServer,
+    NuLoginClient,
+    NuLoginPersonaClient,
+    NuLoginPersonaServer,
+    NuLoginServer,
     client_data_var,
 )
 from app.util.logging_helper import get_logger
@@ -47,7 +47,7 @@ from app.util.logging_helper import get_logger
 logger = get_logger(__name__)
 
 
-T = TypeVar('T', bound=FeslBaseModel)
+T = TypeVar("T", bound=FeslBaseModel)
 
 
 class FeslHandlers:
@@ -71,9 +71,7 @@ class FeslHandlers:
         assert isinstance(model_data, HelloClient)
 
         # MemCheck must be sent with Hello
-        memcheck_response = MemcheckServer(
-            txn="MemCheck", type=0, salt=random.getrandbits(32)
-        )
+        memcheck_response = MemcheckServer(txn="MemCheck", type=0, salt=random.getrandbits(32))
 
         domain_partition = DomainPartition(domain="eagames", subDomain="CNCRA3")
         time_buff = time.strftime('"%b-%d-%Y %H:%M:%S UTC"', time.gmtime())
@@ -96,7 +94,7 @@ class FeslHandlers:
     # ==========================================================================
 
     @staticmethod
-    def handle_login(model_data: NuLoginClient) -> Optional[NuLoginServer]:
+    def handle_login(model_data: NuLoginClient) -> NuLoginServer | None:
         """
         Handle NuLogin - Initial user authentication.
 
@@ -125,9 +123,7 @@ class FeslHandlers:
 
         # Authenticate user by email (nuid) and password
         user = get_user_by_username_and_password(
-            session=db_session,
-            username=model_data.nuid,
-            password=model_data.password
+            session=db_session, username=model_data.nuid, password=model_data.password
         )
 
         if not user:
@@ -139,17 +135,13 @@ class FeslHandlers:
             update_user_mac_addr(db_session, user.id, model_data.macAddr)
 
         # Create FESL session
-        fesl_session = create_fesl_session(
-            session=db_session,
-            user_id=user.id,
-            mac_addr=model_data.macAddr
-        )
+        fesl_session = create_fesl_session(session=db_session, user_id=user.id, mac_addr=model_data.macAddr)
 
         # Store in context for subsequent requests in this connection
         client_data = client_data_var.get()
-        client_data['user'] = user
-        client_data['fesl_session'] = fesl_session
-        client_data['lkey'] = fesl_session.lkey
+        client_data["user"] = user
+        client_data["fesl_session"] = fesl_session
+        client_data["lkey"] = fesl_session.lkey
 
         # Get user entitlements
         entitlements = get_user_entitlements(db_session, user.id)
@@ -157,38 +149,39 @@ class FeslHandlers:
         # Convert to FESL format
         feature_wrappers = []
         for ent in entitlements:
-            feature_wrappers.append(EntitledGameFeatureWrapper(
-                gameFeatureId=ent.game_feature_id,
-                entitlementExpirationDays=ent.expiration_days,
-                entitlementExpirationDate=ent.expiration_date or "",
-                message=ent.message or "",
-                status=ent.status
-            ))
+            feature_wrappers.append(
+                EntitledGameFeatureWrapper(
+                    gameFeatureId=ent.game_feature_id,
+                    entitlementExpirationDays=ent.expiration_days,
+                    entitlementExpirationDate=ent.expiration_date or "",
+                    message=ent.message or "",
+                    status=ent.status,
+                )
+            )
 
         # If no entitlements, add default RA3 entitlement
         if not feature_wrappers:
-            feature_wrappers.append(EntitledGameFeatureWrapper(
-                gameFeatureId=6014,
-                entitlementExpirationDays=-1,
-                entitlementExpirationDate="",
-                message=""
-            ))
+            feature_wrappers.append(
+                EntitledGameFeatureWrapper(
+                    gameFeatureId=6014, entitlementExpirationDays=-1, entitlementExpirationDate="", message=""
+                )
+            )
 
         response = NuLoginServer(
-            txn='NuLogin',
+            txn="NuLogin",
             nuid=user.id,
             profileId=user.id,  # Will be updated to persona ID after NuLoginPersona
             userId=user.id,
             displayName=user.username,
             lkey=fesl_session.lkey,
-            entitledGameFeatureWrappers=feature_wrappers
+            entitledGameFeatureWrappers=feature_wrappers,
         )
 
         logger.debug("NuLogin successful for user: %s (id=%s)", user.username, user.id)
         return response
 
     @staticmethod
-    def handle_get_personas(model_data: NuGetPersonasClient) -> Optional[NuGetPersonasServer]:
+    def handle_get_personas(model_data: NuGetPersonasClient) -> NuGetPersonasServer | None:
         """
         Handle NuGetPersonas - Get list of personas for the logged-in user.
 
@@ -201,7 +194,7 @@ class FeslHandlers:
         logger.debug("NuGetPersonas")
 
         client_data = client_data_var.get()
-        user = client_data.get('user')
+        user = client_data.get("user")
 
         if not user:
             logger.debug("NuGetPersonas: No user in context")
@@ -212,16 +205,13 @@ class FeslHandlers:
 
         persona_names = [p.name for p in personas]
 
-        response = NuGetPersonasServer(
-            txn='NuGetPersonas',
-            personas=persona_names
-        )
+        response = NuGetPersonasServer(txn="NuGetPersonas", personas=persona_names)
 
         logger.debug("NuGetPersonas returning %d personas", len(persona_names))
         return response
 
     @staticmethod
-    def handle_add_persona(model_data: NuAddPersonaClient) -> Optional[NuAddPersonaServer]:
+    def handle_add_persona(model_data: NuAddPersonaClient) -> NuAddPersonaServer | None:
         """
         Handle NuAddPersona - Add a new persona for the logged-in user.
 
@@ -234,7 +224,7 @@ class FeslHandlers:
         logger.debug("NuAddPersona: %s", model_data.name)
 
         client_data = client_data_var.get()
-        user = client_data.get('user')
+        user = client_data.get("user")
 
         if not user:
             logger.debug("NuAddPersona: No user in context")
@@ -251,16 +241,15 @@ class FeslHandlers:
         # Create the new persona
         persona = create_persona_for_user(db_session, user, model_data.name)
 
-        response = NuAddPersonaServer(
-            txn='NuAddPersona'
-        )
+        response = NuAddPersonaServer(txn="NuAddPersona")
 
-        logger.debug("NuAddPersona successful: created persona %s (id=%s) for user %s",
-                    persona.name, persona.id, user.id)
+        logger.debug(
+            "NuAddPersona successful: created persona %s (id=%s) for user %s", persona.name, persona.id, user.id
+        )
         return response
 
     @staticmethod
-    def handle_login_persona(model_data: NuLoginPersonaClient) -> Optional[NuLoginPersonaServer]:
+    def handle_login_persona(model_data: NuLoginPersonaClient) -> NuLoginPersonaServer | None:
         """
         Handle NuLoginPersona - Select a persona to play as.
 
@@ -278,8 +267,8 @@ class FeslHandlers:
         logger.debug("NuLoginPersona for: %s", model_data.name)
 
         client_data = client_data_var.get()
-        user = client_data.get('user')
-        current_lkey = client_data.get('lkey')
+        user = client_data.get("user")
+        current_lkey = client_data.get("lkey")
 
         if not user:
             logger.debug("NuLoginPersona: No user in context")
@@ -307,22 +296,19 @@ class FeslHandlers:
             return None
 
         # Update context
-        client_data['persona'] = persona
-        client_data['lkey'] = fesl_session.lkey
-        client_data['fesl_session'] = fesl_session
+        client_data["persona"] = persona
+        client_data["lkey"] = fesl_session.lkey
+        client_data["fesl_session"] = fesl_session
 
         response = NuLoginPersonaServer(
-            txn='NuLoginPersona',
-            userId=user.id,
-            profileId=persona.id,
-            lkey=fesl_session.lkey
+            txn="NuLoginPersona", userId=user.id, profileId=persona.id, lkey=fesl_session.lkey
         )
 
         logger.debug("NuLoginPersona successful: persona=%s (id=%s)", persona.name, persona.id)
         return response
 
     @staticmethod
-    def handle_gamespy_pre_auth(model_data: GameSpyPreAuthClient) -> Optional[GameSpyPreAuthServer]:
+    def handle_gamespy_pre_auth(model_data: GameSpyPreAuthClient) -> GameSpyPreAuthServer | None:
         """
         Handle GameSpyPreAuth - Generate ticket for GPServer handshake.
 
@@ -341,8 +327,8 @@ class FeslHandlers:
         logger.debug("GameSpyPreAuth")
 
         client_data = client_data_var.get()
-        user = client_data.get('user')
-        persona = client_data.get('persona')
+        user = client_data.get("user")
+        persona = client_data.get("persona")
 
         if not user:
             logger.debug("GameSpyPreAuth: No user in context")
@@ -355,21 +341,13 @@ class FeslHandlers:
         db_session = next(get_session())
 
         # Create pre-auth ticket with a random secret embedded in the ticket
-        preauth = create_preauth_ticket(
-            session=db_session,
-            user_id=user.id,
-            persona_id=persona.id
-        )
+        preauth = create_preauth_ticket(session=db_session, user_id=user.id, persona_id=persona.id)
         logger.debug("GameSpyPreAuth created ticket with challenge: %s", preauth.challenge)
 
         # Store in context for reference
-        client_data['preauth_ticket'] = preauth
+        client_data["preauth_ticket"] = preauth
 
-        response = GameSpyPreAuthServer(
-            txn='GameSpyPreAuth',
-            challenge=preauth.challenge,
-            ticket=preauth.ticket
-        )
+        response = GameSpyPreAuthServer(txn="GameSpyPreAuth", challenge=preauth.challenge, ticket=preauth.ticket)
 
         logger.debug("GameSpyPreAuth successful: ticket created for user=%s, persona=%s", user.id, persona.id)
         return response
@@ -417,17 +395,17 @@ class FeslHandlers:
     def _parse_acct(header: FeslHeader, model_data: FeslBaseModel) -> FeslBaseModel | None:
         """Route acct commands."""
         match model_data.txn:
-            case 'NuLogin':
+            case "NuLogin":
                 return FeslHandlers.handle_login(model_data)
-            case 'NuGetPersonas':
+            case "NuGetPersonas":
                 return FeslHandlers.handle_get_personas(model_data)
-            case 'NuAddPersona':
+            case "NuAddPersona":
                 return FeslHandlers.handle_add_persona(model_data)
-            case 'NuLoginPersona':
+            case "NuLoginPersona":
                 return FeslHandlers.handle_login_persona(model_data)
-            case 'GameSpyPreAuth':
+            case "GameSpyPreAuth":
                 return FeslHandlers.handle_gamespy_pre_auth(model_data)
-            case 'GetTelemetryToken':
+            case "GetTelemetryToken":
                 # No response expected for telemetry
                 pass
             case _:

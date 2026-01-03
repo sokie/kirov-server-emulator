@@ -17,30 +17,31 @@ Protocol format:
 """
 
 import asyncio
-import hashlib
 import base64
+import hashlib
 import secrets
 import string
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from app.util.logging_helper import get_logger, format_hex
+from app.util.logging_helper import format_hex, get_logger
 
 logger = get_logger(__name__)
 
+import contextlib
+
 from app.db.crud import (
-    validate_and_consume_preauth_ticket,
-    parse_ticket,
+    accept_buddy_request,
+    create_buddy_request,
+    create_game_invite,
     create_gamespy_session,
+    delete_buddy_one_way,
     get_gamespy_session_by_sesskey,
     get_persona_by_id,
-    get_user_by_id,
-    update_gamespy_session_status,
-    invalidate_gamespy_session,
-    create_buddy_request,
-    accept_buddy_request,
     get_persona_friends,
-    create_game_invite,
-    delete_buddy_one_way,
+    get_user_by_id,
+    invalidate_gamespy_session,
+    update_gamespy_session_status,
+    validate_and_consume_preauth_ticket,
 )
 from app.db.database import create_session
 
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
 
 
 class GpServer(asyncio.Protocol):
-    """
+    r"""
     GameSpy Protocol Server.
 
     Handles GameSpy protocol commands:
@@ -69,10 +70,10 @@ class GpServer(asyncio.Protocol):
         self._db_session = None
 
         # Session state
-        self.user_id: Optional[int] = None
-        self.persona_id: Optional[int] = None
-        self.sesskey: Optional[str] = None
-        self.uniquenick: Optional[str] = None
+        self.user_id: int | None = None
+        self.persona_id: int | None = None
+        self.sesskey: str | None = None
+        self.uniquenick: str | None = None
 
     @property
     def db_session(self):
@@ -95,11 +96,7 @@ class GpServer(asyncio.Protocol):
 
         # Generate and send initial challenge
         self.server_challenge = self._generate_challenge()
-        challenge_response = self.format_response({
-            "lc": "1",
-            "challenge": self.server_challenge,
-            "id": "1"
-        })
+        challenge_response = self.format_response({"lc": "1", "challenge": self.server_challenge, "id": "1"})
         response_bytes = challenge_response.encode()
         logger.debug("Sending challenge: %s", challenge_response)
         logger.debug("TX hex: %s", format_hex(response_bytes))
@@ -107,7 +104,7 @@ class GpServer(asyncio.Protocol):
 
     def _generate_challenge(self) -> str:
         """Generate a random challenge string - 10 uppercase letters like real server."""
-        return ''.join(secrets.choice(string.ascii_uppercase) for _ in range(10))
+        return "".join(secrets.choice(string.ascii_uppercase) for _ in range(10))
 
     def data_received(self, data):
         try:
@@ -161,7 +158,7 @@ class GpServer(asyncio.Protocol):
             logger.exception("Error processing request: %s", e)
             self.send_error(str(e))
 
-    def parse_request(self, data: str) -> Dict[str, str]:
+    def parse_request(self, data: str) -> dict[str, str]:
         """
         Parses the GameSpy request string into a dictionary.
 
@@ -191,7 +188,7 @@ class GpServer(asyncio.Protocol):
 
         return result
 
-    def format_response(self, data: Dict[str, str]) -> str:
+    def format_response(self, data: dict[str, str]) -> str:
         """Formats a dictionary as a GameSpy response string."""
         return "".join([f"\\{k}\\{v}" for k, v in data.items()]) + "\\final\\"
 
@@ -205,8 +202,8 @@ class GpServer(asyncio.Protocol):
         if self.transport:
             self.transport.write(response.encode())
 
-    def handle_login(self, request_data: Dict[str, str]) -> str:
-        """
+    def handle_login(self, request_data: dict[str, str]) -> str:
+        r"""
         Handle \login\ command - Authenticate using FESL pre-auth ticket.
 
         Request fields:
@@ -340,17 +337,27 @@ class GpServer(asyncio.Protocol):
 
         The password is the FESL challenge from GameSpyPreAuth response.
         """
-        md5hex = lambda x: hashlib.md5(x.encode()).hexdigest()
+
+        def md5hex(x):
+            return hashlib.md5(x.encode()).hexdigest()
+
         spaces = " " * 48
         pwd_hash = md5hex(password)
         proof_string = pwd_hash + spaces + authtoken + server_challenge + client_challenge + pwd_hash
         proof = hashlib.md5(proof_string.encode()).hexdigest()
         logger.debug("Proof calculation: password=%s, authtoken=%s...", password, authtoken[:20])
-        logger.debug("Proof string components: md5(password)=%s, server_chal=%s, client_chal=%s", pwd_hash, server_challenge, client_challenge)
+        logger.debug(
+            "Proof string components: md5(password)=%s, server_chal=%s, client_chal=%s",
+            pwd_hash,
+            server_challenge,
+            client_challenge,
+        )
         logger.debug("Proof result: %s", proof)
         return proof
 
-    def calculate_client_response(self, password: str, authtoken: str, client_challenge: str, server_challenge: str) -> str:
+    def calculate_client_response(
+        self, password: str, authtoken: str, client_challenge: str, server_challenge: str
+    ) -> str:
         """
         Calculate the expected client response hash for validation.
 
@@ -359,15 +366,18 @@ class GpServer(asyncio.Protocol):
 
         This is used to verify the client's 'response' field before proceeding.
         """
-        md5hex = lambda x: hashlib.md5(x.encode()).hexdigest()
+
+        def md5hex(x):
+            return hashlib.md5(x.encode()).hexdigest()
+
         spaces = " " * 48
         pwd_hash = md5hex(password)
         # Note: client_challenge comes BEFORE server_challenge (opposite of server proof)
         response_string = pwd_hash + spaces + authtoken + client_challenge + server_challenge + pwd_hash
         return hashlib.md5(response_string.encode()).hexdigest()
 
-    def handle_getprofile(self, request_data: Dict[str, str]) -> str:
-        """
+    def handle_getprofile(self, request_data: dict[str, str]) -> str:
+        r"""
         Handle \getprofile\ command - Get player profile information.
 
         Request fields:
@@ -389,7 +399,7 @@ class GpServer(asyncio.Protocol):
 
         request_id = request_data.get("id", "1")
         profileid_str = request_data.get("profileid", "")
-        sesskey = request_data.get("sesskey", "")
+        request_data.get("sesskey", "")
 
         if not profileid_str:
             return self.format_error("Missing profileid", request_id)
@@ -425,7 +435,7 @@ class GpServer(asyncio.Protocol):
         # Profile responses are prefixed with \pi\
         return "\\pi\\" + self.format_response(response_data)
 
-    def handle_status(self, request_data: Dict[str, str]) -> str:
+    def handle_status(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \status\ command - Update player status.
 
@@ -452,17 +462,12 @@ class GpServer(asyncio.Protocol):
         statstring = request_data.get("statstring", "Online")
         locstring = request_data.get("locstring", "")
 
-        logger.debug(
-            "Status update: code=%s, statstring=%s, locstring=%s",
-            status_code, statstring, locstring
-        )
+        logger.debug("Status update: code=%s, statstring=%s, locstring=%s", status_code, statstring, locstring)
 
         # Update status in database
         if sesskey:
             try:
-                update_gamespy_session_status(
-                    self.db_session, sesskey, status_code, statstring, locstring
-                )
+                update_gamespy_session_status(self.db_session, sesskey, status_code, statstring, locstring)
             except Exception as e:
                 logger.warning("Error updating status: %s", e)
 
@@ -488,22 +493,20 @@ class GpServer(asyncio.Protocol):
                 friend_client = self.session_manager.get_user_by_persona_id(friend.id)
                 if friend_client:
                     bm_response = f"\\bm\\100\\f\\{self.persona_id}\\msg\\{bm_msg}\\final\\"
-                    try:
+                    with contextlib.suppress(Exception):
                         friend_client.transport.write(bm_response.encode())
-                    except Exception:
-                        pass
         except Exception as e:
             logger.warning("Error notifying buddies: %s", e)
 
     def _ip_to_int(self, ip_str: str) -> int:
         """Convert IP address string to integer."""
         try:
-            parts = ip_str.split('.')
+            parts = ip_str.split(".")
             return (int(parts[0]) << 24) + (int(parts[1]) << 16) + (int(parts[2]) << 8) + int(parts[3])
         except Exception:
             return 0
 
-    def handle_logout(self, request_data: Dict[str, str]) -> str:
+    def handle_logout(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \logout\ command - End the session.
 
@@ -532,7 +535,7 @@ class GpServer(asyncio.Protocol):
 
         return ""  # No response needed for logout
 
-    def handle_addbuddy(self, request_data: Dict[str, str]) -> str:
+    def handle_addbuddy(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \addbuddy\ command - Send a buddy request.
 
@@ -547,7 +550,7 @@ class GpServer(asyncio.Protocol):
         """
         logger.debug("Processing addbuddy")
 
-        sesskey = request_data.get("sesskey", self.sesskey)
+        request_data.get("sesskey", self.sesskey)
         new_profile_id_str = request_data.get("newprofileid", "")
         reason = request_data.get("reason", "")
 
@@ -561,9 +564,7 @@ class GpServer(asyncio.Protocol):
 
         # Create buddy request in database
         try:
-            buddy_request = create_buddy_request(
-                self.db_session, self.persona_id, new_profile_id, reason
-            )
+            create_buddy_request(self.db_session, self.persona_id, new_profile_id, reason)
 
             # Get the target persona
             target_persona = get_persona_by_id(self.db_session, new_profile_id)
@@ -574,16 +575,14 @@ class GpServer(asyncio.Protocol):
                 if target_client:
                     # Send \bm\2\ (buddy request) to target
                     # Format: message text + |signed| + 32 zeros
-                    bm_msg = f"Red Alert 3 user wants to add a buddy|signed|00000000000000000000000000000000"
+                    bm_msg = "Red Alert 3 user wants to add a buddy|signed|00000000000000000000000000000000"
                     bm_response = f"\\bm\\2\\f\\{self.persona_id}\\msg\\{bm_msg}\\final\\"
-                    try:
+                    with contextlib.suppress(Exception):
                         target_client.transport.write(bm_response.encode())
-                    except Exception:
-                        pass
 
             # Send acknowledgment to sender with status update
             # Real server sends \bm\4\ followed by \bm\100\ combined
-            ip_int = self._ip_to_int(self.peername[0]) if self.peername else 0
+            self._ip_to_int(self.peername[0]) if self.peername else 0
             # Get target's current status if online
             target_client = self.session_manager.get_user_by_persona_id(new_profile_id)
             if target_client and target_client.peername:
@@ -600,7 +599,9 @@ class GpServer(asyncio.Protocol):
                         target_locstring = gp_session.loc_string or ""
                 except Exception:
                     pass
-                status_msg = f"|s|{target_status}|ss|{target_statstring}|ls|{target_locstring}|ip|{target_ip_int}|p|0|qm|0"
+                status_msg = (
+                    f"|s|{target_status}|ss|{target_statstring}|ls|{target_locstring}|ip|{target_ip_int}|p|0|qm|0"
+                )
                 return f"\\bm\\4\\f\\{new_profile_id}\\msg\\\\final\\\\bm\\100\\f\\{new_profile_id}\\msg\\{status_msg}\\final\\"
 
             # Target not online, just send ack
@@ -610,7 +611,7 @@ class GpServer(asyncio.Protocol):
             logger.warning("Error creating buddy request: %s", e)
             return ""
 
-    def handle_authadd(self, request_data: Dict[str, str]) -> str:
+    def handle_authadd(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \authadd\ command - Authorize/accept a buddy request.
 
@@ -624,7 +625,7 @@ class GpServer(asyncio.Protocol):
         """
         logger.debug("Processing authadd")
 
-        sesskey = request_data.get("sesskey", self.sesskey)
+        request_data.get("sesskey", self.sesskey)
         from_profile_id_str = request_data.get("fromprofileid", "")
 
         if not from_profile_id_str or not self.persona_id:
@@ -659,10 +660,8 @@ class GpServer(asyncio.Protocol):
                         pass
                     bm_msg = f"|s|{my_status}|ss|{my_statstring}|ls|{my_locstring}|ip|{ip_int}|p|0|qm|0"
                     bm_response = f"\\bm\\100\\f\\{self.persona_id}\\msg\\{bm_msg}\\final\\"
-                    try:
+                    with contextlib.suppress(Exception):
                         sender_client.transport.write(bm_response.encode())
-                    except Exception:
-                        pass
 
             return ""  # No direct response needed
 
@@ -670,7 +669,7 @@ class GpServer(asyncio.Protocol):
             logger.warning("Error accepting buddy request: %s", e)
             return ""
 
-    def handle_pinvite(self, request_data: Dict[str, str]) -> str:
+    def handle_pinvite(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \pinvite\ command - Send a game invite to a buddy.
 
@@ -688,7 +687,7 @@ class GpServer(asyncio.Protocol):
         """
         logger.debug("Processing pinvite")
 
-        sesskey = request_data.get("sesskey", self.sesskey)
+        request_data.get("sesskey", self.sesskey)
         profile_id_str = request_data.get("profileid", "")
         product_id_str = request_data.get("productid", "11419")
         location = request_data.get("location", "")
@@ -704,9 +703,7 @@ class GpServer(asyncio.Protocol):
 
         # Create game invite in database
         try:
-            invite = create_game_invite(
-                self.db_session, self.persona_id, profile_id, product_id, location
-            )
+            create_game_invite(self.db_session, self.persona_id, profile_id, product_id, location)
 
             # Forward invite to target if online
             target_client = self.session_manager.get_user_by_persona_id(profile_id)
@@ -715,10 +712,8 @@ class GpServer(asyncio.Protocol):
                 # Format: \bm\101\f\<from_profileid>\msg\|p|<productid>|l|<location>\final\
                 bm_msg = f"|p|{product_id}|l|{location}"
                 invite_response = f"\\bm\\101\\f\\{self.persona_id}\\msg\\{bm_msg}\\final\\"
-                try:
+                with contextlib.suppress(Exception):
                     target_client.transport.write(invite_response.encode())
-                except Exception:
-                    pass
 
             return ""  # No direct response to sender
 
@@ -726,7 +721,7 @@ class GpServer(asyncio.Protocol):
             logger.warning("Error creating game invite: %s", e)
             return ""
 
-    def handle_delbuddy(self, request_data: Dict[str, str]) -> str:
+    def handle_delbuddy(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \delbuddy\ command - Delete a buddy from friend list.
 
@@ -743,7 +738,7 @@ class GpServer(asyncio.Protocol):
         """
         logger.debug("Processing delbuddy")
 
-        sesskey = request_data.get("sesskey", self.sesskey)
+        request_data.get("sesskey", self.sesskey)
         del_profile_id_str = request_data.get("delprofileid", "")
 
         if not del_profile_id_str or not self.persona_id:
@@ -759,15 +754,9 @@ class GpServer(asyncio.Protocol):
             success = delete_buddy_one_way(self.db_session, self.persona_id, del_profile_id)
 
             if success:
-                logger.debug(
-                    "Deleted buddy %s from persona %s's friend list",
-                    del_profile_id, self.persona_id
-                )
+                logger.debug("Deleted buddy %s from persona %s's friend list", del_profile_id, self.persona_id)
             else:
-                logger.debug(
-                    "Buddy %s was not in persona %s's friend list",
-                    del_profile_id, self.persona_id
-                )
+                logger.debug("Buddy %s was not in persona %s's friend list", del_profile_id, self.persona_id)
 
             return ""  # No response needed
 
@@ -796,11 +785,7 @@ class GpServer(asyncio.Protocol):
 # =============================================================================
 
 
-async def start_gp_server(
-    host: str,
-    port: int,
-    session_manager: "SessionManager"
-) -> asyncio.Server:
+async def start_gp_server(host: str, port: int, session_manager: "SessionManager") -> asyncio.Server:
     """
     Start the GameSpy Protocol server.
 
@@ -813,11 +798,7 @@ async def start_gp_server(
         The asyncio server instance
     """
     loop = asyncio.get_running_loop()
-    server = await loop.create_server(
-        lambda: GpServer(session_manager),
-        host,
-        port
-    )
+    server = await loop.create_server(lambda: GpServer(session_manager), host, port)
     logger.info("GP server listening on %s:%d", host, port)
     return server
 
@@ -832,7 +813,7 @@ TEST_SECRET = "Te5tS3cr3t"
 TEST_LT_TOKEN = "TestSecretToken123"
 
 
-def generate_login_response(request_data: Dict[str, str]) -> str:
+def generate_login_response(request_data: dict[str, str]) -> str:
     """
     Legacy function for generating login response.
     Used for testing without full server context.

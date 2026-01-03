@@ -6,12 +6,12 @@ Handles UDP heartbeats from game hosts registering their sessions.
 
 import asyncio
 import base64
+import contextlib
 import socket
 import struct
-from typing import Optional, Tuple, Dict
 
-from app.util.logging_helper import get_logger, format_hex
 from app.servers.sessions import GameSessionRegistry
+from app.util.logging_helper import format_hex, get_logger
 
 logger = get_logger(__name__)
 
@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 
 class HeartbeatMsg:
     """Message types for UDP heartbeat protocol."""
+
     CHALLENGE_RESPONSE = 0x01  # Server sends challenge to client
     HEARTBEAT = 0x03  # Client sends game session info
     KEEPALIVE = 0x08  # Client keepalive
@@ -37,6 +38,7 @@ class HeartbeatState:
     These indicate why the heartbeat is being sent.
     Reference: GameSpy QR2 SDK (qr2.c)
     """
+
     NORMAL = "0"  # Normal periodic heartbeat
     STATECHANGED = "1"  # Game state changed (mode, players, etc.)
     EXITING = "2"  # Server shutting down, remove from list
@@ -68,7 +70,7 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         bytes  body
     """
 
-    def __init__(self, game_sessions: Optional[Dict[int, dict]] = None):
+    def __init__(self, game_sessions: dict[int, dict] | None = None):
         """
         Initialize the heartbeat server.
 
@@ -76,13 +78,13 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
             game_sessions: Optional dict to store game sessions (clientId -> session info)
         """
         self.transport = None
-        self.game_sessions: Dict[int, dict] = game_sessions if game_sessions is not None else {}
+        self.game_sessions: dict[int, dict] = game_sessions if game_sessions is not None else {}
 
     def connection_made(self, transport):
         self.transport = transport
         logger.info("Heartbeat UDP server started")
 
-    def datagram_received(self, data: bytes, addr: Tuple[str, int]):
+    def datagram_received(self, data: bytes, addr: tuple[str, int]):
         """Handle incoming UDP datagram."""
         host, port = addr
 
@@ -99,8 +101,7 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         body = data[5:]
 
         logger.debug(
-            "UDP msg_id=0x%02X, client_id=%d, body_len=%d from %s:%d",
-            msg_id, client_id, len(body), host, port
+            "UDP msg_id=0x%02X, client_id=%d, body_len=%d from %s:%d", msg_id, client_id, len(body), host, port
         )
 
         if msg_id == HeartbeatMsg.AVAILABLE:
@@ -112,12 +113,9 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         elif msg_id == HeartbeatMsg.KEEPALIVE:
             self._handle_keepalive(body, addr, client_id)
         else:
-            logger.warning(
-                "UDP unhandled msg_id=0x%02X from %s:%d: %s",
-                msg_id, host, port, format_hex(data)
-            )
+            logger.warning("UDP unhandled msg_id=0x%02X from %s:%d: %s", msg_id, host, port, format_hex(data))
 
-    def _handle_available(self, body: bytes, addr: Tuple[str, int], client_id: int):
+    def _handle_available(self, body: bytes, addr: tuple[str, int], client_id: int):
         """
         Handle AVAILABLE message - client checking if master is up.
 
@@ -133,7 +131,7 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         response = struct.pack("<I", 0x0009FDFE) + b"\x00\x00\x00"
         self._send(response, addr)
 
-    def _handle_heartbeat(self, body: bytes, addr: Tuple[str, int], client_id: int):
+    def _handle_heartbeat(self, body: bytes, addr: tuple[str, int], client_id: int):
         """
         Handle HEARTBEAT message - game host sending session info.
 
@@ -146,18 +144,12 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         # Parse key-value pairs from body
         info = self._parse_heartbeat_body(body)
 
-        logger.info(
-            "UDP HEARTBEAT from %s:%d (client_id=%d): %s",
-            host, port, client_id, info
-        )
+        logger.info("UDP HEARTBEAT from %s:%d (client_id=%d): %s", host, port, client_id, info)
 
         # Check if game is shutting down (statechanged=2 means EXITING)
         statechanged = info.get("statechanged", HeartbeatState.NORMAL)
         if statechanged == HeartbeatState.EXITING:
-            logger.info(
-                "Game session exiting: client_id=%d from %s:%d",
-                client_id, host, port
-            )
+            logger.info("Game session exiting: client_id=%d from %s:%d", client_id, host, port)
             # Remove from local sessions
             if client_id in self.game_sessions:
                 del self.game_sessions[client_id]
@@ -182,7 +174,7 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         if public_ip == "0":
             self._send_challenge(addr, client_id)
 
-    def _handle_challenge_response(self, body: bytes, addr: Tuple[str, int], client_id: int):
+    def _handle_challenge_response(self, body: bytes, addr: tuple[str, int], client_id: int):
         """
         Handle CHALLENGE_RESPONSE from client.
 
@@ -190,16 +182,13 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         """
         host, port = addr
 
-        logger.info(
-            "UDP CHALLENGE_RESPONSE from %s:%d (client_id=%d): %s",
-            host, port, client_id, format_hex(body)
-        )
+        logger.info("UDP CHALLENGE_RESPONSE from %s:%d (client_id=%d): %s", host, port, client_id, format_hex(body))
 
         # Send RESPONSE_CORRECT
         response = b"\xfe\xfd" + bytes([HeartbeatMsg.RESPONSE_CORRECT]) + struct.pack("!I", client_id)
         self._send(response, addr)
 
-    def _handle_keepalive(self, body: bytes, addr: Tuple[str, int], client_id: int):
+    def _handle_keepalive(self, body: bytes, addr: tuple[str, int], client_id: int):
         """Handle KEEPALIVE message."""
         host, port = addr
 
@@ -209,7 +198,7 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         if client_id in self.game_sessions:
             self.game_sessions[client_id]["last_keepalive"] = True
 
-    def _send_challenge(self, addr: Tuple[str, int], client_id: int):
+    def _send_challenge(self, addr: tuple[str, int], client_id: int):
         """
         Send challenge response with client's actual IP/port.
 
@@ -240,10 +229,7 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
             + b"\x00"
         )
 
-        logger.debug(
-            "UDP sending challenge to %s:%d (client_id=%d): %s",
-            host, port, client_id, format_hex(response)
-        )
+        logger.debug("UDP sending challenge to %s:%d (client_id=%d): %s", host, port, client_id, format_hex(response))
 
         self._send(response, addr)
 
@@ -262,15 +248,13 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
             if not key:
                 break
             value = tokens[i + 1] if i + 1 < len(tokens) else b""
-            try:
+            with contextlib.suppress(Exception):
                 info[key.decode("utf-8", errors="ignore")] = value.decode("utf-8", errors="ignore")
-            except Exception:
-                pass
             i += 2
 
         return info
 
-    def _send(self, data: bytes, addr: Tuple[str, int]):
+    def _send(self, data: bytes, addr: tuple[str, int]):
         """Send UDP response."""
         if self.transport:
             logger.debug("UDP TX to %s:%d - %d bytes: %s", addr[0], addr[1], len(data), format_hex(data))
@@ -291,7 +275,7 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
 async def start_heartbeat_server(
     host: str = "0.0.0.0",
     port: int = 27900,
-) -> Tuple[asyncio.DatagramTransport, HeartbeatMaster]:
+) -> tuple[asyncio.DatagramTransport, HeartbeatMaster]:
     """
     Start the GameSpy Heartbeat UDP Server.
 

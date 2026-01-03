@@ -5,20 +5,19 @@ Handles parsing incoming NAT negotiation packets and building response packets.
 """
 
 import struct
-from typing import Optional, Tuple, Union
 
 from app.models.natneg_types import (
     NATNEG_MAGIC,
     NATNEG_VERSION,
-    NatNegHeader,
-    NatNegRecordType,
-    NatNegPortType,
     NatNegClientIndex,
-    NatNegInitPacket,
     NatNegConnectPacket,
+    NatNegHeader,
+    NatNegInitPacket,
+    NatNegPortType,
+    NatNegRecordType,
     NatNegReportPacket,
 )
-from app.util.logging_helper import get_logger, format_hex
+from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
 
@@ -36,7 +35,7 @@ def is_natneg_packet(data: bytes) -> bool:
     return len(data) >= 6 and data[:6] == NATNEG_MAGIC
 
 
-def parse_natneg_packet(data: bytes) -> Optional[Tuple[NatNegHeader, bytes]]:
+def parse_natneg_packet(data: bytes) -> tuple[NatNegHeader, bytes] | None:
     """
     Parse a NAT negotiation packet.
 
@@ -53,11 +52,11 @@ def parse_natneg_packet(data: bytes) -> Optional[Tuple[NatNegHeader, bytes]]:
     if header is None:
         return None
 
-    payload = data[NatNegHeader.HEADER_SIZE:]
+    payload = data[NatNegHeader.HEADER_SIZE :]
     return header, payload
 
 
-def parse_init_packet(data: bytes) -> Optional[NatNegInitPacket]:
+def parse_init_packet(data: bytes) -> NatNegInitPacket | None:
     """
     Parse an INIT packet (type 0x00).
 
@@ -78,7 +77,7 @@ def parse_init_packet(data: bytes) -> Optional[NatNegInitPacket]:
     return NatNegInitPacket.from_bytes(data, header)
 
 
-def parse_connect_packet(data: bytes) -> Optional[NatNegConnectPacket]:
+def parse_connect_packet(data: bytes) -> NatNegConnectPacket | None:
     """
     Parse a CONNECT packet (type 0x05).
 
@@ -99,7 +98,7 @@ def parse_connect_packet(data: bytes) -> Optional[NatNegConnectPacket]:
     return NatNegConnectPacket.from_bytes(data, header)
 
 
-def parse_report_packet(data: bytes) -> Optional[NatNegReportPacket]:
+def parse_report_packet(data: bytes) -> NatNegReportPacket | None:
     """
     Parse a REPORT packet (type 0x0D).
 
@@ -120,11 +119,7 @@ def parse_report_packet(data: bytes) -> Optional[NatNegReportPacket]:
     return NatNegReportPacket.from_bytes(data, header)
 
 
-def build_init_ack_packet(
-    session_id: int,
-    port_type: NatNegPortType,
-    client_index: NatNegClientIndex
-) -> bytes:
+def build_init_ack_packet(session_id: int, port_type: NatNegPortType, client_index: NatNegClientIndex) -> bytes:
     """
     Build an INIT_ACK packet (type 0x01).
 
@@ -143,17 +138,13 @@ def build_init_ack_packet(
         record_type=NatNegRecordType.INIT_ACK,
         session_id=session_id,
         port_type=port_type,
-        client_index=client_index
+        client_index=client_index,
     )
     return header.to_bytes()
 
 
 def build_connect_packet(
-    session_id: int,
-    peer_ip: str,
-    peer_port: int,
-    got_data: bool = True,
-    finished: bool = True
+    session_id: int, peer_ip: str, peer_port: int, got_data: bool = True, finished: bool = True
 ) -> bytes:
     """
     Build a CONNECT packet (type 0x05).
@@ -175,21 +166,13 @@ def build_connect_packet(
         Raw packet bytes (20 bytes total)
     """
     connect = NatNegConnectPacket(
-        session_id=session_id,
-        peer_ip=peer_ip,
-        peer_port=peer_port,
-        got_data=got_data,
-        finished=finished
+        session_id=session_id, peer_ip=peer_ip, peer_port=peer_port, got_data=got_data, finished=finished
     )
 
     return connect.to_bytes()
 
 
-def build_report_ack_packet(
-    session_id: int,
-    port_type: NatNegPortType,
-    client_index: NatNegClientIndex
-) -> bytes:
+def build_report_ack_packet(session_id: int, port_type: NatNegPortType, client_index: NatNegClientIndex) -> bytes:
     """
     Build a REPORT_ACK packet (type 0x0E).
 
@@ -208,16 +191,12 @@ def build_report_ack_packet(
         record_type=NatNegRecordType.REPORT_ACK,
         session_id=session_id,
         port_type=port_type,
-        client_index=client_index
+        client_index=client_index,
     )
     return header.to_bytes()
 
 
-def build_connect_ack_packet(
-    session_id: int,
-    port_type: NatNegPortType,
-    client_index: NatNegClientIndex
-) -> bytes:
+def build_connect_ack_packet(session_id: int, port_type: NatNegPortType, client_index: NatNegClientIndex) -> bytes:
     """
     Build a CONNECT_ACK packet (type 0x06).
 
@@ -234,29 +213,23 @@ def build_connect_ack_packet(
         record_type=NatNegRecordType.CONNECT_ACK,
         session_id=session_id,
         port_type=port_type,
-        client_index=client_index
+        client_index=client_index,
     )
     return header.to_bytes()
 
 
 def ip_string_to_bytes(ip: str) -> bytes:
     """Convert dotted decimal IP string to 4 bytes."""
-    parts = [int(x) for x in ip.split('.')]
+    parts = [int(x) for x in ip.split(".")]
     return bytes(parts)
 
 
 def ip_bytes_to_string(ip_bytes: bytes) -> str:
     """Convert 4 bytes to dotted decimal IP string."""
-    return '.'.join(str(b) for b in ip_bytes)
+    return ".".join(str(b) for b in ip_bytes)
 
 
-def replace_ip_port_in_packet(
-    data: bytes,
-    old_ip: str,
-    old_port: int,
-    new_ip: str,
-    new_port: int
-) -> bytes:
+def replace_ip_port_in_packet(data: bytes, old_ip: str, old_port: int, new_ip: str, new_port: int) -> bytes:
     """
     Replace an IP:port pair in a packet (for LAN relay functionality).
 
@@ -275,21 +248,18 @@ def replace_ip_port_in_packet(
     """
     # Build search pattern: 4 bytes IP + 2 bytes port (big-endian)
     old_ip_bytes = ip_string_to_bytes(old_ip)
-    old_port_bytes = struct.pack('>H', old_port)
+    old_port_bytes = struct.pack(">H", old_port)
     old_pattern = old_ip_bytes + old_port_bytes
 
     # Build replacement
     new_ip_bytes = ip_string_to_bytes(new_ip)
-    new_port_bytes = struct.pack('>H', new_port)
+    new_port_bytes = struct.pack(">H", new_port)
     new_pattern = new_ip_bytes + new_port_bytes
 
     # Replace all occurrences
     result = data.replace(old_pattern, new_pattern)
 
     if result != data:
-        logger.debug(
-            "Replaced IP:port %s:%d -> %s:%d in packet",
-            old_ip, old_port, new_ip, new_port
-        )
+        logger.debug("Replaced IP:port %s:%d -> %s:%d in packet", old_ip, old_port, new_ip, new_port)
 
     return result

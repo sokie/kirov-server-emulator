@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
-from app.models.models import UserCreate, UserPublic, UserLogin
-from app.db.crud import get_user_by_username, create_new_user
+from app.db.crud import create_new_user, get_user_by_username
 from app.db.database import get_session
+from app.models.models import UserCreate, UserLogin, UserPublic
 from app.security import verify_password
 
 # The router prefix will be /api/rest, so these endpoints will be
@@ -48,9 +48,11 @@ async def login_for_access(user_in: UserLogin, session: Session = Depends(get_se
 
     return {"message": f"Login successful for user: {user.username}"}
 
+
 @router.get("/items")
 async def read_items():
     return [{"name": "Item Foo"}, {"name": "Item Bar"}]
+
 
 @router.get("/items/{item_id}")
 async def read_item(item_id: int):

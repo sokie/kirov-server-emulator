@@ -1,0 +1,4 @@
+# Development dependencies
+ruff>=0.8.0
+mypy>=1.13.0
+pytest-asyncio>=0.24.0

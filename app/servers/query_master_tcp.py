@@ -6,25 +6,23 @@ Handles TCP queries from game clients requesting room lists and game lists.
 
 import asyncio
 import struct
-from typing import Optional
 
 from app.config.app_settings import app_config
-from app.util.cipher import EncTypeX
-from app.util.logging_helper import get_logger, format_hex
-from app.servers.sessions import GameSessionRegistry
 from app.servers.query_master_parsing import (
-    QueryRequest,
-    RoomEntry,
-    GameEntry,
-    parse_tcp_query,
-    parse_filter_string,
-    is_room_list_request,
-    build_room_list_response,
-    build_game_list_response,
-    create_default_rooms,
     DEFAULT_MASTER_IP,
     DEFAULT_MASTER_PORT,
+    GameEntry,
+    QueryRequest,
+    build_game_list_response,
+    build_room_list_response,
+    create_default_rooms,
+    is_room_list_request,
+    parse_filter_string,
+    parse_tcp_query,
 )
+from app.servers.sessions import GameSessionRegistry
+from app.util.cipher import EncTypeX
+from app.util.logging_helper import format_hex, get_logger
 
 logger = get_logger(__name__)
 
@@ -46,7 +44,7 @@ class QueryMasterHandler:
         self,
         master_ip: str = DEFAULT_MASTER_IP,
         master_port: int = DEFAULT_MASTER_PORT,
-        gamekey: Optional[str] = None,
+        gamekey: str | None = None,
     ):
         self.master_ip = master_ip
         self.master_port = master_port
@@ -121,14 +119,18 @@ class QueryMasterHandler:
         logger.info("Handling room list request for %s", request.game_name)
 
         # Use requested fields or defaults
-        fields = request.fields if request.fields else [
-            "hostname",
-            "numwaiting",
-            "maxwaiting",
-            "numservers",
-            "numplayers",
-            "roomType",
-        ]
+        fields = (
+            request.fields
+            if request.fields
+            else [
+                "hostname",
+                "numwaiting",
+                "maxwaiting",
+                "numservers",
+                "numplayers",
+                "roomType",
+            ]
+        )
 
         return build_room_list_response(
             rooms=self.rooms,
@@ -151,10 +153,7 @@ class QueryMasterHandler:
         # Filter games based on conditions
         filtered_games = self._filter_games(all_games, filter_conditions)
 
-        logger.info(
-            "Game list: %d total, %d after filter",
-            len(all_games), len(filtered_games)
-        )
+        logger.info("Game list: %d total, %d after filter", len(all_games), len(filtered_games))
 
         # Use requested fields
         fields = request.fields if request.fields else []
@@ -220,9 +219,8 @@ class QueryMasterHandler:
             elif operator == "<=":
                 if actual > expected:
                     return False
-            elif operator == ">=":
-                if actual < expected:
-                    return False
+            elif operator == ">=" and actual < expected:
+                return False
 
         return True
 
@@ -246,7 +244,7 @@ class QueryMasterServer(asyncio.Protocol):
     """
 
     # Shared handler instance with room/game data
-    _handler: Optional[QueryMasterHandler] = None
+    _handler: QueryMasterHandler | None = None
 
     @classmethod
     def set_handler(cls, handler: QueryMasterHandler):
@@ -346,8 +344,8 @@ class QueryMasterServer(asyncio.Protocol):
 async def start_master_server(
     host: str = "0.0.0.0",
     port: int = 28910,
-    master_ip: Optional[str] = None,
-    gamekey: Optional[str] = None,
+    master_ip: str | None = None,
+    gamekey: str | None = None,
 ) -> asyncio.AbstractServer:
     """
     Start the GameSpy Master Server.

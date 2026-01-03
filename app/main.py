@@ -1,21 +1,21 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.config.app_settings import app_config
+from app.db.database import create_db_and_tables
+from app.rest.routes import router as rest_router
 from app.servers.fesl_server import start_fesl_server
 from app.servers.gp_server import start_gp_server
-from app.servers.peerchat_server import start_irc_server
-from app.servers.sessions import SessionManager
 from app.servers.natneg_server import start_natneg_server
+from app.servers.peerchat_server import start_irc_server
 from app.servers.query_master_tcp import start_master_server
 from app.servers.query_master_udp import start_heartbeat_server
-from app.rest.routes import router as rest_router
+from app.servers.sessions import SessionManager
 from app.soap.service import soap_router
-
-from app.db.database import create_db_and_tables
-from app.config.app_settings import app_config
 from app.util.logging_helper import setup_logging
 
 
@@ -61,9 +61,7 @@ async def lifespan(app: FastAPI):
         natneg_host = app_config.natneg.host
         natneg_port = app_config.natneg.port
         print(f"INFO:     Starting NAT Negotiation server on {natneg_host}:{natneg_port}...")
-        natneg_transport, natneg_protocol = await start_natneg_server(
-            host=natneg_host, port=natneg_port
-        )
+        natneg_transport, natneg_protocol = await start_natneg_server(host=natneg_host, port=natneg_port)
         print(f"INFO:     NAT Negotiation server is listening on {natneg_host}:{natneg_port}")
 
     # Start Master Server (GameSpy server/room list queries)
@@ -81,9 +79,7 @@ async def lifespan(app: FastAPI):
 
         # Start UDP server for heartbeats
         print(f"INFO:     Starting Heartbeat Server (UDP) on {master_host}:{master_udp_port}...")
-        heartbeat_transport, heartbeat_protocol = await start_heartbeat_server(
-            host=master_host, port=master_udp_port
-        )
+        heartbeat_transport, heartbeat_protocol = await start_heartbeat_server(host=master_host, port=master_udp_port)
         print(f"INFO:     Heartbeat Server (UDP) is listening on {master_host}:{master_udp_port}")
 
     yield

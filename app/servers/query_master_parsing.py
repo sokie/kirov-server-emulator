@@ -9,7 +9,6 @@ import re
 import socket
 import struct
 from dataclasses import dataclass, field
-from typing import Optional, Dict
 
 from app.util.logging_helper import get_logger
 
@@ -82,8 +81,8 @@ class GameEntry:
     public_port: int
     private_ip: str
     private_port: int
-    traced_ip: Optional[str] = None
-    traced_port: Optional[int] = None
+    traced_ip: str | None = None
+    traced_port: int | None = None
     fields: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -123,9 +122,7 @@ def parse_filter_string(filter_str: str):
 
     conditions = []
     # Improved regex: handles quoted and unquoted values, and ignores parentheses
-    condition_pattern = re.compile(
-        r"\(?\s*(\w+)\s*(!=|==|=|<|>|<=|>=)\s*'?(.*?)'?\s*\)?$"
-    )
+    condition_pattern = re.compile(r"\(?\s*(\w+)\s*(!=|==|=|<|>|<=|>=)\s*'?(.*?)'?\s*\)?$")
 
     # Split by AND/OR, keeping the operators
     tokens = re.split(r"\)\s*(AND|OR)\s*\(", filter_str.strip())
@@ -231,9 +228,7 @@ def apply_filters_to_dict(servers: list, filters: list):
 
             # Check the condition based on the operator
             is_match = False
-            if op == "=" and server_value == value:
-                is_match = True
-            elif op == "!=" and server_value != value:
+            if op == "=" and server_value == value or op == "!=" and server_value != value:
                 is_match = True
             # Note: More operators like '>', '<', etc. could be added here.
 
@@ -279,12 +274,12 @@ def parse_server_query_data(data: bytes):
     # --- Interpretation of the Parts ---
     if len(parts) > 3:
         parsed_data["game_name"] = parts[3].decode("utf-8", errors="ignore")
-        logger.debug("Game Name: %s", parsed_data['game_name'])
+        logger.debug("Game Name: %s", parsed_data["game_name"])
 
     if len(parts) > 5:
         filter_string = parts[5].decode("utf-8", errors="ignore").split("%", 1)[-1]
         parsed_data["filter_raw"] = filter_string
-        logger.debug("Raw Filter String: %s", parsed_data['filter_raw'])
+        logger.debug("Raw Filter String: %s", parsed_data["filter_raw"])
 
         # Parse the filter string into a structured format
         parsed_conditions = parse_filter_string(filter_string)
@@ -421,7 +416,7 @@ def bytes_to_ip(data: bytes) -> str:
     return socket.inet_ntoa(data)
 
 
-def make_field_list(fields: list, field_types: Optional[dict] = None) -> bytes:
+def make_field_list(fields: list, field_types: dict | None = None) -> bytes:
     """
     Build a field list for the response header.
 
@@ -629,7 +624,7 @@ def build_game_list_response(
 # =============================================================================
 
 
-def build_value_map_message(fields: list, field_types: Optional[dict] = None) -> bytes:
+def build_value_map_message(fields: list, field_types: dict | None = None) -> bytes:
     """
     Build a VALUE_MAP message (type 0x01) in new format.
 
@@ -656,7 +651,7 @@ def build_value_map_message(fields: list, field_types: Optional[dict] = None) ->
 def build_game_result_message(
     game: GameEntry,
     fields: list,
-    field_types: Optional[dict] = None,
+    field_types: dict | None = None,
 ) -> bytes:
     """
     Build a GAME_RESULT message (type 0x02) in new format.
@@ -735,6 +730,6 @@ def create_default_rooms() -> list:
         RoomEntry(room_id=0x1344, hostname="LobbyClan:2", room_type=1),
         # Tournament rooms
         RoomEntry(room_id=0x1345, hostname="LobbyTournaments:1", room_type=1),
-        RoomEntry(room_id=0x1346, hostname="LobbyTournaments:2", room_type=1)
+        RoomEntry(room_id=0x1346, hostname="LobbyTournaments:2", room_type=1),
     ]
     return rooms

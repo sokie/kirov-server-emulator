@@ -13,23 +13,19 @@ from app.models.fesl_types import (
     FeslBaseModel,
     FeslHeader,
     FeslType,
-    MemcheckServer,
-    MemcheckClient,
+    GameSpyPreAuthClient,
     HelloClient,
     HelloServer,
-    NuLoginClient,
-    NuLoginServer,
-    NuGetPersonasClient,
-    NuGetPersonasServer,
-    NuLoginPersonaClient,
-    NuLoginPersonaServer,
+    MemcheckClient,
+    MemcheckServer,
     NuAddPersonaClient,
-    NuAddPersonaServer,
-    GameSpyPreAuthClient,
-    GameSpyPreAuthServer,
+    NuGetPersonasClient,
+    NuLoginClient,
+    NuLoginPersonaClient,
+    NuLoginServer,
 )
 from app.servers.fesl_handlers import FeslHandlers
-from app.util.logging_helper import get_logger, format_hex
+from app.util.logging_helper import format_hex, get_logger
 
 logger = get_logger(__name__)
 
@@ -51,37 +47,37 @@ def get_model_for_txn(data_dict: dict, header: FeslHeader):
         An instance of a specific data model (e.g., HelloClient, NuLoginClient),
         or the original dictionary if no model is found.
     """
-    txn_type = data_dict.get('TXN')
+    txn_type = data_dict.get("TXN")
 
     # Special case: MemCheck - the game client sends responses with SERVER tag (0x80)
     # but the payload contains client response fields. Detect by payload content.
-    if txn_type == 'MemCheck':
+    if txn_type == "MemCheck":
         # Client response has 'result' field, server request has 'type' and 'salt'
-        if 'result' in data_dict:
+        if "result" in data_dict:
             return MemcheckClient.from_dict(data_dict)
         else:
             return MemcheckServer.from_dict(data_dict)
 
     if header.fesl_type == FeslType.TAG_SINGLE_SERVER or header.fesl_type == FeslType.TAG_MULTI_SERVER:
         match txn_type:
-            case 'Hello':
+            case "Hello":
                 return HelloServer.from_dict(data_dict)
-            case 'NuLogin':
+            case "NuLogin":
                 return NuLoginServer.from_dict(data_dict)
 
     elif header.fesl_type == FeslType.TAG_SINGLE_CLIENT or header.fesl_type == FeslType.TAG_MULTI_CLIENT:
         match txn_type:
-            case 'Hello':
+            case "Hello":
                 return HelloClient.from_dict(data_dict)
-            case 'NuLogin':
+            case "NuLogin":
                 return NuLoginClient.from_dict(data_dict)
-            case 'NuGetPersonas':
+            case "NuGetPersonas":
                 return NuGetPersonasClient.from_dict(data_dict)
-            case 'NuLoginPersona':
+            case "NuLoginPersona":
                 return NuLoginPersonaClient.from_dict(data_dict)
-            case 'NuAddPersona':
+            case "NuAddPersona":
                 return NuAddPersonaClient.from_dict(data_dict)
-            case 'GameSpyPreAuth':
+            case "GameSpyPreAuth":
                 return GameSpyPreAuthClient.from_dict(data_dict)
 
     # Return the dictionary if no specific model is found
@@ -116,7 +112,7 @@ def create_packet(fesl_command: str, fesl_type: FeslType, packet_number: int, da
 
     # 1. Serialize data model to a string, then encode to bytes with a null terminator.
     payload_string = _model_to_string(data_model)
-    payload_bytes_with_null = payload_string.encode('utf-8') + b'\0'
+    payload_bytes_with_null = payload_string.encode("utf-8") + b"\0"
     data_size = len(payload_bytes_with_null)
 
     # 2. Calculate final packet size
@@ -127,10 +123,7 @@ def create_packet(fesl_command: str, fesl_type: FeslType, packet_number: int, da
 
     # 4. Pack the header into bytes
     header_bytes = struct.pack(
-        FeslHeader.HEADER_FORMAT,
-        fesl_command.encode('utf-8'),
-        fesl_type_and_number,
-        packet_size
+        FeslHeader.HEADER_FORMAT, fesl_command.encode("utf-8"), fesl_type_and_number, packet_size
     )
 
     # 5. Combine header and payload into a final bytearray
@@ -156,7 +149,7 @@ def parse_game_data(byte_array: bytes):
 
     # Find the null terminator to determine the end of the data payload
     data_start = FeslHeader.HEADER_SIZE
-    null_terminator_index = byte_array.find(b'\0', data_start)
+    null_terminator_index = byte_array.find(b"\0", data_start)
 
     if null_terminator_index == -1:
         logger.warning("No null terminator found for the data payload.")
@@ -167,10 +160,13 @@ def parse_game_data(byte_array: bytes):
 
     # Note: expected_data_size includes the null terminator, but data_bytes excludes it
     if len(data_bytes) + 1 != expected_data_size:
-        logger.warning("Actual data size (%d) does not match expected data size from header (%d).",
-                      len(data_bytes) + 1, expected_data_size)
+        logger.warning(
+            "Actual data size (%d) does not match expected data size from header (%d).",
+            len(data_bytes) + 1,
+            expected_data_size,
+        )
 
-    data_string = data_bytes.decode('utf-8', 'ignore')
+    data_string = data_bytes.decode("utf-8", "ignore")
     data_dict = {}
 
     if not data_string:
@@ -180,13 +176,13 @@ def parse_game_data(byte_array: bytes):
     lines = data_string.splitlines()
 
     # The first key-value pair should be the transaction type 'TXN'
-    if not lines or not lines[0].startswith('TXN='):
+    if not lines or not lines[0].startswith("TXN="):
         logger.warning("Data payload does not start with 'TXN'. Payload: \"%s\"", data_string)
 
     for line in lines:
-        if '=' in line:
+        if "=" in line:
             # Split only on the first equals sign
-            key, value = line.split('=', 1)
+            key, value = line.split("=", 1)
             data_dict[key] = value
         elif line:  # Handle non-empty lines that are not key-value pairs
             logger.warning("Malformed line found in data payload: '%s'", line)
