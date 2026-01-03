@@ -1,0 +1,65 @@
+[project]
+name = "kirov-server-emulator"
+version = "0.1.0"
+description = "Red Alert 3 backend server emulator"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "E712",   # comparison to True/False (needed for SQLAlchemy queries)
+    "E722",   # bare except (some are intentional for robustness)
+    "B008",   # do not perform function calls in argument defaults
+    "B039",   # mutable ContextVar defaults (used intentionally)
+    "B905",   # zip without strict= (python 3.10+)
+    "SIM105", # contextlib.suppress suggestion (prefer explicit try/except)
+    "SIM108", # use ternary operator instead of if-else
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/test/*" = ["B", "SIM", "E402", "F841"]  # Less strict for tests
+"app/servers/gp_server.py" = ["E402"]  # Import order for circular import avoidance
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["app/test"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = false  # Start permissive, tighten later
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/test/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

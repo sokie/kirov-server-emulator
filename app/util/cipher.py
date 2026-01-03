@@ -14,7 +14,6 @@ Based on: https://github.com/teknogods/eaEmu/blob/master/eaEmu/gamespy/cipher.py
 
 import random
 from array import array
-from typing import Optional, Union
 
 from app.util.logging_helper import get_logger
 
@@ -38,7 +37,7 @@ class EncTypeX:
         """Generate a random 8-character validate token."""
         return "".join(random.choice(EncTypeX.alphabet) for _ in range(8))
 
-    def __init__(self, key: Union[str, bytes], validate: Optional[Union[str, bytes]] = None):
+    def __init__(self, key: str | bytes, validate: str | bytes | None = None):
         """
         Initialize the cipher.
 

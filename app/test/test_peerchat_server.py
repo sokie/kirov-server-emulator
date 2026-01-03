@@ -17,42 +17,40 @@ Format examples validated (using placeholder data):
 import pytest
 
 # Configure pytest-asyncio mode
-pytest_plugins = ('pytest_asyncio',)
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-from io import BytesIO
+pytest_plugins = ("pytest_asyncio",)
 
-from app.models.irc_types import (
-    IRCMessage, IRCUser, IRCChannel, IRCNumeric,
-    IRCCommand, GameSpyCommand
+from app.models.irc_types import IRCChannel, IRCMessage, IRCNumeric, IRCUser
+from app.models.peerchat_state import (
+    irc_channels,
+    irc_clients,
+    irc_clients_lock,
+    join_channel,
+    part_channel,
 )
-from app.raw.irc_factory import IRCFactory
-from app.raw.peerchat import (
-    IRCClient, handle_irc_client, join_channel, part_channel,
-    irc_channels, irc_clients, irc_clients_lock
-)
-
+from app.servers.peerchat_handlers import IRCFactory
+from app.servers.peerchat_server import IRCClient
 
 # =============================================================================
 # Test Data Constants (placeholder/fake data)
 # =============================================================================
 
-TEST_IP = '192.168.1.100'
-TEST_NICKNAME = 'testplayer'
-TEST_NICKNAME_2 = 'otherplayer'
-TEST_ENCODED_IP = 'TestToken'
+TEST_IP = "192.168.1.100"
+TEST_NICKNAME = "testplayer"
+TEST_NICKNAME_2 = "otherplayer"
+TEST_ENCODED_IP = "TestToken"
 TEST_PROFILE_ID = 123456789
-TEST_USERNAME = f'{TEST_ENCODED_IP}|{TEST_PROFILE_ID}'
-TEST_CDKEY_HASH = 'AAAA1111BBBB2222CCCC'
-TEST_AUTH_TOKEN = '00000000000000000000000000000000'
-TEST_GPG_CHANNEL = '#GPG!1234'
-TEST_GSP_CHANNEL = '#GSP!testgame!TestSession'
-TEST_REALNAME = 'testrealname'
+TEST_USERNAME = f"{TEST_ENCODED_IP}|{TEST_PROFILE_ID}"
+TEST_CDKEY_HASH = "AAAA1111BBBB2222CCCC"
+TEST_AUTH_TOKEN = "00000000000000000000000000000000"
+TEST_GPG_CHANNEL = "#GPG!1234"
+TEST_GSP_CHANNEL = "#GSP!testgame!TestSession"
+TEST_REALNAME = "testrealname"
 
 
 # =============================================================================
 # IRC Message Parsing Tests
 # =============================================================================
+
 
 class TestIRCMessageParsing:
     """Test IRC message parsing from wire format."""
@@ -265,6 +263,7 @@ class TestIRCMessageParsing:
 # IRC Message Serialization Tests
 # =============================================================================
 
+
 class TestIRCMessageSerialization:
     """Test IRC message serialization to wire format."""
 
@@ -278,9 +277,7 @@ class TestIRCMessageSerialization:
         """Test serializing with short server prefix (GameSpy style)."""
         # Format: :s 001 <nick> :Welcome message
         message = IRCMessage(
-            command="001",
-            params=[TEST_NICKNAME, f"Welcome to the Matrix {TEST_NICKNAME}"],
-            prefix="s"
+            command="001", params=[TEST_NICKNAME, f"Welcome to the Matrix {TEST_NICKNAME}"], prefix="s"
         )
 
         result = message.serialize()
@@ -290,11 +287,7 @@ class TestIRCMessageSerialization:
     def test_serialize_with_user_prefix(self):
         """Test serializing a message with user prefix (GameSpy format with * hostname)."""
         # Format: :<nick>!<username>@* JOIN #channel
-        message = IRCMessage(
-            command="JOIN",
-            params=[TEST_GPG_CHANNEL],
-            prefix=f"{TEST_NICKNAME}!{TEST_USERNAME}@*"
-        )
+        message = IRCMessage(command="JOIN", params=[TEST_GPG_CHANNEL], prefix=f"{TEST_NICKNAME}!{TEST_USERNAME}@*")
 
         result = message.serialize()
         assert result.startswith(f":{TEST_NICKNAME}!{TEST_USERNAME}@*")
@@ -303,10 +296,7 @@ class TestIRCMessageSerialization:
 
     def test_serialize_with_trailing(self):
         """Test serializing a message with trailing parameter containing spaces."""
-        message = IRCMessage(
-            command="PRIVMSG",
-            params=["#channel", "Hello World!"]
-        )
+        message = IRCMessage(command="PRIVMSG", params=["#channel", "Hello World!"])
 
         result = message.serialize()
         assert ":Hello World!" in result
@@ -314,11 +304,7 @@ class TestIRCMessageSerialization:
     def test_serialize_usrip_response(self):
         """Test serializing USRIP response (302)."""
         # Format: :s 302  :=+@<ip>
-        message = IRCMessage(
-            command="302",
-            params=["", f"=+@{TEST_IP}"],
-            prefix="s"
-        )
+        message = IRCMessage(command="302", params=["", f"=+@{TEST_IP}"], prefix="s")
 
         result = message.serialize()
         assert ":s 302" in result
@@ -330,7 +316,7 @@ class TestIRCMessageSerialization:
         message = IRCMessage(
             command="702",
             params=[TEST_GPG_CHANNEL, TEST_GPG_CHANNEL, TEST_NICKNAME, "BCAST", "\\b_flags\\s"],
-            prefix="s"
+            prefix="s",
         )
 
         result = message.serialize()
@@ -343,6 +329,7 @@ class TestIRCMessageSerialization:
 # IRCUser Tests
 # =============================================================================
 
+
 class TestIRCUser:
     """Test IRCUser data class."""
 
@@ -352,7 +339,7 @@ class TestIRCUser:
         user = IRCUser(
             nickname=TEST_NICKNAME,
             username=TEST_USERNAME,
-            hostname=TEST_IP  # Real IP ignored, uses *
+            hostname=TEST_IP,  # Real IP ignored, uses *
         )
 
         prefix = user.get_prefix()
@@ -382,6 +369,7 @@ class TestIRCUser:
 # IRCChannel Tests
 # =============================================================================
 
+
 class TestIRCChannel:
     """Test IRCChannel data class."""
 
@@ -408,11 +396,7 @@ class TestIRCChannel:
     def test_user_stats_storage(self):
         """Test user stats dictionary for GameSpy GETCKEY/SETCKEY."""
         channel = IRCChannel(name=TEST_GPG_CHANNEL)
-        channel.user_stats[TEST_NICKNAME] = {
-            "b_flags": "s",
-            "b_wins": "10",
-            "b_losses": "5"
-        }
+        channel.user_stats[TEST_NICKNAME] = {"b_flags": "s", "b_wins": "10", "b_losses": "5"}
 
         assert channel.user_stats[TEST_NICKNAME]["b_wins"] == "10"
 
@@ -420,6 +404,7 @@ class TestIRCChannel:
 # =============================================================================
 # Mock Classes for Testing
 # =============================================================================
+
 
 class MockStreamReader:
     """Mock asyncio StreamReader for testing."""
@@ -433,7 +418,7 @@ class MockStreamReader:
             line = self.data[self.index]
             self.index += 1
             return line
-        return b''
+        return b""
 
 
 class MockStreamWriter:
@@ -450,7 +435,7 @@ class MockStreamWriter:
         pass
 
     def get_extra_info(self, name):
-        if name == 'peername':
+        if name == "peername":
             return (TEST_IP, 12345)
         return None
 
@@ -462,12 +447,13 @@ class MockStreamWriter:
 
     def get_all_written(self) -> bytes:
         """Get all written data concatenated."""
-        return b''.join(self.written)
+        return b"".join(self.written)
 
 
 # =============================================================================
 # IRCClient Tests
 # =============================================================================
+
 
 class TestIRCClient:
     """Test IRCClient class."""
@@ -504,6 +490,7 @@ class TestIRCClient:
 # USRIP Command Tests
 # =============================================================================
 
+
 class TestUSRIPCommand:
     """Test USRIP command handling."""
 
@@ -530,6 +517,7 @@ class TestUSRIPCommand:
 # =============================================================================
 # NICK Command Tests
 # =============================================================================
+
 
 class TestNICKCommand:
     """Test NICK command handling."""
@@ -579,6 +567,7 @@ class TestNICKCommand:
 # USER Command Tests
 # =============================================================================
 
+
 class TestUSERCommand:
     """Test USER command handling."""
 
@@ -592,9 +581,7 @@ class TestUSERCommand:
     async def test_user_sets_fields_from_gamespy_format(self):
         """Test USER command parses GameSpy format."""
         # Format: USER <encoded_ip|profile_id> <local_ip> <server> :<auth_token>
-        message = IRCMessage.parse(
-            f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :{TEST_AUTH_TOKEN}"
-        )
+        message = IRCMessage.parse(f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :{TEST_AUTH_TOKEN}")
 
         await IRCFactory.handle_user(self.client, message)
 
@@ -605,9 +592,7 @@ class TestUSERCommand:
     async def test_user_parses_profile_id(self):
         """Test USER command extracts profile_id from username."""
         # Username format: <encoded_ip>|<profile_id>
-        message = IRCMessage.parse(
-            f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :token"
-        )
+        message = IRCMessage.parse(f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :token")
 
         await IRCFactory.handle_user(self.client, message)
 
@@ -627,6 +612,7 @@ class TestUSERCommand:
 # Welcome/Registration Tests
 # =============================================================================
 
+
 class TestWelcomeSequence:
     """Test welcome message sequence after registration."""
 
@@ -642,9 +628,7 @@ class TestWelcomeSequence:
     @pytest.mark.asyncio
     async def test_welcome_sequence_sent_after_registration(self):
         """Test full welcome sequence (001-004 + MOTD) sent after USER+NICK."""
-        user_msg = IRCMessage.parse(
-            f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :token"
-        )
+        user_msg = IRCMessage.parse(f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :token")
         await IRCFactory.handle_user(self.client, user_msg)
 
         nick_msg = IRCMessage.parse(f"NICK {TEST_NICKNAME}")
@@ -664,9 +648,7 @@ class TestWelcomeSequence:
     @pytest.mark.asyncio
     async def test_welcome_message_format(self):
         """Test welcome message matches GameSpy format."""
-        user_msg = IRCMessage.parse(
-            f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :token"
-        )
+        user_msg = IRCMessage.parse(f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :token")
         await IRCFactory.handle_user(self.client, user_msg)
 
         nick_msg = IRCMessage.parse(f"NICK {TEST_NICKNAME}")
@@ -683,6 +665,7 @@ class TestWelcomeSequence:
 # =============================================================================
 # CDKEY Command Tests
 # =============================================================================
+
 
 class TestCDKEYCommand:
     """Test GameSpy CDKEY command handling."""
@@ -719,6 +702,7 @@ class TestCDKEYCommand:
 # =============================================================================
 # JOIN Command Tests
 # =============================================================================
+
 
 class TestJOINCommand:
     """Test JOIN command handling."""
@@ -804,6 +788,7 @@ class TestJOINCommand:
 # PART Command Tests
 # =============================================================================
 
+
 class TestPARTCommand:
     """Test PART command handling."""
 
@@ -864,6 +849,7 @@ class TestPARTCommand:
 # =============================================================================
 # MODE Command Tests
 # =============================================================================
+
 
 class TestMODECommand:
     """Test MODE command handling."""
@@ -928,6 +914,7 @@ class TestMODECommand:
 # TOPIC Command Tests
 # =============================================================================
 
+
 class TestTOPICCommand:
     """Test TOPIC command handling."""
 
@@ -983,6 +970,7 @@ class TestTOPICCommand:
 # PING/PONG Command Tests
 # =============================================================================
 
+
 class TestPINGPONGCommands:
     """Test PING/PONG handling."""
 
@@ -1006,7 +994,7 @@ class TestPINGPONGCommands:
     @pytest.mark.asyncio
     async def test_pong_updates_timestamp(self):
         """Test PONG updates last_pong_time."""
-        import time
+
         old_time = self.client.last_pong_time
 
         message = IRCMessage.parse("PONG :s")
@@ -1018,6 +1006,7 @@ class TestPINGPONGCommands:
 # =============================================================================
 # GETCKEY Command Tests
 # =============================================================================
+
 
 class TestGETCKEYCommand:
     """Test GameSpy GETCKEY command handling."""
@@ -1037,11 +1026,7 @@ class TestGETCKEYCommand:
         irc_channels.clear()
         channel = IRCChannel(name=TEST_GPG_CHANNEL)
         channel.users.add(TEST_NICKNAME)
-        channel.user_stats[TEST_NICKNAME] = {
-            "b_flags": "s",
-            "b_wins": "10",
-            "b_losses": "5"
-        }
+        channel.user_stats[TEST_NICKNAME] = {"b_flags": "s", "b_wins": "10", "b_losses": "5"}
         irc_channels[TEST_GPG_CHANNEL] = channel
 
     @pytest.mark.asyncio
@@ -1093,6 +1078,7 @@ class TestGETCKEYCommand:
 # =============================================================================
 # SETCKEY Command Tests
 # =============================================================================
+
 
 class TestSETCKEYCommand:
     """Test GameSpy SETCKEY command handling."""
@@ -1158,6 +1144,7 @@ class TestSETCKEYCommand:
 # UTM Command Tests
 # =============================================================================
 
+
 class TestUTMCommand:
     """Test GameSpy UTM command handling."""
 
@@ -1172,7 +1159,7 @@ class TestUTMCommand:
 
         # Create another client to receive messages
         self.other_writer = MockStreamWriter()
-        self.other_client = IRCClient(MockStreamReader([]), self.other_writer, ('10.0.0.1', 12346))
+        self.other_client = IRCClient(MockStreamReader([]), self.other_writer, ("10.0.0.1", 12346))
         self.other_client.user.nickname = TEST_NICKNAME_2
         self.other_client.user.username = "OtherToken|987654321"
 
@@ -1225,9 +1212,7 @@ class TestUTMCommand:
     @pytest.mark.asyncio
     async def test_utm_game_data(self):
         """Test UTM with complex game data."""
-        message = IRCMessage.parse(
-            f"UTM {TEST_GSP_CHANNEL} :SL/ M=testmap;MC=ABC123"
-        )
+        message = IRCMessage.parse(f"UTM {TEST_GSP_CHANNEL} :SL/ M=testmap;MC=ABC123")
 
         await IRCFactory.handle_utm(self.client, message)
 
@@ -1239,6 +1224,7 @@ class TestUTMCommand:
 # =============================================================================
 # WHO Command Tests
 # =============================================================================
+
 
 class TestWHOCommand:
     """Test WHO command handling."""
@@ -1253,7 +1239,7 @@ class TestWHOCommand:
 
         # Target user
         self.target_writer = MockStreamWriter()
-        self.target_client = IRCClient(MockStreamReader([]), self.target_writer, ('10.0.0.1', 12346))
+        self.target_client = IRCClient(MockStreamReader([]), self.target_writer, ("10.0.0.1", 12346))
         self.target_client.user.nickname = TEST_NICKNAME_2
         self.target_client.user.username = "OtherToken|987654321"
         self.target_client.user.realname = TEST_REALNAME
@@ -1280,6 +1266,7 @@ class TestWHOCommand:
 # =============================================================================
 # Channel Operations Tests
 # =============================================================================
+
 
 class TestChannelOperations:
     """Test channel join/part operations."""
@@ -1343,6 +1330,7 @@ class TestChannelOperations:
 # Full Flow Integration Tests
 # =============================================================================
 
+
 class TestFullProtocolFlow:
     """Test complete protocol flows using placeholder data."""
 
@@ -1364,8 +1352,7 @@ class TestFullProtocolFlow:
 
         # Step 2: USER + NICK (registration)
         await IRCFactory.handle_user(
-            self.client,
-            IRCMessage.parse(f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :{TEST_AUTH_TOKEN}")
+            self.client, IRCMessage.parse(f"USER {TEST_USERNAME} 127.0.0.1 peerchat.gamespy.com :{TEST_AUTH_TOKEN}")
         )
         await IRCFactory.handle_nick(self.client, IRCMessage.parse(f"NICK {TEST_NICKNAME}"))
 
@@ -1409,22 +1396,15 @@ class TestFullProtocolFlow:
             irc_clients[TEST_NICKNAME] = self.client
 
         # Join game lobby
-        await IRCFactory.handle_join(
-            self.client,
-            IRCMessage.parse(f"JOIN {TEST_GSP_CHANNEL}")
-        )
+        await IRCFactory.handle_join(self.client, IRCMessage.parse(f"JOIN {TEST_GSP_CHANNEL}"))
 
         # Set topic (as lobby host)
         await IRCFactory.handle_topic(
-            self.client,
-            IRCMessage.parse(f"TOPIC {TEST_GSP_CHANNEL} :{TEST_NICKNAME} {TEST_NICKNAME}")
+            self.client, IRCMessage.parse(f"TOPIC {TEST_GSP_CHANNEL} :{TEST_NICKNAME} {TEST_NICKNAME}")
         )
 
         # Set mode
-        await IRCFactory.handle_mode(
-            self.client,
-            IRCMessage.parse(f"MODE {TEST_GSP_CHANNEL} +l 6")
-        )
+        await IRCFactory.handle_mode(self.client, IRCMessage.parse(f"MODE {TEST_GSP_CHANNEL} +l 6"))
 
         # Verify
         channel = irc_channels[TEST_GSP_CHANNEL]
@@ -1448,8 +1428,7 @@ class TestFullProtocolFlow:
 
         # Set stats
         await IRCFactory.handle_setckey(
-            self.client,
-            IRCMessage.parse(f"SETCKEY {TEST_GPG_CHANNEL} {TEST_NICKNAME} :\\b_wins\\10\\b_losses\\5")
+            self.client, IRCMessage.parse(f"SETCKEY {TEST_GPG_CHANNEL} {TEST_NICKNAME} :\\b_wins\\10\\b_losses\\5")
         )
 
         # Clear writer to check GETCKEY response
@@ -1457,8 +1436,7 @@ class TestFullProtocolFlow:
 
         # Get stats
         await IRCFactory.handle_getckey(
-            self.client,
-            IRCMessage.parse(f"GETCKEY {TEST_GPG_CHANNEL} * 000 0 :\\username\\b_wins\\b_losses")
+            self.client, IRCMessage.parse(f"GETCKEY {TEST_GPG_CHANNEL} * 000 0 :\\username\\b_wins\\b_losses")
         )
 
         written = self.writer.get_all_written()

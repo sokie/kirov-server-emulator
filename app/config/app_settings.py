@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict, JsonConfigSettingsSource
+from pydantic_settings import BaseSettings, JsonConfigSettingsSource, SettingsConfigDict
 
 
 class IRCSettings(BaseModel):
@@ -7,42 +7,53 @@ class IRCSettings(BaseModel):
     port: int = Field(default=6667, gt=1024, lt=65536)
     server_name: str = Field(default="peerchat.ea.com")
 
+
 class GameSettings(BaseModel):
     """Game-specific settings."""
+
     gamekey: str = Field()
+
 
 class LoggingSettings(BaseModel):
     """Logging configuration."""
+
     level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+
 
 class FeslSettings(BaseModel):
     """FESL (EA Frontend Server Layer) settings."""
+
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=18800, gt=1024, lt=65536)
 
+
 class GpSettings(BaseModel):
     """GameSpy Presence server settings."""
+
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=29900, gt=1024, lt=65536)
 
+
 class NatNegSettings(BaseModel):
     """NAT Negotiation server settings."""
+
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=27901, gt=1024, lt=65536)
     session_timeout: int = Field(default=30)  # Seconds to wait for both clients
     enabled: bool = Field(default=True)
     force_lan_mode: bool = Field(
-        default=True,
-        description="Always use LAN mode (local IPs). WAN mode (NAT punchthrough) is experimental."
+        default=True, description="Always use LAN mode (local IPs). WAN mode (NAT punchthrough) is experimental."
     )
 
 
 class MasterServerSettings(BaseModel):
     """GameSpy Master Server settings for server/room list queries."""
+
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=28910, gt=1024, lt=65536)  # TCP port for queries
     udp_port: int = Field(default=27900, gt=1024, lt=65536)  # UDP port for heartbeats
     enabled: bool = Field(default=True)
+
 
 class AppSettings(BaseSettings):
     irc: IRCSettings = Field(default_factory=IRCSettings)
@@ -56,7 +67,7 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         json_file="config.json",
         json_file_encoding="utf-8",
-        extra='ignore',
+        extra="ignore",
     )
 
     @classmethod

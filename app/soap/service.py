@@ -1,5 +1,4 @@
-from typing import Optional
-from fastapi_soap import SoapRouter, XMLBody, SoapResponse
+from fastapi_soap import SoapResponse, SoapRouter, XMLBody
 from pydantic_xml import BaseXmlModel, element
 
 
@@ -27,11 +26,7 @@ class AddNumbersResponse(BaseXmlModel, tag="AddNumbersResponse"):
 soap_router = SoapRouter(name="HelloWorldService", prefix="/api/soap")
 
 
-@soap_router.operation(
-    name="SayHello",
-    request_model=SayHelloRequest,
-    response_model=SayHelloResponse
-)
+@soap_router.operation(name="SayHello", request_model=SayHelloRequest, response_model=SayHelloResponse)
 def say_hello(body: SayHelloRequest = XMLBody(SayHelloRequest)):
     """
     A simple SOAP method that returns a greeting.
@@ -41,11 +36,7 @@ def say_hello(body: SayHelloRequest = XMLBody(SayHelloRequest)):
     return SoapResponse(SayHelloResponse(message=message))
 
 
-@soap_router.operation(
-    name="AddNumbers",
-    request_model=AddNumbersRequest,
-    response_model=AddNumbersResponse
-)
+@soap_router.operation(name="AddNumbers", request_model=AddNumbersRequest, response_model=AddNumbersResponse)
 def add_numbers(body: AddNumbersRequest = XMLBody(AddNumbersRequest)):
     """
     Adds two integers and returns the result.

@@ -10,24 +10,24 @@ This tests the cross-service handshake:
 6. User authenticates with GPServer using the ticket
 """
 
-import pytest
 import base64
-import os
+
+import pytest
 from sqlmodel import Session, SQLModel
 
-from app.db.database import engine, create_db_and_tables
 from app.db.crud import (
-    create_new_user,
-    get_user_by_username_and_password,
-    get_personas_for_user,
     create_fesl_session,
-    update_fesl_session_persona,
-    create_preauth_ticket,
-    validate_and_consume_preauth_ticket,
     create_gamespy_session,
-    parse_ticket,
+    create_new_user,
+    create_preauth_ticket,
+    get_personas_for_user,
+    get_user_by_username_and_password,
     get_user_entitlements,
+    parse_ticket,
+    update_fesl_session_persona,
+    validate_and_consume_preauth_ticket,
 )
+from app.db.database import engine
 from app.models.models import UserCreate
 
 
@@ -50,11 +50,7 @@ class TestAuthenticationFlow:
     def test_user_registration_creates_persona_and_entitlement(self):
         """Test that user registration creates a default persona and entitlement."""
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="testuser",
-                password="testpass123",
-                email="test@example.com"
-            )
+            user_data = UserCreate(username="testuser", password="testpass123", email="test@example.com")
 
             user = create_new_user(session, user_data)
 
@@ -76,11 +72,7 @@ class TestAuthenticationFlow:
         """Test user authentication by email and password."""
         with self.get_session() as session:
             # Create user
-            user_data = UserCreate(
-                username="authtest",
-                password="authpass123",
-                email="auth@example.com"
-            )
+            user_data = UserCreate(username="authtest", password="authpass123", email="auth@example.com")
             create_new_user(session, user_data)
 
             # Authenticate by username
@@ -101,19 +93,12 @@ class TestAuthenticationFlow:
         """Test FESL session creation and lkey generation."""
         with self.get_session() as session:
             # Create user
-            user_data = UserCreate(
-                username="sessiontest",
-                password="sessionpass",
-                email="session@example.com"
-            )
+            user_data = UserCreate(username="sessiontest", password="sessionpass", email="session@example.com")
             user = create_new_user(session, user_data)
 
             # Create FESL session
             fesl_session = create_fesl_session(
-                session=session,
-                user_id=user.id,
-                client_ip="192.168.1.1",
-                mac_addr="$aabbccddeeff"
+                session=session, user_id=user.id, client_ip="192.168.1.1", mac_addr="$aabbccddeeff"
             )
 
             assert fesl_session.id is not None
@@ -126,11 +111,7 @@ class TestAuthenticationFlow:
         """Test updating FESL session with persona selection."""
         with self.get_session() as session:
             # Create user
-            user_data = UserCreate(
-                username="personatest",
-                password="personapass",
-                email="persona@example.com"
-            )
+            user_data = UserCreate(username="personatest", password="personapass", email="persona@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -140,9 +121,7 @@ class TestAuthenticationFlow:
             original_lkey = fesl_session.lkey
 
             # Update with persona
-            updated_session = update_fesl_session_persona(
-                session, original_lkey, persona.id
-            )
+            updated_session = update_fesl_session_persona(session, original_lkey, persona.id)
 
             assert updated_session is not None
             assert updated_session.persona_id == persona.id
@@ -153,11 +132,7 @@ class TestAuthenticationFlow:
         """Test GameSpy pre-auth ticket creation."""
         with self.get_session() as session:
             # Create user
-            user_data = UserCreate(
-                username="tickettest",
-                password="ticketpass",
-                email="ticket@example.com"
-            )
+            user_data = UserCreate(username="tickettest", password="ticketpass", email="ticket@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -172,8 +147,8 @@ class TestAuthenticationFlow:
             assert ticket.is_used is False
 
             # Verify ticket format (base64 of userId|profileId|token)
-            decoded = base64.b64decode(ticket.ticket).decode('utf-8')
-            parts = decoded.split('|')
+            decoded = base64.b64decode(ticket.ticket).decode("utf-8")
+            parts = decoded.split("|")
             assert len(parts) == 3
             assert parts[0] == str(user.id)
             assert parts[1] == str(persona.id)
@@ -182,11 +157,7 @@ class TestAuthenticationFlow:
         """Test validating and consuming a pre-auth ticket."""
         with self.get_session() as session:
             # Create user
-            user_data = UserCreate(
-                username="validatetest",
-                password="validatepass",
-                email="validate@example.com"
-            )
+            user_data = UserCreate(username="validatetest", password="validatepass", email="validate@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -212,11 +183,7 @@ class TestAuthenticationFlow:
         """Test GameSpy session creation after ticket validation."""
         with self.get_session() as session:
             # Create user
-            user_data = UserCreate(
-                username="gptest",
-                password="gppass",
-                email="gp@example.com"
-            )
+            user_data = UserCreate(username="gptest", password="gppass", email="gp@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -235,7 +202,7 @@ class TestAuthenticationFlow:
                 client_ip="192.168.1.100",
                 port=29900,
                 product_id=11419,
-                gamename="redalert3pc"
+                gamename="redalert3pc",
             )
 
             assert gp_session.id is not None
@@ -249,23 +216,15 @@ class TestAuthenticationFlow:
         """Test the complete authentication flow from registration to GPServer login."""
         with self.get_session() as session:
             # Step 1: User Registration
-            user_data = UserCreate(
-                username="testplayer",
-                password="testpass123",
-                email="testplayer@example.com"
-            )
+            user_data = UserCreate(username="testplayer", password="testpass123", email="testplayer@example.com")
             user = create_new_user(session, user_data)
             assert user.id is not None
             print(f"[1] User created: id={user.id}, username={user.username}")
 
             # Step 2: FESL NuLogin
-            auth_user = get_user_by_username_and_password(
-                session, "testplayer@example.com", "testpass123"
-            )
+            auth_user = get_user_by_username_and_password(session, "testplayer@example.com", "testpass123")
             assert auth_user is not None
-            fesl_session = create_fesl_session(
-                session, auth_user.id, mac_addr="$aabbccddeeff"
-            )
+            fesl_session = create_fesl_session(session, auth_user.id, mac_addr="$aabbccddeeff")
             print(f"[2] NuLogin successful: userId={auth_user.id}, lkey={fesl_session.lkey}")
 
             # Step 3: FESL NuGetPersonas
@@ -275,9 +234,7 @@ class TestAuthenticationFlow:
 
             # Step 4: FESL NuLoginPersona
             selected_persona = personas[0]
-            updated_session = update_fesl_session_persona(
-                session, fesl_session.lkey, selected_persona.id
-            )
+            updated_session = update_fesl_session_persona(session, fesl_session.lkey, selected_persona.id)
             assert updated_session is not None
             print(f"[4] NuLoginPersona: profileId={selected_persona.id}, lkey={updated_session.lkey}")
 
@@ -298,7 +255,7 @@ class TestAuthenticationFlow:
                 persona_id=validated_persona_id,
                 preauth_ticket_id=consumed_ticket.id,
                 product_id=11419,
-                gamename="redalert3pc"
+                gamename="redalert3pc",
             )
             print(f"[7] GPServer session created: sesskey={gp_session.sesskey}")
 
@@ -356,7 +313,7 @@ class TestTicketParsing:
 
 
 class TestFeslHandlersIntegration:
-    """Integration tests for FESL AcctFactory handlers with real database operations."""
+    """Integration tests for FESL FeslHandlers handlers with real database operations."""
 
     @pytest.fixture(autouse=True)
     def setup_database(self):
@@ -371,16 +328,12 @@ class TestFeslHandlersIntegration:
 
     def test_nulogin_handler_flow(self):
         """Test that NuLogin handler authenticates and creates session correctly."""
-        from app.raw.acct_factory import AcctFactory
         from app.models.fesl_types import NuLoginClient, client_data_var
+        from app.servers.fesl_handlers import FeslHandlers
 
         with self.get_session() as session:
             # Create user first
-            user_data = UserCreate(
-                username="handlertest",
-                password="handlerpass",
-                email="handler@example.com"
-            )
+            user_data = UserCreate(username="handlertest", password="handlerpass", email="handler@example.com")
             user = create_new_user(session, user_data)
 
         # Reset context
@@ -388,18 +341,15 @@ class TestFeslHandlersIntegration:
 
         # Create login request
         login_request = NuLoginClient(
-            txn='NuLogin',
-            nuid='handler@example.com',
-            password='handlerpass',
-            macAddr='$aabbccddeeff'
+            txn="NuLogin", nuid="handler@example.com", password="handlerpass", macAddr="$aabbccddeeff"
         )
 
         # Call handler
-        response = AcctFactory.handle_login(login_request)
+        response = FeslHandlers.handle_login(login_request)
 
         assert response is not None
-        assert response.txn == 'NuLogin'
-        assert response.displayName == 'handlertest'
+        assert response.txn == "NuLogin"
+        assert response.displayName == "handlertest"
         assert response.lkey is not None
         assert len(response.lkey) > 0
         assert len(response.entitledGameFeatureWrappers) >= 1
@@ -407,40 +357,31 @@ class TestFeslHandlersIntegration:
 
     def test_nulogin_wrong_password(self):
         """Test that NuLogin handler rejects wrong password."""
-        from app.raw.acct_factory import AcctFactory
         from app.models.fesl_types import NuLoginClient, client_data_var
+        from app.servers.fesl_handlers import FeslHandlers
 
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="wrongpass",
-                password="correctpass",
-                email="wrongpass@example.com"
-            )
+            user_data = UserCreate(username="wrongpass", password="correctpass", email="wrongpass@example.com")
             create_new_user(session, user_data)
 
         client_data_var.set({})
 
         login_request = NuLoginClient(
-            txn='NuLogin',
-            nuid='wrongpass@example.com',
-            password='incorrectpass',
-            macAddr='$aabbccddeeff'
+            txn="NuLogin", nuid="wrongpass@example.com", password="incorrectpass", macAddr="$aabbccddeeff"
         )
 
-        response = AcctFactory.handle_login(login_request)
+        response = FeslHandlers.handle_login(login_request)
 
         assert response is None
 
     def test_nugetpersonas_handler_flow(self):
         """Test NuGetPersonas handler returns correct personas."""
-        from app.raw.acct_factory import AcctFactory
-        from app.models.fesl_types import NuLoginClient, NuGetPersonasClient, client_data_var
+        from app.models.fesl_types import NuGetPersonasClient, NuLoginClient, client_data_var
+        from app.servers.fesl_handlers import FeslHandlers
 
         with self.get_session() as session:
             user_data = UserCreate(
-                username="personahandler",
-                password="personapass",
-                email="personahandler@example.com"
+                username="personahandler", password="personapass", email="personahandler@example.com"
             )
             create_new_user(session, user_data)
 
@@ -448,38 +389,26 @@ class TestFeslHandlersIntegration:
 
         # First login
         login_request = NuLoginClient(
-            txn='NuLogin',
-            nuid='personahandler@example.com',
-            password='personapass',
-            macAddr='$aabbccddeeff'
+            txn="NuLogin", nuid="personahandler@example.com", password="personapass", macAddr="$aabbccddeeff"
         )
-        AcctFactory.handle_login(login_request)
+        FeslHandlers.handle_login(login_request)
 
         # Then get personas
-        personas_request = NuGetPersonasClient(
-            txn='NuGetPersonas',
-            namespace=''
-        )
-        response = AcctFactory.handle_get_personas(personas_request)
+        personas_request = NuGetPersonasClient(txn="NuGetPersonas", namespace="")
+        response = FeslHandlers.handle_get_personas(personas_request)
 
         assert response is not None
-        assert response.txn == 'NuGetPersonas'
+        assert response.txn == "NuGetPersonas"
         assert len(response.personas) == 1
-        assert response.personas[0] == 'personahandler'
+        assert response.personas[0] == "personahandler"
 
     def test_nuloginpersona_handler_flow(self):
         """Test NuLoginPersona handler selects persona correctly."""
-        from app.raw.acct_factory import AcctFactory
-        from app.models.fesl_types import (
-            NuLoginClient, NuLoginPersonaClient, client_data_var
-        )
+        from app.models.fesl_types import NuLoginClient, NuLoginPersonaClient, client_data_var
+        from app.servers.fesl_handlers import FeslHandlers
 
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="selectpersona",
-                password="selectpass",
-                email="selectpersona@example.com"
-            )
+            user_data = UserCreate(username="selectpersona", password="selectpass", email="selectpersona@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona_id = personas[0].id
@@ -488,40 +417,28 @@ class TestFeslHandlersIntegration:
 
         # Login first
         login_request = NuLoginClient(
-            txn='NuLogin',
-            nuid='selectpersona@example.com',
-            password='selectpass',
-            macAddr='$aabbccddeeff'
+            txn="NuLogin", nuid="selectpersona@example.com", password="selectpass", macAddr="$aabbccddeeff"
         )
-        login_response = AcctFactory.handle_login(login_request)
+        login_response = FeslHandlers.handle_login(login_request)
         original_lkey = login_response.lkey
 
         # Select persona
-        persona_request = NuLoginPersonaClient(
-            txn='NuLoginPersona',
-            name='selectpersona'
-        )
-        response = AcctFactory.handle_login_persona(persona_request)
+        persona_request = NuLoginPersonaClient(txn="NuLoginPersona", name="selectpersona")
+        response = FeslHandlers.handle_login_persona(persona_request)
 
         assert response is not None
-        assert response.txn == 'NuLoginPersona'
+        assert response.txn == "NuLoginPersona"
         assert response.profileId == persona_id
         # New lkey should be generated
         assert response.lkey != original_lkey
 
     def test_gamespypreauth_handler_flow(self):
         """Test GameSpyPreAuth handler generates valid ticket."""
-        from app.raw.acct_factory import AcctFactory
-        from app.models.fesl_types import (
-            NuLoginClient, NuLoginPersonaClient, GameSpyPreAuthClient, client_data_var
-        )
+        from app.models.fesl_types import GameSpyPreAuthClient, NuLoginClient, NuLoginPersonaClient, client_data_var
+        from app.servers.fesl_handlers import FeslHandlers
 
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="preauthtest",
-                password="preauthpass",
-                email="preauthtest@example.com"
-            )
+            user_data = UserCreate(username="preauthtest", password="preauthpass", email="preauthtest@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -530,33 +447,27 @@ class TestFeslHandlersIntegration:
 
         # Login
         login_request = NuLoginClient(
-            txn='NuLogin',
-            nuid='preauthtest@example.com',
-            password='preauthpass',
-            macAddr='$aabbccddeeff'
+            txn="NuLogin", nuid="preauthtest@example.com", password="preauthpass", macAddr="$aabbccddeeff"
         )
-        AcctFactory.handle_login(login_request)
+        FeslHandlers.handle_login(login_request)
 
         # Select persona
-        persona_request = NuLoginPersonaClient(
-            txn='NuLoginPersona',
-            name='preauthtest'
-        )
-        AcctFactory.handle_login_persona(persona_request)
+        persona_request = NuLoginPersonaClient(txn="NuLoginPersona", name="preauthtest")
+        FeslHandlers.handle_login_persona(persona_request)
 
         # Get pre-auth ticket
-        preauth_request = GameSpyPreAuthClient(txn='GameSpyPreAuth')
-        response = AcctFactory.handle_gamespy_pre_auth(preauth_request)
+        preauth_request = GameSpyPreAuthClient(txn="GameSpyPreAuth")
+        response = FeslHandlers.handle_gamespy_pre_auth(preauth_request)
 
         assert response is not None
-        assert response.txn == 'GameSpyPreAuth'
+        assert response.txn == "GameSpyPreAuth"
         assert response.challenge is not None
         assert len(response.challenge) == 8
         assert response.ticket is not None
 
         # Verify ticket format
-        decoded = base64.b64decode(response.ticket).decode('utf-8')
-        parts = decoded.split('|')
+        decoded = base64.b64decode(response.ticket).decode("utf-8")
+        parts = decoded.split("|")
         assert len(parts) == 3
         assert int(parts[0]) == user.id
         assert int(parts[1]) == persona.id
@@ -570,17 +481,11 @@ class TestFeslHandlersIntegration:
         - After NuLoginPersona: userId == user.id, profileId == persona.id (different!)
 
         """
-        from app.raw.acct_factory import AcctFactory
-        from app.models.fesl_types import (
-            NuLoginClient, NuLoginPersonaClient, client_data_var
-        )
+        from app.models.fesl_types import NuLoginClient, NuLoginPersonaClient, client_data_var
+        from app.servers.fesl_handlers import FeslHandlers
 
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="idtest",
-                password="idtestpass",
-                email="idtest@example.com"
-            )
+            user_data = UserCreate(username="idtest", password="idtestpass", email="idtest@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -594,12 +499,9 @@ class TestFeslHandlersIntegration:
 
         # Step 1: NuLogin - userId and profileId should BOTH be user.id
         login_request = NuLoginClient(
-            txn='NuLogin',
-            nuid='idtest@example.com',
-            password='idtestpass',
-            macAddr='$aabbccddeeff'
+            txn="NuLogin", nuid="idtest@example.com", password="idtestpass", macAddr="$aabbccddeeff"
         )
-        login_response = AcctFactory.handle_login(login_request)
+        login_response = FeslHandlers.handle_login(login_request)
 
         assert login_response is not None
         assert login_response.userId == user_id
@@ -607,11 +509,8 @@ class TestFeslHandlersIntegration:
         assert login_response.userId == login_response.profileId
 
         # Step 2: NuLoginPersona - userId stays same, profileId becomes persona.id
-        persona_request = NuLoginPersonaClient(
-            txn='NuLoginPersona',
-            name='idtest'
-        )
-        persona_response = AcctFactory.handle_login_persona(persona_request)
+        persona_request = NuLoginPersonaClient(txn="NuLoginPersona", name="idtest")
+        persona_response = FeslHandlers.handle_login_persona(persona_request)
 
         assert persona_response is not None
         assert persona_response.userId == user_id  # userId stays as user.id
@@ -621,17 +520,11 @@ class TestFeslHandlersIntegration:
 
     def test_complete_fesl_to_gpserver_handoff(self):
         """Test complete FESL authentication followed by GPServer ticket validation."""
-        from app.raw.acct_factory import AcctFactory
-        from app.models.fesl_types import (
-            NuLoginClient, NuLoginPersonaClient, GameSpyPreAuthClient, client_data_var
-        )
+        from app.models.fesl_types import GameSpyPreAuthClient, NuLoginClient, NuLoginPersonaClient, client_data_var
+        from app.servers.fesl_handlers import FeslHandlers
 
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="fullflow",
-                password="fullflowpass",
-                email="fullflow@example.com"
-            )
+            user_data = UserCreate(username="fullflow", password="fullflowpass", email="fullflow@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -640,31 +533,25 @@ class TestFeslHandlersIntegration:
 
         # Step 1: NuLogin
         login_request = NuLoginClient(
-            txn='NuLogin',
-            nuid='fullflow@example.com',
-            password='fullflowpass',
-            macAddr='$aabbccddeeff'
+            txn="NuLogin", nuid="fullflow@example.com", password="fullflowpass", macAddr="$aabbccddeeff"
         )
-        login_response = AcctFactory.handle_login(login_request)
+        login_response = FeslHandlers.handle_login(login_request)
         assert login_response is not None
         assert login_response.userId == user.id
         # After NuLogin, profileId == userId
         assert login_response.profileId == user.id
 
         # Step 2: NuLoginPersona
-        persona_request = NuLoginPersonaClient(
-            txn='NuLoginPersona',
-            name='fullflow'
-        )
-        persona_response = AcctFactory.handle_login_persona(persona_request)
+        persona_request = NuLoginPersonaClient(txn="NuLoginPersona", name="fullflow")
+        persona_response = FeslHandlers.handle_login_persona(persona_request)
         assert persona_response is not None
         # After NuLoginPersona: userId stays same, profileId becomes persona.id
         assert persona_response.userId == user.id
         assert persona_response.profileId == persona.id
 
         # Step 3: GameSpyPreAuth
-        preauth_request = GameSpyPreAuthClient(txn='GameSpyPreAuth')
-        preauth_response = AcctFactory.handle_gamespy_pre_auth(preauth_request)
+        preauth_request = GameSpyPreAuthClient(txn="GameSpyPreAuth")
+        preauth_response = FeslHandlers.handle_gamespy_pre_auth(preauth_request)
         assert preauth_response is not None
 
         # Step 4: GPServer validates ticket (simulating GPServer login handler)
@@ -684,7 +571,7 @@ class TestFeslHandlersIntegration:
                 persona_id=validated_persona_id,
                 preauth_ticket_id=consumed_ticket.id,
                 product_id=11419,
-                gamename='redalert3pc'
+                gamename="redalert3pc",
             )
             assert gp_session is not None
             assert gp_session.is_active is True
@@ -709,11 +596,7 @@ class TestEdgeCases:
         from datetime import datetime, timedelta
 
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="expiredticket",
-                password="expiredpass",
-                email="expired@example.com"
-            )
+            user_data = UserCreate(username="expiredticket", password="expiredpass", email="expired@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -730,11 +613,7 @@ class TestEdgeCases:
     def test_already_used_ticket_rejected(self):
         """Test that already-used pre-auth tickets are rejected."""
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="usedticket",
-                password="usedpass",
-                email="used@example.com"
-            )
+            user_data = UserCreate(username="usedticket", password="usedpass", email="used@example.com")
             user = create_new_user(session, user_data)
             personas = get_personas_for_user(session, user.id)
             persona = personas[0]
@@ -756,11 +635,7 @@ class TestEdgeCases:
         from app.db.crud import create_persona_for_user
 
         with self.get_session() as session:
-            user_data = UserCreate(
-                username="multipersona",
-                password="multipass",
-                email="multi@example.com"
-            )
+            user_data = UserCreate(username="multipersona", password="multipass", email="multi@example.com")
             user = create_new_user(session, user_data)
 
             # Create additional persona
@@ -778,16 +653,8 @@ class TestEdgeCases:
         """Test that different users have isolated sessions."""
         with self.get_session() as session:
             # Create two users
-            user1_data = UserCreate(
-                username="user1",
-                password="password1",
-                email="user1@example.com"
-            )
-            user2_data = UserCreate(
-                username="user2",
-                password="password2",
-                email="user2@example.com"
-            )
+            user1_data = UserCreate(username="user1", password="password1", email="user1@example.com")
+            user2_data = UserCreate(username="user2", password="password2", email="user2@example.com")
             user1 = create_new_user(session, user1_data)
             user2 = create_new_user(session, user2_data)
 

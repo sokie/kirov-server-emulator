@@ -1,6 +1,6 @@
 import os
 
-from sqlmodel import create_engine, SQLModel, Session
+from sqlmodel import Session, SQLModel, create_engine
 
 # The database URL tells SQLAlchemy where our database is located.
 # "sqlite:///database.db" means we are using SQLite, and the database
@@ -44,4 +44,3 @@ def cleanup(db_file: str = "database.db"):
     if os.path.exists(db_file):
         os.remove(db_file)
         print(f"Removed database file: {db_file}")
-

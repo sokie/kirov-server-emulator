@@ -9,18 +9,23 @@ These tests cover:
 5. Protocol flow validation based on real example data
 """
 
-import pytest
-import hashlib
 import base64
+import hashlib
 from unittest.mock import MagicMock, patch
-from app.raw.gp_server import (
-    GpServer,
-    generate_login_response,
-    TEST_USER_ID as GP_TEST_USER_ID,
-    TEST_UNIQUENICK as GP_TEST_UNIQUENICK,
+
+from app.servers.gp_server import (
     TEST_SECRET as GP_TEST_SECRET,
 )
-
+from app.servers.gp_server import (
+    TEST_UNIQUENICK as GP_TEST_UNIQUENICK,
+)
+from app.servers.gp_server import (
+    TEST_USER_ID as GP_TEST_USER_ID,
+)
+from app.servers.gp_server import (
+    GpServer,
+    generate_login_response,
+)
 
 # Test constants (sanitized dummy data)
 TEST_USER_ID = "100001"
@@ -40,7 +45,7 @@ class MockSessionManager:
 
     def register_user(self, sesskey, protocol):
         self.users[sesskey] = protocol
-        if hasattr(protocol, 'persona_id') and protocol.persona_id:
+        if hasattr(protocol, "persona_id") and protocol.persona_id:
             self.users_by_persona[protocol.persona_id] = protocol
 
     async def unregister_user(self, sesskey):
@@ -65,8 +70,8 @@ class MockTransport:
         self.written.append(data)
 
     def get_extra_info(self, name):
-        if name == 'peername':
-            return ('127.0.0.1', 12345)
+        if name == "peername":
+            return ("127.0.0.1", 12345)
         return None
 
     def close(self):
@@ -130,7 +135,7 @@ class TestGpServerLegacy:
 
         # Calculate expected proof using test secret
         secret = GP_TEST_SECRET
-        expected_proof_string = f"{userid}{uniquenick}{challenge}{secret}".encode("utf-8")
+        expected_proof_string = f"{userid}{uniquenick}{challenge}{secret}".encode()
         expected_proof = hashlib.md5(expected_proof_string).hexdigest()
 
         assert response_parts["proof"] == expected_proof
@@ -173,7 +178,7 @@ class TestGpServerMethods:
         self.mock_session_manager = MockSessionManager()
         self.gp_server = GpServer(self.mock_session_manager)
         self.gp_server.transport = MockTransport()
-        self.gp_server.peername = ('127.0.0.1', 12345)
+        self.gp_server.peername = ("127.0.0.1", 12345)
 
     def test_parse_request_basic(self):
         """Test parsing a basic GameSpy request."""
@@ -215,6 +220,7 @@ class TestGpServerMethods:
     def test_format_response_preserves_order(self):
         """Test that response formatting preserves key order."""
         from collections import OrderedDict
+
         data = OrderedDict([("lc", "2"), ("sesskey", "12345"), ("proof", "abc")])
 
         result = self.gp_server.format_response(data)
@@ -245,10 +251,7 @@ class TestGpServerMethods:
         expected_proof = "a25c61a3929cc6ccfeb1eab242d3a669"
 
         proof = self.gp_server.calculate_proof(
-            password=password,
-            authtoken=authtoken,
-            client_challenge=client_challenge,
-            server_challenge=server_challenge
+            password=password, authtoken=authtoken, client_challenge=client_challenge, server_challenge=server_challenge
         )
 
         assert proof == expected_proof
@@ -276,10 +279,7 @@ class TestGpServerMethods:
         expected_response = "43575edbb342e4ef667e8d34d4df3584"
 
         response = self.gp_server.calculate_client_response(
-            password=password,
-            authtoken=authtoken,
-            client_challenge=client_challenge,
-            server_challenge=server_challenge
+            password=password, authtoken=authtoken, client_challenge=client_challenge, server_challenge=server_challenge
         )
 
         assert response == expected_response
@@ -384,8 +384,7 @@ class TestGpServerParsing:
         """Test parsing a pinvite (game invite) request."""
         location = f"2166 219975299 0 PW: #HOST:{TEST_UNIQUENICK} {TEST_UNIQUENICK} #FROM:{TEST_UNIQUENICK} #CHAN:#GSP!redalert3pc!TestLobby"
         request = (
-            f"\\pinvite\\\\sesskey\\{TEST_SESSKEY}\\profileid\\300001\\"
-            f"productid\\11419\\location\\{location}\\final\\"
+            f"\\pinvite\\\\sesskey\\{TEST_SESSKEY}\\profileid\\300001\\productid\\11419\\location\\{location}\\final\\"
         )
 
         result = self.gp_server.parse_request(request)
@@ -412,7 +411,7 @@ class TestGpServerStatusHandling:
         self.mock_session_manager = MockSessionManager()
         self.gp_server = GpServer(self.mock_session_manager)
         self.gp_server.transport = MockTransport()
-        self.gp_server.peername = ('127.0.0.1', 12345)
+        self.gp_server.peername = ("127.0.0.1", 12345)
         self.gp_server.sesskey = TEST_SESSKEY
 
     def test_handle_status_online(self):
@@ -421,11 +420,7 @@ class TestGpServerStatusHandling:
         Per GameSpy protocol, status updates don't return a response.
         The server updates the database and notifies buddies instead.
         """
-        request_data = {
-            "sesskey": TEST_SESSKEY,
-            "statstring": "Online",
-            "locstring": ""
-        }
+        request_data = {"sesskey": TEST_SESSKEY, "statstring": "Online", "locstring": ""}
 
         response = self.gp_server.handle_status(request_data)
 
@@ -437,11 +432,7 @@ class TestGpServerStatusHandling:
 
         Per GameSpy protocol, status updates don't return a response.
         """
-        request_data = {
-            "sesskey": TEST_SESSKEY,
-            "statstring": "Chatting",
-            "locstring": "2166"
-        }
+        request_data = {"sesskey": TEST_SESSKEY, "statstring": "Chatting", "locstring": "2166"}
 
         response = self.gp_server.handle_status(request_data)
 
@@ -453,11 +444,7 @@ class TestGpServerStatusHandling:
 
         Per GameSpy protocol, status updates don't return a response.
         """
-        request_data = {
-            "sesskey": TEST_SESSKEY,
-            "statstring": "Staging",
-            "locstring": TEST_UNIQUENICK
-        }
+        request_data = {"sesskey": TEST_SESSKEY, "statstring": "Staging", "locstring": TEST_UNIQUENICK}
 
         response = self.gp_server.handle_status(request_data)
 
@@ -473,7 +460,7 @@ class TestGpServerLogout:
         self.mock_session_manager = MockSessionManager()
         self.gp_server = GpServer(self.mock_session_manager)
         self.gp_server.transport = MockTransport()
-        self.gp_server.peername = ('127.0.0.1', 12345)
+        self.gp_server.peername = ("127.0.0.1", 12345)
         # Don't set sesskey so unregister_user won't be called
         self.gp_server.user_id = 100001
         self.gp_server.persona_id = 200001
@@ -507,16 +494,13 @@ class TestGpServerProtocolFlow:
         self.mock_session_manager = MockSessionManager()
         self.gp_server = GpServer(self.mock_session_manager)
         self.gp_server.transport = MockTransport()
-        self.gp_server.peername = ('127.0.0.1', 12345)
+        self.gp_server.peername = ("127.0.0.1", 12345)
 
     def test_login_response_structure(self):
         """Test that login response has correct structure (based on example)."""
         # Example from PDF: \lc\2\sesskey\877562875\proof\...\userid\...\profileid\...\uniquenick\...\lt\...\id\1\final\
 
-        response = generate_login_response({
-            "challenge": TEST_CHALLENGE,
-            "id": "1"
-        })
+        response = generate_login_response({"challenge": TEST_CHALLENGE, "id": "1"})
 
         # Parse response
         parts = response.strip().split("\\")
@@ -543,10 +527,11 @@ class TestGpServerProtocolFlow:
         self.gp_server.sesskey = TEST_SESSKEY
 
         # Mock database calls
-        with patch('app.raw.gp_server.create_session'), \
-             patch('app.raw.gp_server.get_persona_by_id') as mock_persona, \
-             patch('app.raw.gp_server.get_user_by_id') as mock_user:
-
+        with (
+            patch("app.servers.gp_server.create_session"),
+            patch("app.servers.gp_server.get_persona_by_id") as mock_persona,
+            patch("app.servers.gp_server.get_user_by_id") as mock_user,
+        ):
             mock_persona_obj = MagicMock()
             mock_persona_obj.id = 200001
             mock_persona_obj.name = TEST_UNIQUENICK
@@ -557,11 +542,7 @@ class TestGpServerProtocolFlow:
             mock_user_obj.id = 100001
             mock_user.return_value = mock_user_obj
 
-            response = self.gp_server.handle_getprofile({
-                "profileid": "200001",
-                "sesskey": TEST_SESSKEY,
-                "id": "2"
-            })
+            response = self.gp_server.handle_getprofile({"profileid": "200001", "sesskey": TEST_SESSKEY, "id": "2"})
 
         # Verify response structure
         assert response.startswith("\\pi\\")
@@ -590,33 +571,28 @@ class TestGpServerProtocolFlow:
         }
 
         for code, expected_string in status_map.items():
-            request = f"\\status\\{code}\\sesskey\\{TEST_SESSKEY}\\statstring\\{expected_string}\\locstring\\test\\final\\"
+            request = (
+                f"\\status\\{code}\\sesskey\\{TEST_SESSKEY}\\statstring\\{expected_string}\\locstring\\test\\final\\"
+            )
             result = self.gp_server.parse_request(request)
             assert result.get("statstring") == expected_string
 
     def test_complete_session_flow(self):
         """Test a complete session flow: login response -> status -> logout."""
         # Step 1: Generate login response
-        login_response = generate_login_response({
-            "challenge": TEST_CHALLENGE,
-            "id": "1"
-        })
+        login_response = generate_login_response({"challenge": TEST_CHALLENGE, "id": "1"})
         assert "\\lc\\2" in login_response
 
         # Step 2: Status update (don't set sesskey to avoid async task in logout)
-        status_response = self.gp_server.handle_status({
-            "sesskey": TEST_SESSKEY,
-            "statstring": "Online",
-            "locstring": ""
-        })
+        status_response = self.gp_server.handle_status(
+            {"sesskey": TEST_SESSKEY, "statstring": "Online", "locstring": ""}
+        )
         # Status updates return empty string per GameSpy protocol
         assert status_response == ""
 
         # Step 3: Logout (sesskey is None, so no async unregister call)
         self.gp_server.user_id = 100001  # Set some state to clear
-        logout_response = self.gp_server.handle_logout({
-            "sesskey": TEST_SESSKEY
-        })
+        logout_response = self.gp_server.handle_logout({"sesskey": TEST_SESSKEY})
         assert logout_response == ""
         assert self.gp_server.user_id is None
 
@@ -629,35 +605,25 @@ class TestGpServerErrorHandling:
         self.mock_session_manager = MockSessionManager()
         self.gp_server = GpServer(self.mock_session_manager)
         self.gp_server.transport = MockTransport()
-        self.gp_server.peername = ('127.0.0.1', 12345)
+        self.gp_server.peername = ("127.0.0.1", 12345)
 
     def test_getprofile_missing_profileid(self):
         """Test getprofile with missing profileid returns error."""
-        response = self.gp_server.handle_getprofile({
-            "sesskey": TEST_SESSKEY,
-            "id": "2"
-        })
+        response = self.gp_server.handle_getprofile({"sesskey": TEST_SESSKEY, "id": "2"})
 
         assert "\\error\\" in response
         assert "Missing profileid" in response
 
     def test_getprofile_invalid_profileid(self):
         """Test getprofile with invalid profileid returns error."""
-        response = self.gp_server.handle_getprofile({
-            "profileid": "not_a_number",
-            "sesskey": TEST_SESSKEY,
-            "id": "2"
-        })
+        response = self.gp_server.handle_getprofile({"profileid": "not_a_number", "sesskey": TEST_SESSKEY, "id": "2"})
 
         assert "\\error\\" in response
         assert "Invalid profileid" in response
 
     def test_login_missing_authtoken(self):
         """Test login with missing authtoken returns error."""
-        response = self.gp_server.handle_login({
-            "challenge": TEST_CHALLENGE,
-            "id": "1"
-        })
+        response = self.gp_server.handle_login({"challenge": TEST_CHALLENGE, "id": "1"})
 
         assert "\\error\\" in response
         assert "Missing authtoken" in response
@@ -671,22 +637,19 @@ class TestGpServerNewHandlers:
         self.mock_session_manager = MockSessionManager()
         self.gp_server = GpServer(self.mock_session_manager)
         self.gp_server.transport = MockTransport()
-        self.gp_server.peername = ('127.0.0.1', 12345)
+        self.gp_server.peername = ("127.0.0.1", 12345)
         self.gp_server.sesskey = TEST_SESSKEY
         self.gp_server.persona_id = 200001
         self.gp_server.user_id = 100001
 
     def test_handle_addbuddy_returns_bm4(self):
         """Test addbuddy returns bm type 4 acknowledgment."""
-        with patch('app.raw.gp_server.create_session'), \
-             patch('app.raw.gp_server.create_buddy_request'), \
-             patch('app.raw.gp_server.get_persona_by_id'):
-
-            response = self.gp_server.handle_addbuddy({
-                "sesskey": TEST_SESSKEY,
-                "newprofileid": "300001",
-                "reason": ""
-            })
+        with (
+            patch("app.servers.gp_server.create_session"),
+            patch("app.servers.gp_server.create_buddy_request"),
+            patch("app.servers.gp_server.get_persona_by_id"),
+        ):
+            response = self.gp_server.handle_addbuddy({"sesskey": TEST_SESSKEY, "newprofileid": "300001", "reason": ""})
 
             assert "\\bm\\4" in response
             assert "300001" in response
@@ -695,39 +658,39 @@ class TestGpServerNewHandlers:
         """Test addbuddy without persona_id returns empty."""
         self.gp_server.persona_id = None
 
-        response = self.gp_server.handle_addbuddy({
-            "sesskey": TEST_SESSKEY,
-            "newprofileid": "300001"
-        })
+        response = self.gp_server.handle_addbuddy({"sesskey": TEST_SESSKEY, "newprofileid": "300001"})
 
         assert response == ""
 
     def test_handle_authadd_calls_accept_buddy_request(self):
         """Test authadd calls accept_buddy_request."""
-        with patch('app.raw.gp_server.create_session'), \
-             patch('app.raw.gp_server.accept_buddy_request') as mock_accept:
+        with (
+            patch("app.servers.gp_server.create_session"),
+            patch("app.servers.gp_server.accept_buddy_request") as mock_accept,
+        ):
             mock_accept.return_value = True
 
-            response = self.gp_server.handle_authadd({
-                "sesskey": TEST_SESSKEY,
-                "fromprofileid": "300001",
-                "sig": "00000000000000000000000000000000"
-            })
+            response = self.gp_server.handle_authadd(
+                {"sesskey": TEST_SESSKEY, "fromprofileid": "300001", "sig": "00000000000000000000000000000000"}
+            )
 
             mock_accept.assert_called_once()
             assert response == ""
 
     def test_handle_pinvite_creates_invite(self):
         """Test pinvite creates game invite."""
-        with patch('app.raw.gp_server.create_session'), \
-             patch('app.raw.gp_server.create_game_invite') as mock_invite:
-
-            response = self.gp_server.handle_pinvite({
-                "sesskey": TEST_SESSKEY,
-                "profileid": "300001",
-                "productid": "11419",
-                "location": "2166 219975299 0 PW: #HOST:testplayer"
-            })
+        with (
+            patch("app.servers.gp_server.create_session"),
+            patch("app.servers.gp_server.create_game_invite") as mock_invite,
+        ):
+            response = self.gp_server.handle_pinvite(
+                {
+                    "sesskey": TEST_SESSKEY,
+                    "profileid": "300001",
+                    "productid": "11419",
+                    "location": "2166 219975299 0 PW: #HOST:testplayer",
+                }
+            )
 
             mock_invite.assert_called_once()
             assert response == ""
@@ -736,12 +699,9 @@ class TestGpServerNewHandlers:
         """Test pinvite without persona_id returns empty."""
         self.gp_server.persona_id = None
 
-        response = self.gp_server.handle_pinvite({
-            "sesskey": TEST_SESSKEY,
-            "profileid": "300001",
-            "productid": "11419",
-            "location": "test"
-        })
+        response = self.gp_server.handle_pinvite(
+            {"sesskey": TEST_SESSKEY, "profileid": "300001", "productid": "11419", "location": "test"}
+        )
 
         assert response == ""
 
@@ -767,7 +727,9 @@ class TestGpServerNewHandlers:
     def test_parse_pinvite_request(self):
         """Test parsing pinvite request."""
         location = "2166 219975299 0 PW: #HOST:testplayer testplayer #FROM:testplayer #CHAN:#GSP!redalert3pc!TestLobby"
-        request = f"\\pinvite\\\\sesskey\\{TEST_SESSKEY}\\profileid\\300001\\productid\\11419\\location\\{location}\\final\\"
+        request = (
+            f"\\pinvite\\\\sesskey\\{TEST_SESSKEY}\\profileid\\300001\\productid\\11419\\location\\{location}\\final\\"
+        )
 
         result = self.gp_server.parse_request(request)
 
@@ -800,7 +762,7 @@ class TestGpServerConnection:
         """Test that connection_made generates a challenge string."""
         self.gp_server.connection_made(self.mock_transport)
 
-        assert hasattr(self.gp_server, 'server_challenge')
+        assert hasattr(self.gp_server, "server_challenge")
         # Server challenge is 10 uppercase letters (matches real data: RKSUWPOCWX)
         assert len(self.gp_server.server_challenge) == 10
         assert self.gp_server.server_challenge.isupper()

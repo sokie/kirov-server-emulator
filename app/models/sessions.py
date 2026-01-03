@@ -1,5 +1,6 @@
-from cachetools import TTLCache
 import secrets
+
+from cachetools import TTLCache
 
 # Create a session store that can hold up to 1024 sessions,
 # with each session lasting for 3600 seconds (1 hour).
