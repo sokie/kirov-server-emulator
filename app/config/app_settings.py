@@ -1,5 +1,9 @@
+import os
+
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, JsonConfigSettingsSource, SettingsConfigDict
+
+from app.util.paths import get_runtime_path
 
 
 class IRCSettings(BaseModel):
@@ -55,6 +59,10 @@ class MasterServerSettings(BaseModel):
     enabled: bool = Field(default=True)
 
 
+# Compute config path at module load time for frozen executable support
+_config_path = os.path.join(get_runtime_path(), "config.json")
+
+
 class AppSettings(BaseSettings):
     irc: IRCSettings = Field(default_factory=IRCSettings)
     fesl: FeslSettings = Field(default_factory=FeslSettings)
@@ -65,7 +73,7 @@ class AppSettings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
     model_config = SettingsConfigDict(
-        json_file="config.json",
+        json_file=_config_path,
         json_file_encoding="utf-8",
         extra="ignore",
     )

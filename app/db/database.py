@@ -2,10 +2,12 @@ import os
 
 from sqlmodel import Session, SQLModel, create_engine
 
+from app.util.paths import get_runtime_path
+
 # The database URL tells SQLAlchemy where our database is located.
-# "sqlite:///database.db" means we are using SQLite, and the database
-# file is named "database.db" in the same directory.
-DATABASE_URL = "sqlite:///database.db"
+# Use absolute path based on runtime location for frozen executable support.
+_db_path = os.path.join(get_runtime_path(), "database.db")
+DATABASE_URL = f"sqlite:///{_db_path}"
 
 # The engine is the central point of communication with the database.
 # connect_args is needed only for SQLite to allow sharing the connection

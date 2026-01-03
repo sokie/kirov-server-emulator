@@ -31,3 +31,4 @@ typing_extensions==4.14.0
 uvicorn==0.34.3
 pytest==8.2.2
 pytest-cov==6.0.0
+pyinstaller>=6.0.0

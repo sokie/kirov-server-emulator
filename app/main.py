@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app._version import __version__
 from app.config.app_settings import app_config
 from app.db.database import create_db_and_tables
 from app.rest.routes import router as rest_router
@@ -17,6 +19,7 @@ from app.servers.query_master_udp import start_heartbeat_server
 from app.servers.sessions import SessionManager
 from app.soap.service import soap_router
 from app.util.logging_helper import setup_logging
+from app.util.paths import get_base_path
 
 
 @asynccontextmanager
@@ -104,7 +107,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Red Alert 3 LAN Server",
     description="EA server emulator with FESL authentication and Peerchat IRC support.",
-    version="1.2.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -115,7 +118,8 @@ app.include_router(rest_router, prefix="/api/rest")
 app.include_router(soap_router)
 
 # Mount the static files directory
-app.mount("/", StaticFiles(directory="static"), name="static")
+static_path = os.path.join(get_base_path(), "static")
+app.mount("/", StaticFiles(directory=static_path), name="static")
 
 
 @app.get("/health")
