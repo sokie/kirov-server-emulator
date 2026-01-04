@@ -418,25 +418,44 @@ class GameSessionRegistry:
         private_ip = info.get("localip0", host)
         private_port = int(info.get("localport", public_port))
 
-        # Create or update GameEntry
-        game = GameEntry(
-            public_ip=public_ip,
-            public_port=public_port,
-            private_ip=private_ip,
-            private_port=private_port,
-            traced_ip=host,  # The IP we actually received the packet from
-            traced_port=port,
-            fields=info,
-        )
+        # Check if session already exists
+        existing_game = self._sessions.get(client_id)
 
-        self._sessions[client_id] = game
-        logger.info(
-            "Registered game: client_id=%d, host=%s:%d, hostname=%s",
-            client_id,
-            public_ip,
-            public_port,
-            info.get("hostname", "unknown"),
-        )
+        if existing_game:
+            # Update existing GameEntry
+            existing_game.public_ip = public_ip
+            existing_game.public_port = public_port
+            existing_game.private_ip = private_ip
+            existing_game.private_port = private_port
+            existing_game.traced_ip = host
+            existing_game.traced_port = port
+            existing_game.fields = info
+            logger.debug(
+                "Updated game: client_id=%d, host=%s:%d, hostname=%s",
+                client_id,
+                public_ip,
+                public_port,
+                info.get("hostname", "unknown"),
+            )
+        else:
+            # Create new GameEntry
+            game = GameEntry(
+                public_ip=public_ip,
+                public_port=public_port,
+                private_ip=private_ip,
+                private_port=private_port,
+                traced_ip=host,
+                traced_port=port,
+                fields=info,
+            )
+            self._sessions[client_id] = game
+            logger.info(
+                "Registered game: client_id=%d, host=%s:%d, hostname=%s",
+                client_id,
+                public_ip,
+                public_port,
+                info.get("hostname", "unknown"),
+            )
 
     def unregister_game(self, client_id: int):
         """Remove a game session."""
