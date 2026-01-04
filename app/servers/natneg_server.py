@@ -4,13 +4,13 @@ NAT Negotiation UDP Server.
 Implements the GameSpy NAT negotiation protocol for Red Alert 3.
 Listens on UDP port 27901 and facilitates NAT traversal between clients.
 
-The server supports LAN mode where clients on the same public IP
-are directed to use their local IP addresses for P2P connections.
+Uses dual-mode: sends both LAN and WAN addresses in CONNECT packets.
+The game tries all connections, so whichever works will succeed,
+enabling seamless LAN and WAN support without configuration.
 """
 
 import asyncio
 
-from app.config.app_settings import app_config
 from app.models.natneg_types import (
     NatNegHeader,
     NatNegRecordType,
@@ -35,11 +35,12 @@ class NatNegServer(asyncio.DatagramProtocol):
     NAT Negotiation UDP Server Protocol.
 
     Handles the GameSpy NAT negotiation protocol:
-    1. Receives INIT packets from clients
-    2. Responds with INIT_ACK
-    3. When both host and guest register with same session_id, sends CONNECT to both
-    4. For LAN clients (same public IP), uses local IPs in CONNECT packets
-    5. Handles CONNECT_ACK and REPORT packets
+    1. Receives INIT packets from clients (4 per client with different port_types)
+    2. Responds with INIT_ACK for each
+    3. When both host and guest register, sends CONNECT to all connections
+       - port_type 0,1: LAN addresses (local_ip:local_port)
+       - port_type 2,3: WAN addresses (public_ip:public_port)
+    4. Handles CONNECT_ACK and REPORT packets
     """
 
     def __init__(self, session_manager: NatNegSessionManager | None = None):
@@ -170,107 +171,114 @@ class NatNegServer(asyncio.DatagramProtocol):
         Called when a session has both clients registered.
 
         Sends CONNECT packets to ALL connections of both clients.
-        Uses LAN mode by default (local IPs from INIT packets).
-        WAN mode (NAT punchthrough) is experimental and requires force_lan_mode=false in config.
+        Uses dual mode: sends both LAN and WAN addresses across different port_types.
+        - port_type 0,1: LAN addresses (local_ip:local_port)
+        - port_type 2,3: WAN addresses (public_ip:public_port)
+
+        The game tries all connections, so whichever works will succeed.
+        This enables seamless LAN and WAN support without configuration.
         """
         if not session.host or not session.guest:
             logger.error("Session ready but missing client(s)")
             return
 
-        # Determine whether to use LAN or WAN mode
-        # Default: force_lan_mode=True (always use local IPs)
-        # If force_lan_mode=False, auto-detect based on public IPs
-        force_lan = app_config.natneg.force_lan_mode
-        if force_lan:
-            use_lan_mode = True
-        else:
-            # Auto-detect: use LAN mode if clients are on same network
-            use_lan_mode = session.are_same_lan()
-
         logger.info(
-            "Session %08X ready - sending CONNECT packets (LAN mode: %s, forced: %s)",
+            "Session %08X ready - sending dual-mode CONNECT packets (LAN + WAN)",
             session.session_id,
-            use_lan_mode,
-            force_lan,
+        )
+        logger.info(
+            "Session %08X - Host LAN: %s:%d, WAN: %s:%d",
+            session.session_id,
+            session.host.local_ip,
+            session.host.local_port,
+            session.host.public_ip,
+            session.host.public_port,
+        )
+        logger.info(
+            "Session %08X - Guest LAN: %s:%d, WAN: %s:%d",
+            session.session_id,
+            session.guest.local_ip,
+            session.guest.local_port,
+            session.guest.public_ip,
+            session.guest.public_port,
         )
 
-        # Determine addresses to use for P2P connection
-        # For LAN, use local addresses from INIT packets (where game listens)
-        # For WAN, use public addresses (requires NAT punchthrough - experimental)
-        if use_lan_mode:
-            # LAN mode: use local IP:port from INIT packet
-            host_ip_for_guest = session.host.local_ip
-            host_port_for_guest = session.host.local_port
-            guest_ip_for_host = session.guest.local_ip
-            guest_port_for_host = session.guest.local_port
-            logger.info(
-                "LAN mode: Host(%s:%d) <-> Guest(%s:%d)",
-                host_ip_for_guest,
-                host_port_for_guest,
-                guest_ip_for_host,
-                guest_port_for_host,
-            )
-        else:
-            # WAN mode: use public addresses (experimental - NAT punchthrough may not work)
-            host_ip_for_guest = session.host.public_ip
-            host_port_for_guest = session.host.public_port
-            guest_ip_for_host = session.guest.public_ip
-            guest_port_for_host = session.guest.public_port
-            logger.warning(
-                "WAN mode (experimental): Host(%s:%d) <-> Guest(%s:%d) - NAT punchthrough may fail",
-                host_ip_for_guest,
-                host_port_for_guest,
-                guest_ip_for_host,
-                guest_port_for_host,
-            )
-
-        # Build CONNECT packet for guest (telling them about host)
-        # CONNECT packets don't include port_type/client_index - same packet to all connections
-        connect_to_guest = build_connect_packet(
+        # Build LAN CONNECT packets (using local addresses from INIT packets)
+        connect_lan_to_guest = build_connect_packet(
             session_id=session.session_id,
-            peer_ip=host_ip_for_guest,
-            peer_port=host_port_for_guest,
+            peer_ip=session.host.local_ip,
+            peer_port=session.host.local_port,
+            got_data=True,
+            finished=True,
+        )
+        connect_lan_to_host = build_connect_packet(
+            session_id=session.session_id,
+            peer_ip=session.guest.local_ip,
+            peer_port=session.guest.local_port,
             got_data=True,
             finished=True,
         )
 
-        # Send CONNECT to ALL guest connections
+        # Build WAN CONNECT packets (using public addresses as seen by server)
+        connect_wan_to_guest = build_connect_packet(
+            session_id=session.session_id,
+            peer_ip=session.host.public_ip,
+            peer_port=session.host.public_port,
+            got_data=True,
+            finished=True,
+        )
+        connect_wan_to_host = build_connect_packet(
+            session_id=session.session_id,
+            peer_ip=session.guest.public_ip,
+            peer_port=session.guest.public_port,
+            got_data=True,
+            finished=True,
+        )
+
+        # Send to guest: LAN for port_type 0,1 | WAN for port_type 2,3
         for port_type, conn in session.guest.connections.items():
-            guest_addr = (conn.public_ip, conn.public_port)
-            self._send_to(connect_to_guest, guest_addr)
+            if port_type <= 1:
+                packet = connect_lan_to_guest
+                mode = "LAN"
+                peer_ip, peer_port = session.host.local_ip, session.host.local_port
+            else:
+                packet = connect_wan_to_guest
+                mode = "WAN"
+                peer_ip, peer_port = session.host.public_ip, session.host.public_port
+            self._send_to(packet, (conn.public_ip, conn.public_port))
             logger.debug(
-                "Sent CONNECT to GUEST %s:%d (port_type=%d) -> peer %s:%d",
+                "Sent CONNECT to GUEST %s:%d (port_type=%d, %s) -> peer %s:%d",
                 conn.public_ip,
                 conn.public_port,
                 port_type,
-                host_ip_for_guest,
-                host_port_for_guest,
+                mode,
+                peer_ip,
+                peer_port,
             )
 
-        # Build CONNECT packet for host (telling them about guest)
-        connect_to_host = build_connect_packet(
-            session_id=session.session_id,
-            peer_ip=guest_ip_for_host,
-            peer_port=guest_port_for_host,
-            got_data=True,
-            finished=True,
-        )
-
-        # Send CONNECT to ALL host connections
+        # Send to host: LAN for port_type 0,1 | WAN for port_type 2,3
         for port_type, conn in session.host.connections.items():
-            host_addr = (conn.public_ip, conn.public_port)
-            self._send_to(connect_to_host, host_addr)
+            if port_type <= 1:
+                packet = connect_lan_to_host
+                mode = "LAN"
+                peer_ip, peer_port = session.guest.local_ip, session.guest.local_port
+            else:
+                packet = connect_wan_to_host
+                mode = "WAN"
+                peer_ip, peer_port = session.guest.public_ip, session.guest.public_port
+            self._send_to(packet, (conn.public_ip, conn.public_port))
             logger.debug(
-                "Sent CONNECT to HOST %s:%d (port_type=%d) -> peer %s:%d",
+                "Sent CONNECT to HOST %s:%d (port_type=%d, %s) -> peer %s:%d",
                 conn.public_ip,
                 conn.public_port,
                 port_type,
-                guest_ip_for_host,
-                guest_port_for_host,
+                mode,
+                peer_ip,
+                peer_port,
             )
 
         logger.info(
-            "Session %08X: Sent CONNECT to %d guest connections and %d host connections",
+            "Session %08X: Sent CONNECT to %d guest + %d host connections (dual LAN/WAN mode)",
             session.session_id,
             len(session.guest.connections),
             len(session.host.connections),
