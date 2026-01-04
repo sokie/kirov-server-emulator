@@ -331,10 +331,6 @@ class NatNegClientConnection:
     # Connection info
     port_type: NatNegPortType
 
-    # State tracking
-    connect_sent: bool = False
-    connect_acked: bool = False
-
 
 @dataclass
 class NatNegClient:
@@ -355,6 +351,7 @@ class NatNegClient:
 
     # State tracking
     init_received: bool = False
+    connect_acked: bool = False
 
     def add_connection(self, conn: NatNegClientConnection):
         """Add or update a connection for a port_type."""
