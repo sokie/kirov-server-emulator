@@ -411,13 +411,13 @@ def encode_field_value_classic(value: str) -> bytes:
 def build_room_list_response(
     rooms: list,
     fields: list,
-    master_ip: str = DEFAULT_MASTER_IP,
+    client_ip: str = DEFAULT_MASTER_IP,
 ) -> bytes:
     """
     Build a classic-format room list response.
 
     Response structure:
-        ip4     masterIp
+        ip4     clientIp (echoed back to client)
         u16be   0x0000 (port 0 for room list)
         fieldList
         u8      0x00
@@ -434,15 +434,15 @@ def build_room_list_response(
     Args:
         rooms: List of RoomEntry objects
         fields: List of field names to include
-        master_ip: Master server IP address
+        client_ip: Client's IP address (echoed back in response)
 
     Returns:
         Complete response bytes
     """
     response = b""
 
-    # Master IP (4 bytes)
-    response += ip_to_bytes(master_ip)
+    # Client IP echoed back (4 bytes)
+    response += ip_to_bytes(client_ip)
 
     # Port 0 for room list (2 bytes big-endian)
     response += struct.pack("!H", 0)
@@ -479,18 +479,40 @@ def build_room_list_response(
 # =============================================================================
 
 
+def _compute_query_key(validate_token: bytes) -> bytes:
+    """
+    Compute the 2-byte query key from the validate token.
+
+    The real GameSpy server derives bytes 4-5 of the response from the
+    validate token using XOR operations. Based on observed traffic:
+    - byte0 = validate[0] XOR 0xFC
+    - byte1 = validate[1] XOR 0xC9
+
+    Args:
+        validate_token: 8-byte validate token from request
+
+    Returns:
+        2-byte query key
+    """
+    if len(validate_token) >= 2:
+        key0 = validate_token[0] ^ 0xFC
+        key1 = validate_token[1] ^ 0xC9
+        return bytes([key0, key1])
+    return b"\x00\x00"
+
+
 def build_game_list_response(
     games: list,
     fields: list,
-    master_ip: str = DEFAULT_MASTER_IP,
-    master_port: int = DEFAULT_MASTER_PORT,
+    client_ip: str = DEFAULT_MASTER_IP,
+    validate_token: bytes = b"",
 ) -> bytes:
     """
     Build a classic-format game list response.
 
     Response structure:
-        ip4     masterIp
-        u16be   masterPort
+        ip4     clientIp (echoed back to client)
+        u16be   queryKey (derived from validate token)
         fieldList
         u8      0x00
         [gameEntryClassic]...
@@ -503,7 +525,6 @@ def build_game_list_response(
         ip4     privateIp
         u16be   privatePort
         ip4     tracedIp
-        u16be   tracedPort
         repeat for each field:
             u8 0xFF + str bytes + u8 0x00
         u8      0x00 (end of entry)
@@ -511,19 +532,19 @@ def build_game_list_response(
     Args:
         games: List of GameEntry objects
         fields: List of field names to include
-        master_ip: Master server IP address
-        master_port: Master server port
+        client_ip: Client's IP address (echoed back in response)
+        validate_token: 8-byte validate token from request (used to derive query key)
 
     Returns:
         Complete response bytes
     """
     response = b""
 
-    # Master IP (4 bytes)
-    response += ip_to_bytes(master_ip)
+    # Client IP echoed back (4 bytes)
+    response += ip_to_bytes(client_ip)
 
-    # Master port (2 bytes big-endian)
-    response += struct.pack("!H", master_port)
+    # Query key derived from validate token (2 bytes)
+    response += _compute_query_key(validate_token)
 
     # Field list
     response += make_field_list(fields)
@@ -546,7 +567,6 @@ def build_game_list_response(
 
         # Traced IP/port (same as public if not specified)
         response += ip_to_bytes(game.traced_ip)
-        response += struct.pack("!H", game.traced_port)
 
         # Field values
         for field_name in fields:
@@ -609,7 +629,6 @@ def build_game_result_message(
         ip4     privateIp
         u16be   privatePort
         ip4     tracedIp
-        u16be   tracedPort
         repeat for each VALUE_MAP field:
             if type == 0: str0 (null-terminated string)
             if type == 1: u8 (one byte integer)
@@ -635,7 +654,6 @@ def build_game_result_message(
     payload += ip_to_bytes(game.private_ip)
     payload += struct.pack("!H", game.private_port)
     payload += ip_to_bytes(game.traced_ip)
-    payload += struct.pack("!H", game.traced_port)
 
     # Field values based on type
     for field_name in fields:
@@ -661,19 +679,56 @@ def create_default_rooms() -> list:
     """Create default room list for Red Alert 3."""
     rooms = [
         # Chat rooms
-        RoomEntry(room_id=0x1337, hostname="ChatRoom1", room_type=1),
-        RoomEntry(room_id=0x1338, hostname="ChatRoom1", room_type=2),
+        RoomEntry(room_id=0x0881, hostname="ChatRoom1", room_type=1),
+        RoomEntry(room_id=0x0896, hostname="ChatRoom1", room_type=2),
         # Lobby rooms
-        RoomEntry(room_id=0x1339, hostname="LobbyRoom:1", room_type=1),
-        RoomEntry(room_id=0x1340, hostname="LobbyRoom:2", room_type=1),
+        RoomEntry(room_id=0x0876, hostname="LobbyRoom:1", room_type=1),
+        RoomEntry(room_id=0x0877, hostname="LobbyRoom:2", room_type=1),
+        RoomEntry(room_id=0x0878, hostname="LobbyRoom:3", room_type=1),
+        RoomEntry(room_id=0x0879, hostname="LobbyRoom:4", room_type=1),
+        RoomEntry(room_id=0x087A, hostname="LobbyRoom:5", room_type=1),
+        RoomEntry(room_id=0x0880, hostname="LobbyRoom:6", room_type=1),
+        RoomEntry(room_id=0x0884, hostname="LobbyRoom:7", room_type=1),
+        RoomEntry(room_id=0x0882, hostname="LobbyRoom:8", room_type=1),
+        RoomEntry(room_id=0x0885, hostname="LobbyRoom:9", room_type=1),
+        RoomEntry(room_id=0x0887, hostname="LobbyRoom:10", room_type=1),
+        RoomEntry(room_id=0x0883, hostname="LobbyRoom:11", room_type=1),
+        RoomEntry(room_id=0x0886, hostname="LobbyRoom:12", room_type=1),
+        RoomEntry(room_id=0x0889, hostname="LobbyRoom:13", room_type=1),
+        RoomEntry(room_id=0x088B, hostname="LobbyRoom:14", room_type=1),
+        RoomEntry(room_id=0x088D, hostname="LobbyRoom:15", room_type=1),
+        RoomEntry(room_id=0x088C, hostname="LobbyRoom:16", room_type=1),
+        RoomEntry(room_id=0x0923, hostname="LobbyRoom:17", room_type=1),
+        RoomEntry(room_id=0x0924, hostname="LobbyRoom:18", room_type=1),
+        RoomEntry(room_id=0x0925, hostname="LobbyRoom:19", room_type=1),
+        RoomEntry(room_id=0x0926, hostname="LobbyRoom:20", room_type=1),
+        RoomEntry(room_id=0x0927, hostname="LobbyRoom:21", room_type=1),
         # Coop rooms
-        RoomEntry(room_id=0x1341, hostname="LobbyCoop:1", room_type=1),
-        RoomEntry(room_id=0x1342, hostname="LobbyCoop:2", room_type=1),
+        RoomEntry(room_id=0x0928, hostname="LobbyCoop:1", room_type=1),
+        RoomEntry(room_id=0x0929, hostname="LobbyCoop:2", room_type=1),
+        RoomEntry(room_id=0x092A, hostname="LobbyCoop:3", room_type=1),
+        RoomEntry(room_id=0x092B, hostname="LobbyCoop:4", room_type=1),
+        RoomEntry(room_id=0x092C, hostname="LobbyCoop:5", room_type=1),
         # Clan rooms
-        RoomEntry(room_id=0x1343, hostname="LobbyClan:1", room_type=1),
-        RoomEntry(room_id=0x1344, hostname="LobbyClan:2", room_type=1),
+        RoomEntry(room_id=0x0888, hostname="LobbyClan:1", room_type=1),
+        RoomEntry(room_id=0x088A, hostname="LobbyClan:2", room_type=1),
         # Tournament rooms
-        RoomEntry(room_id=0x1345, hostname="LobbyTournaments:1", room_type=1),
-        RoomEntry(room_id=0x1346, hostname="LobbyTournaments:2", room_type=1),
+        RoomEntry(room_id=0x088F, hostname="LobbyTournaments:1", room_type=1),
+        RoomEntry(room_id=0x0894, hostname="LobbyTournaments:2", room_type=1),
+        # Special rooms
+        RoomEntry(room_id=0x0890, hostname="LobbyCompStomp:1", room_type=1),
+        RoomEntry(room_id=0x0892, hostname="LobbyCustomMap:1", room_type=1),
+        RoomEntry(room_id=0x0893, hostname="LobbyCustomMap:2", room_type=1),
+        RoomEntry(room_id=0x088E, hostname="LobbyBeginners:1", room_type=1),
+        RoomEntry(room_id=0x0891, hostname="LobbyHardcore:1", room_type=1),
+        RoomEntry(room_id=0x087F, hostname="LobbyBattlecast:1", room_type=1),
+        # Language rooms
+        RoomEntry(room_id=0x087E, hostname="LobbyGerman:1", room_type=1),
+        RoomEntry(room_id=0x087D, hostname="LobbyGerman:2", room_type=1),
+        RoomEntry(room_id=0x087C, hostname="LobbyFrench:1", room_type=1),
+        RoomEntry(room_id=0x087B, hostname="LobbyKorean:1", room_type=1),
+        RoomEntry(room_id=0x092D, hostname="LobbyRussian:1", room_type=1),
+        RoomEntry(room_id=0x092E, hostname="LobbyTaiwan:1", room_type=1),
+        RoomEntry(room_id=0x0935, hostname="LobbySpanish:1", room_type=1),
     ]
     return rooms

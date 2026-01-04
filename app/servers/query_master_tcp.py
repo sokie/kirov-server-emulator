@@ -60,12 +60,15 @@ class QueryMasterHandler:
         """Set the list of available game sessions."""
         self.games = games
 
-    def handle_query(self, data: bytes, encrypt: bool = True) -> bytes:
+    def handle_query(
+        self, data: bytes, client_ip: str = "0.0.0.0", encrypt: bool = True
+    ) -> bytes:
         """
         Handle an incoming TCP query and return the appropriate response.
 
         Args:
             data: Raw TCP data from client
+            client_ip: Client's IP address (echoed back in response header)
             encrypt: Whether to encrypt the response (default True)
 
         Returns:
@@ -79,9 +82,9 @@ class QueryMasterHandler:
 
         # Determine if this is a room list or game list request
         if is_room_list_request(request):
-            response = self._handle_room_list_request(request)
+            response = self._handle_room_list_request(request, client_ip)
         else:
-            response = self._handle_game_list_request(request)
+            response = self._handle_game_list_request(request, client_ip)
 
         # Encrypt the response if requested
         if encrypt and response and request.validate_token:
@@ -114,7 +117,7 @@ class QueryMasterHandler:
             # Fall back to unencrypted response
             return response
 
-    def _handle_room_list_request(self, request: QueryRequest) -> bytes:
+    def _handle_room_list_request(self, request: QueryRequest, client_ip: str) -> bytes:
         """Handle a room list request."""
         logger.info("Handling room list request for %s", request.game_name)
 
@@ -135,10 +138,10 @@ class QueryMasterHandler:
         return build_room_list_response(
             rooms=self.rooms,
             fields=fields,
-            master_ip=self.master_ip,
+            client_ip=client_ip,
         )
 
-    def _handle_game_list_request(self, request: QueryRequest) -> bytes:
+    def _handle_game_list_request(self, request: QueryRequest, client_ip: str) -> bytes:
         """Handle a game list request."""
         logger.info("Handling game list request for %s", request.game_name)
 
@@ -161,8 +164,8 @@ class QueryMasterHandler:
         return build_game_list_response(
             games=filtered_games,
             fields=fields,
-            master_ip=self.master_ip,
-            master_port=self.master_port,
+            client_ip=client_ip,
+            validate_token=request.validate_token,
         )
 
     def _filter_games(self, games: list, filter_conditions: list) -> list:
@@ -308,16 +311,13 @@ class QueryMasterServer(asyncio.Protocol):
             # Get the handler and process the query
             handler = self.get_handler()
 
-            # Update handler's master IP based on actual server IP if possible
+            # Get client IP from connection
+            client_ip = "0.0.0.0"
             if self.peername:
-                sock = self.transport.get_extra_info("socket")
-                if sock:
-                    local_addr = sock.getsockname()
-                    if local_addr[0] != "0.0.0.0":
-                        handler.master_ip = local_addr[0]
+                client_ip = self.peername[0]
 
-            # Process the query
-            response = handler.handle_query(packet)
+            # Process the query with client IP
+            response = handler.handle_query(packet, client_ip=client_ip)
 
             if response:
                 logger.debug("Sending response: %d bytes", len(response))
