@@ -60,9 +60,7 @@ class QueryMasterHandler:
         """Set the list of available game sessions."""
         self.games = games
 
-    def handle_query(
-        self, data: bytes, client_ip: str = "0.0.0.0", encrypt: bool = True
-    ) -> bytes:
+    def handle_query(self, data: bytes, client_ip: str = "0.0.0.0", encrypt: bool = True) -> bytes:
         """
         Handle an incoming TCP query and return the appropriate response.
 
