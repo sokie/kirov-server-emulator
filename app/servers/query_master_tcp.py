@@ -15,12 +15,11 @@ from app.servers.query_master_parsing import (
     QueryRequest,
     build_game_list_response,
     build_room_list_response,
-    create_default_rooms,
     is_room_list_request,
     parse_filter_string,
     parse_tcp_query,
 )
-from app.servers.sessions import GameSessionRegistry
+from app.servers.sessions import GameSessionRegistry, RoomRegistry
 from app.util.cipher import EncTypeX
 from app.util.logging_helper import format_hex, get_logger
 
@@ -49,15 +48,10 @@ class QueryMasterHandler:
         self.master_ip = master_ip
         self.master_port = master_port
         self.gamekey = gamekey or app_config.game.gamekey
-        self.rooms: list = []  # List of RoomEntry
-        self.games: list = []  # List of GameEntry
-
-    def set_rooms(self, rooms: list):
-        """Set the list of available rooms."""
-        self.rooms = rooms
+        self.games: list = []  # List of GameEntry (manually added games)
 
     def set_games(self, games: list):
-        """Set the list of available game sessions."""
+        """Set the list of manually added game sessions."""
         self.games = games
 
     def handle_query(self, data: bytes, client_ip: str = "0.0.0.0", encrypt: bool = True) -> bytes:
@@ -133,8 +127,12 @@ class QueryMasterHandler:
             ]
         )
 
+        # Get rooms from registry (includes up-to-date stats)
+        room_registry = RoomRegistry.get_instance()
+        rooms = room_registry.get_rooms()
+
         return build_room_list_response(
-            rooms=self.rooms,
+            rooms=rooms,
             fields=fields,
             client_ip=client_ip,
         )
@@ -257,7 +255,6 @@ class QueryMasterServer(asyncio.Protocol):
         """Get or create the shared handler instance."""
         if cls._handler is None:
             cls._handler = QueryMasterHandler()
-            cls._handler.set_rooms(create_default_rooms())
         return cls._handler
 
     def __init__(self):
@@ -357,13 +354,12 @@ async def start_master_server(
     Returns:
         The asyncio server instance
     """
-    # Initialize the shared handler with default rooms
+    # Initialize the shared handler
     handler = QueryMasterHandler(
         master_ip=master_ip or host if host != "0.0.0.0" else "127.0.0.1",
         master_port=port,
         gamekey=gamekey,
     )
-    handler.set_rooms(create_default_rooms())
     QueryMasterServer.set_handler(handler)
 
     logger.info("Master server using gamekey: %s", handler.gamekey)

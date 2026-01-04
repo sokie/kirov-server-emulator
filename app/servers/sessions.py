@@ -22,7 +22,7 @@ from app.models.natneg_types import (
     NatNegPortType,
     NatNegSession,
 )
-from app.servers.query_master_parsing import GameEntry
+from app.servers.query_master_parsing import GameEntry, RoomEntry, create_default_rooms
 from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
@@ -457,10 +457,24 @@ class GameSessionRegistry:
                 info.get("hostname", "unknown"),
             )
 
+        # Update room registry with this game
+        groupid = info.get("groupid")
+        if groupid:
+            try:
+                room_id = int(groupid)
+                num_players = int(info.get("numRPlyr", 0))
+                room_registry = RoomRegistry.get_instance()
+                room_registry.register_game_to_room(client_id, room_id, num_players)
+            except (ValueError, TypeError):
+                pass
+
     def unregister_game(self, client_id: int):
         """Remove a game session."""
         if client_id in self._sessions:
             del self._sessions[client_id]
+            # Also remove from room registry
+            room_registry = RoomRegistry.get_instance()
+            room_registry.unregister_game_from_room(client_id)
             logger.info("Unregistered game: client_id=%d", client_id)
 
     def get_games(self) -> list:
@@ -474,3 +488,170 @@ class GameSessionRegistry:
     def clear(self):
         """Clear all sessions."""
         self._sessions.clear()
+
+
+# =============================================================================
+# RoomRegistry - Shared registry for game rooms/lobbies
+# =============================================================================
+
+
+class RoomRegistry:
+    """
+    Shared registry for game rooms/lobbies.
+
+    Tracks rooms by room_id and updates room statistics when games
+    register/unregister. Singleton pattern ensures all servers share
+    the same registry.
+    """
+
+    _instance: Optional["RoomRegistry"] = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._rooms: dict[int, RoomEntry] = {}  # room_id -> RoomEntry
+            cls._instance._games_per_room: dict[int, set[int]] = {}  # room_id -> set of client_ids
+            cls._instance._game_to_room: dict[int, int] = {}  # client_id -> room_id
+            cls._instance._initialize_default_rooms()
+        return cls._instance
+
+    @classmethod
+    def get_instance(cls) -> "RoomRegistry":
+        """Get the singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def _initialize_default_rooms(self):
+        """Initialize the registry with default rooms."""
+        for room in create_default_rooms():
+            self._rooms[room.room_id] = room
+            self._games_per_room[room.room_id] = set()
+        logger.info("Initialized %d default rooms", len(self._rooms))
+
+    def get_room(self, room_id: int) -> RoomEntry | None:
+        """Get a room by its ID."""
+        return self._rooms.get(room_id)
+
+    def get_rooms(self) -> list[RoomEntry]:
+        """Get all rooms as a list."""
+        return list(self._rooms.values())
+
+    def register_game_to_room(self, client_id: int, room_id: int, num_players: int):
+        """
+        Register a game to a room and update room statistics.
+
+        Args:
+            client_id: Unique client ID from heartbeat
+            room_id: Room ID (groupid from heartbeat)
+            num_players: Number of players in the game (numRPlyr)
+        """
+        room = self._rooms.get(room_id)
+        if room is None:
+            logger.warning("Unknown room_id=%d (0x%04X) for client_id=%d", room_id, room_id, client_id)
+            return
+
+        # Check if game was previously in a different room
+        old_room_id = self._game_to_room.get(client_id)
+        if old_room_id is not None and old_room_id != room_id:
+            # Remove from old room first
+            self._remove_game_from_room(client_id, old_room_id)
+
+        # Check if this is a new game or an update
+        is_new = client_id not in self._games_per_room.get(room_id, set())
+
+        # Add game to room
+        self._games_per_room[room_id].add(client_id)
+        self._game_to_room[client_id] = room_id
+
+        # Update room statistics
+        if is_new:
+            room.numservers += 1
+            logger.debug(
+                "Game client_id=%d joined room %s (0x%04X), numservers=%d",
+                client_id,
+                room.hostname,
+                room_id,
+                room.numservers,
+            )
+
+        # Update player count - recalculate from all games in room
+        self._update_room_player_count(room_id)
+
+    def unregister_game_from_room(self, client_id: int):
+        """
+        Unregister a game from its room and update room statistics.
+
+        Args:
+            client_id: Unique client ID from heartbeat
+        """
+        room_id = self._game_to_room.get(client_id)
+        if room_id is None:
+            return
+
+        self._remove_game_from_room(client_id, room_id)
+
+    def _remove_game_from_room(self, client_id: int, room_id: int):
+        """Internal method to remove a game from a specific room."""
+        room = self._rooms.get(room_id)
+        if room is None:
+            return
+
+        games_in_room = self._games_per_room.get(room_id)
+        if games_in_room and client_id in games_in_room:
+            games_in_room.discard(client_id)
+            room.numservers = max(0, room.numservers - 1)
+            logger.debug(
+                "Game client_id=%d left room %s (0x%04X), numservers=%d",
+                client_id,
+                room.hostname,
+                room_id,
+                room.numservers,
+            )
+
+        self._game_to_room.pop(client_id, None)
+
+        # Update player count
+        self._update_room_player_count(room_id)
+
+    def _update_room_player_count(self, room_id: int):
+        """Recalculate player count for a room from all games."""
+        room = self._rooms.get(room_id)
+        if room is None:
+            return
+
+        # Get all games in this room from GameSessionRegistry
+        game_registry = GameSessionRegistry.get_instance()
+        total_players = 0
+
+        for client_id in self._games_per_room.get(room_id, set()):
+            game = game_registry.get_game(client_id)
+            if game:
+                try:
+                    total_players += int(game.fields.get("numRPlyr", 0))
+                except (ValueError, TypeError):
+                    pass
+
+        room.numwaiting = total_players
+        room.numplayers = total_players
+
+    def update_game_player_count(self, client_id: int, num_players: int):
+        """
+        Update the player count for a game and recalculate room totals.
+
+        Args:
+            client_id: Unique client ID
+            num_players: New player count
+        """
+        room_id = self._game_to_room.get(client_id)
+        if room_id is not None:
+            self._update_room_player_count(room_id)
+
+    def clear(self):
+        """Clear all room associations (but keep room definitions)."""
+        for room in self._rooms.values():
+            room.numservers = 0
+            room.numwaiting = 0
+            room.numplayers = 0
+        self._games_per_room = {room_id: set() for room_id in self._rooms}
+        self._game_to_room.clear()
