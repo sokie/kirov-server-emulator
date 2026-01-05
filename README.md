@@ -15,7 +15,7 @@ This project aims to:
 
 ### Implemented
 
-- [x] **FESL Server** - EA Frontend Server Layer for authentication and session management
+- [x] **FESL Server** - EA Frontend Service Layer for authentication and session management
 - [x] **GP Server** - GameSpy Presence server for buddy system, status, and messaging
 - [x] **Peerchat Server** - IRC-based lobby, chat, and game session coordination
 - [x] **NAT Negotiation Server** - UDP hole punching for peer-to-peer connections
@@ -26,7 +26,9 @@ This project aims to:
 
 ### Planned
 
-- [ ] **Sake Server** - Stats and leaderboard storage
+- [ ] **Sake Storage Server** - Storage
+- [ ] **Stats server** - Stats
+- [ ] **Competition server** - Post-match stats
 - [ ] **Web Server** - Account management and registration portal
 
 ## Quick Start
@@ -154,3 +156,4 @@ This project is provided for educational and preservation purposes.
 ## Disclaimer
 
 This project is not affiliated with or endorsed by Electronic Arts, Westwood Studios, or any related entities. Red Alert 3 and Command & Conquer are trademarks of Electronic Arts Inc.
+
