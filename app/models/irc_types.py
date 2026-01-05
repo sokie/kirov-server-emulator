@@ -42,6 +42,10 @@ class IRCMessage:
                 parts.append(f":{self.params[-1]}")
             elif " " in self.params[0] or self.params[0].startswith(":"):
                 parts.append(f":{self.params[0]}")
+            elif self.command in ("PING", "PONG"):
+                # PING/PONG should always use trailing format for GameSpy compatibility
+                # Real EA servers send "PING :s" not "PING s"
+                parts.append(f":{self.params[0]}")
             else:
                 parts.append(self.params[0])
 
