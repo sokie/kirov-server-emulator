@@ -188,7 +188,7 @@ class NatNegServer(asyncio.DatagramProtocol):
             return
 
         # Determine if port_type 1 should use LAN or WAN based on session order
-        # Odd session_order (1, 3, 5...) = LAN, Even (2, 4, 6...) = WAN
+        # Even session_order (0, 2, 4...) = LAN, Odd (1, 3, 5...) = WAN
         use_lan_for_pt1 = (session.session_order % 2) == 0
         pt1_mode = "LAN" if use_lan_for_pt1 else "WAN"
 
