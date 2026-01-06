@@ -174,17 +174,20 @@ class NatNegServer(asyncio.DatagramProtocol):
         """
         Called when a session has both clients registered.
 
-        Sends CONNECT packets to port_type 0 and 1 only:
-        - port_type 0: LAN address (local_ip:local_port) - primary game port
-        - port_type 1: WAN address (public_ip:public_port) - fallback for internet
-        - port_type 2,3: Skipped (used for NAT detection, not actual connections)
+        Sends CONNECT packets to ALL connections of both clients.
+        Uses dual mode: sends both LAN and WAN addresses across different port_types.
+        - port_type 0,1: LAN addresses (local_ip:local_port)
+        - port_type 2,3: WAN addresses (public_ip:public_port)
+
+        The game tries all connections, so whichever works will succeed.
+        This enables seamless LAN and WAN support without configuration.
         """
         if not session.host or not session.guest:
             logger.error("Session ready but missing client(s)")
             return
 
         logger.info(
-            "Session %08X ready - sending CONNECT (pt0=LAN, pt1=WAN, pt2,3=skip)",
+            "Session %08X ready - sending dual-mode CONNECT packets (LAN + WAN)",
             session.session_id,
         )
         logger.info(
@@ -236,21 +239,19 @@ class NatNegServer(asyncio.DatagramProtocol):
             finished=True,
         )
 
-        # Send to guest: pt0=LAN, pt1=WAN, pt2,3=skip
+        # Send to guest: LAN for port_type 0,1 | WAN for port_type 2,3
         for port_type, conn in session.guest.connections.items():
-            if port_type == 0:
+            if port_type <= 1:
                 packet = connect_lan_to_guest
-                peer_ip, peer_port = session.host.local_ip, session.host.local_port
                 mode = "LAN"
-            elif port_type == 1:
-                packet = connect_wan_to_guest
-                peer_ip, peer_port = session.host.public_ip, session.host.public_port
-                mode = "WAN"
+                peer_ip, peer_port = session.host.local_ip, session.host.local_port
             else:
-                continue  # Skip port_type 2, 3
+                packet = connect_wan_to_guest
+                mode = "WAN"
+                peer_ip, peer_port = session.host.public_ip, session.host.public_port
             self._send_to(packet, (conn.public_ip, conn.public_port))
-            logger.info(
-                "Sent CONNECT to GUEST %s:%d (pt=%d, %s) -> peer %s:%d",
+            logger.debug(
+                "Sent CONNECT to GUEST %s:%d (port_type=%d, %s) -> peer %s:%d",
                 conn.public_ip,
                 conn.public_port,
                 port_type,
@@ -259,21 +260,19 @@ class NatNegServer(asyncio.DatagramProtocol):
                 peer_port,
             )
 
-        # Send to host: pt0=LAN, pt1=WAN, pt2,3=skip
+        # Send to host: LAN for port_type 0,1 | WAN for port_type 2,3
         for port_type, conn in session.host.connections.items():
-            if port_type == 0:
+            if port_type <= 1:
                 packet = connect_lan_to_host
-                peer_ip, peer_port = session.guest.local_ip, session.guest.local_port
                 mode = "LAN"
-            elif port_type == 1:
-                packet = connect_wan_to_host
-                peer_ip, peer_port = session.guest.public_ip, session.guest.public_port
-                mode = "WAN"
+                peer_ip, peer_port = session.guest.local_ip, session.guest.local_port
             else:
-                continue  # Skip port_type 2, 3
+                packet = connect_wan_to_host
+                mode = "WAN"
+                peer_ip, peer_port = session.guest.public_ip, session.guest.public_port
             self._send_to(packet, (conn.public_ip, conn.public_port))
-            logger.info(
-                "Sent CONNECT to HOST %s:%d (pt=%d, %s) -> peer %s:%d",
+            logger.debug(
+                "Sent CONNECT to HOST %s:%d (port_type=%d, %s) -> peer %s:%d",
                 conn.public_ip,
                 conn.public_port,
                 port_type,
@@ -283,8 +282,10 @@ class NatNegServer(asyncio.DatagramProtocol):
             )
 
         logger.info(
-            "Session %08X: Sent CONNECT (pt0=LAN, pt1=WAN, pt2,3=skipped)",
+            "Session %08X: Sent CONNECT to %d guest + %d host connections (dual LAN/WAN mode)",
             session.session_id,
+            len(session.guest.connections),
+            len(session.host.connections),
         )
 
     async def _handle_connect_ack(self, header: NatNegHeader, addr: tuple[str, int]):
