@@ -218,6 +218,36 @@ def build_connect_ack_packet(session_id: int, port_type: NatNegPortType, client_
     return header.to_bytes()
 
 
+def build_address_reply_packet(request_data: bytes, public_ip: str, public_port: int) -> bytes:
+    """
+    Build an ADDRESS_REPLY packet (type 0x0B).
+
+    This responds to ADDRESS_CHECK with the client's public IP:port as seen by the server.
+    Allows clients to discover their external address for NAT traversal.
+
+    Args:
+        request_data: Original ADDRESS_CHECK packet data
+        public_ip: Client's public IP (as seen by server)
+        public_port: Client's public port (as seen by server)
+
+    Returns:
+        Raw packet bytes
+    """
+    # Copy first 12 bytes (magic + version + record_type + session_id + port_type + client_index)
+    response = bytearray(request_data[:12])
+
+    # Change record type to ADDRESS_REPLY (0x0B)
+    response[7] = NatNegRecordType.ADDRESS_REPLY.value
+
+    # Append public IP (4 bytes)
+    response.extend(ip_string_to_bytes(public_ip))
+
+    # Append public port (2 bytes, big-endian)
+    response.extend(struct.pack(">H", public_port))
+
+    return bytes(response)
+
+
 def ip_string_to_bytes(ip: str) -> bytes:
     """Convert dotted decimal IP string to 4 bytes."""
     parts = [int(x) for x in ip.split(".")]

@@ -19,6 +19,7 @@ from app.models.natneg_types import (
 from app.servers.sessions import NatNegSessionManager
 from app.util.logging_helper import format_hex, get_logger
 from app.util.natneg_protocol import (
+    build_address_reply_packet,
     build_connect_packet,
     build_init_ack_packet,
     build_report_ack_packet,
@@ -114,6 +115,8 @@ class NatNegServer(asyncio.DatagramProtocol):
             asyncio.create_task(self._handle_connect_ack(header, addr))
         elif header.record_type == NatNegRecordType.REPORT:
             asyncio.create_task(self._handle_report(header, data, addr))
+        elif header.record_type == NatNegRecordType.ADDRESS_CHECK:
+            asyncio.create_task(self._handle_address_check(data, addr))
         elif header.record_type == NatNegRecordType.CONNECT_PING:
             # This is P2P traffic, we just ignore it
             logger.debug("Received CONNECT_PING (P2P) from %s:%d", client_ip, client_port)
@@ -333,6 +336,34 @@ class NatNegServer(asyncio.DatagramProtocol):
 
         self._send_to(ack_packet, addr)
         logger.debug("Sent REPORT_ACK to %s:%d", client_ip, client_port)
+
+    async def _handle_address_check(self, data: bytes, addr: tuple[str, int]):
+        """
+        Handle ADDRESS_CHECK packet from client.
+
+        Responds with ADDRESS_REPLY containing the client's public IP:port
+        as seen by the server. This allows clients to discover their
+        external address for NAT traversal.
+        """
+        client_ip, client_port = addr
+
+        logger.info(
+            "ADDRESS_CHECK from %s:%d - responding with public address",
+            client_ip,
+            client_port,
+        )
+
+        # Build and send ADDRESS_REPLY with client's public IP:port
+        reply_packet = build_address_reply_packet(data, client_ip, client_port)
+        self._send_to(reply_packet, addr)
+
+        logger.debug(
+            "Sent ADDRESS_REPLY to %s:%d (public=%s:%d)",
+            client_ip,
+            client_port,
+            client_ip,
+            client_port,
+        )
 
     def _send_to(self, data: bytes, addr: tuple[str, int]):
         """Send a packet to the specified address."""
