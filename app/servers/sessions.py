@@ -412,9 +412,7 @@ class NatNegSessionManager:
             )
             return info
 
-    async def update_pair_relay_ports(
-        self, host_ip: str, guest_ip: str, ports: tuple[int, int]
-    ):
+    async def update_pair_relay_ports(self, host_ip: str, guest_ip: str, ports: tuple[int, int]):
         """
         Store relay ports for a host-guest pair.
 
@@ -461,11 +459,7 @@ class NatNegSessionManager:
         """
         released = []
         async with self._lock:
-            stale_pairs = [
-                pair
-                for pair, info in self._pair_attempts.items()
-                if info.is_stale(ttl_seconds)
-            ]
+            stale_pairs = [pair for pair, info in self._pair_attempts.items() if info.is_stale(ttl_seconds)]
 
             for pair in stale_pairs:
                 info = self._pair_attempts.pop(pair)

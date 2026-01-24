@@ -268,12 +268,8 @@ class NatNegServer(asyncio.DatagramProtocol):
         )
 
         # Send CONNECT packets (only for port_type 1)
-        self._send_connect_to_client(
-            session, session.guest, connect_to_guest, address_mode.upper(), host_ip, host_port
-        )
-        self._send_connect_to_client(
-            session, session.host, connect_to_host, address_mode.upper(), guest_ip, guest_port
-        )
+        self._send_connect_to_client(session, session.guest, connect_to_guest, address_mode.upper(), host_ip, host_port)
+        self._send_connect_to_client(session, session.host, connect_to_host, address_mode.upper(), guest_ip, guest_port)
 
         logger.info(
             "Session %08X: Sent CONNECT (attempt #%d, mode=%s)",
@@ -393,12 +389,8 @@ class NatNegServer(asyncio.DatagramProtocol):
         )
 
         # Send CONNECT packets
-        self._send_connect_to_client(
-            session, session.guest, connect_to_guest, "RELAY", relay_host, port_a
-        )
-        self._send_connect_to_client(
-            session, session.host, connect_to_host, "RELAY", relay_host, port_b
-        )
+        self._send_connect_to_client(session, session.guest, connect_to_guest, "RELAY", relay_host, port_a)
+        self._send_connect_to_client(session, session.host, connect_to_host, "RELAY", relay_host, port_b)
 
         logger.info(
             "Session %08X: Sent CONNECT via RELAY (ports %d <-> %d)",
