@@ -16,6 +16,8 @@ from app.models.natneg_types import (
     NatNegRecordType,
     NatNegSession,
 )
+from app.models.relay_types import PairAttemptInfo
+from app.servers.relay_server import RelayServer
 from app.servers.sessions import NatNegSessionManager
 from app.util.logging_helper import format_hex, get_logger
 from app.util.natneg_protocol import (
@@ -39,21 +41,31 @@ class NatNegServer(asyncio.DatagramProtocol):
     Handles the GameSpy NAT negotiation protocol:
     1. Receives INIT packets from clients (4 per client with different port_types)
     2. Responds with INIT_ACK for each
-    3. When both host and guest register, sends CONNECT to all connections
-       - port_type 0,1: LAN addresses (local_ip:local_port)
-       - port_type 2,3: WAN addresses (public_ip:public_port)
+    3. When both host and guest register, sends CONNECT packets with progressive fallback:
+       - Attempt 1: WAN addresses (public_ip:public_port)
+       - Attempt 2: LAN addresses (local_ip:local_port)
+       - Attempt 3+: Relay addresses (relay server ports)
     4. Handles CONNECT_ACK and REPORT packets
     """
 
-    def __init__(self, session_manager: NatNegSessionManager | None = None):
+    def __init__(
+        self,
+        session_manager: NatNegSessionManager | None = None,
+        relay_server: RelayServer | None = None,
+        pair_ttl: float = 300.0,
+    ):
         """
         Initialize the NAT negotiation server.
 
         Args:
             session_manager: Optional session manager. If None, creates a new one.
+            relay_server: Optional relay server for fallback connections.
+            pair_ttl: Time-to-live for pair attempt tracking in seconds.
         """
         self.transport: asyncio.DatagramTransport | None = None
         self.session_manager = session_manager or NatNegSessionManager()
+        self.relay_server = relay_server
+        self.pair_ttl = pair_ttl
 
         # Set up the session ready callback
         self.session_manager.set_on_session_ready(self._on_session_ready)
@@ -174,29 +186,38 @@ class NatNegServer(asyncio.DatagramProtocol):
         """
         Called when a session has both clients registered.
 
-        Sends CONNECT packets to ALL connections of both clients.
-        Uses alternating mode for port_type 1 based on session order per host IP:
-        - port_type 0: Always LAN
-        - port_type 1: LAN for odd session_order (1, 3, 5...), WAN for even (2, 4, 6...)
-        - port_type 2,3: Always WAN
+        Implements progressive fallback based on pair attempt count:
+        - Attempt 1: WAN addresses (public IP, most common scenario)
+        - Attempt 2: LAN addresses (same network)
+        - Attempt 3+: Relay addresses (guaranteed to work)
 
-        Game sends 3 sessions per lobby, and only uses port_type 1.
-        This alternation helps test which address type works.
+        The attempt count is tracked by (host_ip, guest_ip) pair since
+        clients retry with new session_ids on connection failure.
         """
         if not session.host or not session.guest:
             logger.error("Session ready but missing client(s)")
             return
 
-        # Determine if port_type 1 should use LAN or WAN based on session order
-        # Even session_order (0, 2, 4...) = LAN, Odd (1, 3, 5...) = WAN
-        use_lan_for_pt1 = (session.session_order % 2) == 0
-        pt1_mode = "LAN" if use_lan_for_pt1 else "WAN"
+        # Get pair attempt info (increments counter)
+        pair_info = await self.session_manager.get_pair_attempt(
+            session.host.public_ip,
+            session.guest.public_ip,
+        )
+        attempt = pair_info.attempt_count
+
+        # Determine address mode based on attempt count
+        if attempt == 1:
+            address_mode = "wan"
+        elif attempt == 2:
+            address_mode = "lan"
+        else:
+            address_mode = "relay"
 
         logger.info(
-            "Session %08X ready - session_order=%d, port_type_1=%s",
+            "Session %08X ready - pair attempt #%d, mode=%s",
             session.session_id,
-            session.session_order,
-            pt1_mode,
+            attempt,
+            address_mode.upper(),
         )
         logger.info(
             "Session %08X - Host LAN: %s:%d, WAN: %s:%d",
@@ -215,31 +236,187 @@ class NatNegServer(asyncio.DatagramProtocol):
             session.guest.public_port,
         )
 
-        # Build LAN CONNECT packets (using local addresses from INIT packets)
-        connect_lan_to_guest = build_connect_packet(
+        # Handle relay mode
+        if address_mode == "relay":
+            await self._send_connect_relay(session, pair_info)
+            return
+
+        # Build CONNECT packets for WAN or LAN mode
+        if address_mode == "wan":
+            # WAN: Use public addresses as seen by server
+            host_ip, host_port = session.host.public_ip, session.host.public_port
+            guest_ip, guest_port = session.guest.public_ip, session.guest.public_port
+        else:
+            # LAN: Use local addresses from INIT packets
+            host_ip, host_port = session.host.local_ip, session.host.local_port
+            guest_ip, guest_port = session.guest.local_ip, session.guest.local_port
+
+        # Build CONNECT packets
+        connect_to_guest = build_connect_packet(
             session_id=session.session_id,
-            peer_ip=session.host.local_ip,
-            peer_port=session.host.local_port,
+            peer_ip=host_ip,
+            peer_port=host_port,
             got_data=True,
             finished=True,
         )
-        connect_lan_to_host = build_connect_packet(
+        connect_to_host = build_connect_packet(
             session_id=session.session_id,
-            peer_ip=session.guest.local_ip,
-            peer_port=session.guest.local_port,
+            peer_ip=guest_ip,
+            peer_port=guest_port,
             got_data=True,
             finished=True,
         )
 
-        # Build WAN CONNECT packets (using public addresses as seen by server)
-        connect_wan_to_guest = build_connect_packet(
+        # Send CONNECT packets (only for port_type 1)
+        self._send_connect_to_client(
+            session, session.guest, connect_to_guest, address_mode.upper(), host_ip, host_port
+        )
+        self._send_connect_to_client(
+            session, session.host, connect_to_host, address_mode.upper(), guest_ip, guest_port
+        )
+
+        logger.info(
+            "Session %08X: Sent CONNECT (attempt #%d, mode=%s)",
+            session.session_id,
+            attempt,
+            address_mode.upper(),
+        )
+
+    def _send_connect_to_client(
+        self,
+        session: NatNegSession,
+        client,
+        packet: bytes,
+        mode: str,
+        peer_ip: str,
+        peer_port: int,
+    ):
+        """Send CONNECT packet to a client's port_type 1 connection."""
+        if 1 not in client.connections:
+            logger.warning(
+                "Session %08X: %s has no port_type 1 connection",
+                session.session_id,
+                client.client_index.name,
+            )
+            return
+
+        conn = client.connections[1]
+        self._send_to(packet, (conn.public_ip, conn.public_port))
+        logger.info(
+            "CONNECT to %s %s:%d (pt=1, %s) -> peer %s:%d",
+            client.client_index.name,
+            conn.public_ip,
+            conn.public_port,
+            mode,
+            peer_ip,
+            peer_port,
+        )
+
+    async def _send_connect_relay(self, session: NatNegSession, pair_info: PairAttemptInfo):
+        """
+        Send CONNECT packets with relay server addresses.
+
+        Allocates relay ports if not already allocated for this pair.
+        """
+        if self.relay_server is None:
+            logger.warning(
+                "Session %08X: Relay requested but no relay server available, falling back to WAN",
+                session.session_id,
+            )
+            # Fall back to WAN if no relay server
+            await self._send_connect_fallback_wan(session)
+            return
+
+        # Allocate relay ports if not already done for this pair
+        if pair_info.relay_ports is None:
+            route = await self.relay_server.allocate_route()
+            if route is None:
+                logger.error(
+                    "Session %08X: Failed to allocate relay ports, falling back to WAN",
+                    session.session_id,
+                )
+                await self._send_connect_fallback_wan(session)
+                return
+
+            pair_info.relay_ports = (route.port_a, route.port_b)
+            await self.session_manager.update_pair_relay_ports(
+                session.host.public_ip,
+                session.guest.public_ip,
+                pair_info.relay_ports,
+            )
+
+        port_a, port_b = pair_info.relay_ports
+
+        # Get relay server host (use the transport's local address)
+        relay_host = self.relay_server.host
+        if relay_host == "0.0.0.0":
+            # Use the natneg server's bound address as relay address
+            # This assumes relay and natneg are on the same machine
+            if self.transport:
+                sockname = self.transport.get_extra_info("sockname")
+                if sockname and sockname[0] != "0.0.0.0":
+                    relay_host = sockname[0]
+
+        # If still 0.0.0.0, we need a proper public IP
+        # For now, use the server's perspective of the connection
+        # In production, this should be configured
+        if relay_host == "0.0.0.0":
+            logger.warning(
+                "Session %08X: Relay host is 0.0.0.0, clients may not be able to connect",
+                session.session_id,
+            )
+
+        logger.info(
+            "Session %08X: Using relay at %s ports %d (host) and %d (guest)",
+            session.session_id,
+            relay_host,
+            port_a,
+            port_b,
+        )
+
+        # Build CONNECT packets pointing to relay ports
+        # Host connects to port_a, told to reach guest at (relay_host, port_b)
+        # Guest connects to port_b, told to reach host at (relay_host, port_a)
+        connect_to_guest = build_connect_packet(
+            session_id=session.session_id,
+            peer_ip=relay_host,
+            peer_port=port_a,  # Guest will connect to port_a to reach host
+            got_data=True,
+            finished=True,
+        )
+        connect_to_host = build_connect_packet(
+            session_id=session.session_id,
+            peer_ip=relay_host,
+            peer_port=port_b,  # Host will connect to port_b to reach guest
+            got_data=True,
+            finished=True,
+        )
+
+        # Send CONNECT packets
+        self._send_connect_to_client(
+            session, session.guest, connect_to_guest, "RELAY", relay_host, port_a
+        )
+        self._send_connect_to_client(
+            session, session.host, connect_to_host, "RELAY", relay_host, port_b
+        )
+
+        logger.info(
+            "Session %08X: Sent CONNECT via RELAY (ports %d <-> %d)",
+            session.session_id,
+            port_a,
+            port_b,
+        )
+
+    async def _send_connect_fallback_wan(self, session: NatNegSession):
+        """Send CONNECT with WAN addresses as fallback when relay unavailable."""
+        connect_to_guest = build_connect_packet(
             session_id=session.session_id,
             peer_ip=session.host.public_ip,
             peer_port=session.host.public_port,
             got_data=True,
             finished=True,
         )
-        connect_wan_to_host = build_connect_packet(
+        connect_to_host = build_connect_packet(
             session_id=session.session_id,
             peer_ip=session.guest.public_ip,
             peer_port=session.guest.public_port,
@@ -247,54 +424,21 @@ class NatNegServer(asyncio.DatagramProtocol):
             finished=True,
         )
 
-        # Only send CONNECT for port_type 1
-        # Send to guest
-        if 1 in session.guest.connections:
-            conn = session.guest.connections[1]
-            if use_lan_for_pt1:
-                packet = connect_lan_to_guest
-                mode = "LAN"
-                peer_ip, peer_port = session.host.local_ip, session.host.local_port
-            else:
-                packet = connect_wan_to_guest
-                mode = "WAN"
-                peer_ip, peer_port = session.host.public_ip, session.host.public_port
-            self._send_to(packet, (conn.public_ip, conn.public_port))
-            logger.info(
-                "CONNECT to GUEST %s:%d (pt=1, %s) -> peer %s:%d",
-                conn.public_ip,
-                conn.public_port,
-                mode,
-                peer_ip,
-                peer_port,
-            )
-
-        # Send to host
-        if 1 in session.host.connections:
-            conn = session.host.connections[1]
-            if use_lan_for_pt1:
-                packet = connect_lan_to_host
-                mode = "LAN"
-                peer_ip, peer_port = session.guest.local_ip, session.guest.local_port
-            else:
-                packet = connect_wan_to_host
-                mode = "WAN"
-                peer_ip, peer_port = session.guest.public_ip, session.guest.public_port
-            self._send_to(packet, (conn.public_ip, conn.public_port))
-            logger.info(
-                "CONNECT to HOST %s:%d (pt=1, %s) -> peer %s:%d",
-                conn.public_ip,
-                conn.public_port,
-                mode,
-                peer_ip,
-                peer_port,
-            )
-
-        logger.info(
-            "Session %08X: Sent CONNECT only to port_type 1 (session_order=%d, mode=%s)",
-            session.session_id,
-            session.session_order,
-            pt1_mode,
+        self._send_connect_to_client(
+            session,
+            session.guest,
+            connect_to_guest,
+            "WAN-FALLBACK",
+            session.host.public_ip,
+            session.host.public_port,
+        )
+        self._send_connect_to_client(
+            session,
+            session.host,
+            connect_to_host,
+            "WAN-FALLBACK",
+            session.guest.public_ip,
+            session.guest.public_port,
         )
 
     async def _handle_connect_ack(self, header: NatNegHeader, addr: tuple[str, int]):
@@ -382,11 +526,26 @@ class NatNegServer(asyncio.DatagramProtocol):
             logger.debug("TX to %s:%d (%d bytes): %s", addr[0], addr[1], len(data), format_hex(data[:20]))
 
     async def _cleanup_loop(self):
-        """Periodically clean up expired sessions."""
+        """Periodically clean up expired sessions and stale pairs."""
         try:
             while True:
                 await asyncio.sleep(10.0)  # Run every 10 seconds
                 await self.session_manager.cleanup_expired_sessions()
+
+                # Cleanup stale pair tracking entries
+                released_pairs = await self.session_manager.cleanup_stale_pairs(self.pair_ttl)
+
+                # Release relay routes for expired pairs
+                if self.relay_server and released_pairs:
+                    for host_ip, guest_ip, relay_ports in released_pairs:
+                        route = self.relay_server.get_route_by_port(relay_ports[0])
+                        if route:
+                            await self.relay_server.release_route(route)
+                            logger.info(
+                                "Released relay route for expired pair %s <-> %s",
+                                host_ip,
+                                guest_ip,
+                            )
         except asyncio.CancelledError:
             pass
 
@@ -396,7 +555,11 @@ class NatNegServer(asyncio.DatagramProtocol):
 
 
 async def start_natneg_server(
-    host: str = "0.0.0.0", port: int = 27901, session_manager: NatNegSessionManager | None = None
+    host: str = "0.0.0.0",
+    port: int = 27901,
+    session_manager: NatNegSessionManager | None = None,
+    relay_server: RelayServer | None = None,
+    pair_ttl: float = 300.0,
 ) -> tuple[asyncio.DatagramTransport, NatNegServer]:
     """
     Start the NAT negotiation UDP server.
@@ -405,6 +568,8 @@ async def start_natneg_server(
         host: Host to bind to
         port: Port to bind to (default 27901)
         session_manager: Optional shared session manager
+        relay_server: Optional relay server for fallback connections
+        pair_ttl: Time-to-live for pair attempt tracking in seconds
 
     Returns:
         Tuple of (transport, protocol)
@@ -412,7 +577,8 @@ async def start_natneg_server(
     loop = asyncio.get_running_loop()
 
     transport, protocol = await loop.create_datagram_endpoint(
-        lambda: NatNegServer(session_manager), local_addr=(host, port)
+        lambda: NatNegServer(session_manager, relay_server, pair_ttl),
+        local_addr=(host, port),
     )
 
     return transport, protocol

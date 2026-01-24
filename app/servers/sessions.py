@@ -22,6 +22,7 @@ from app.models.natneg_types import (
     NatNegPortType,
     NatNegSession,
 )
+from app.models.relay_types import PairAttemptInfo
 from app.servers.query_master_parsing import GameEntry
 from app.util.logging_helper import get_logger
 
@@ -137,6 +138,10 @@ class NatNegSessionManager:
     is keyed by the session_id (cookie). When both host and guest have
     registered with the same cookie, the manager triggers CONNECT packets
     to be sent to both clients.
+
+    Pair tracking: Tracks connection attempts by (host_ip, guest_ip) pair
+    to implement progressive fallback (WAN -> LAN -> Relay). Session IDs
+    change on retry, but the IP pair remains constant.
     """
 
     def __init__(self):
@@ -149,6 +154,10 @@ class NatNegSessionManager:
         # Host IP -> session count (for alternating LAN/WAN on port_type 1)
         # Tracks how many sessions we've processed per host IP
         self._host_session_counter: dict[str, int] = {}
+
+        # (host_ip, guest_ip) -> PairAttemptInfo for tracking retry attempts
+        # This is used to determine WAN/LAN/Relay mode across session retries
+        self._pair_attempts: dict[tuple[str, str], PairAttemptInfo] = {}
 
         # Lock for thread safety
         self._lock = asyncio.Lock()
@@ -373,6 +382,108 @@ class NatNegSessionManager:
     def get_client_count(self) -> int:
         """Get the number of registered clients."""
         return len(self._client_endpoints)
+
+    async def get_pair_attempt(self, host_ip: str, guest_ip: str) -> PairAttemptInfo:
+        """
+        Get or create attempt info for a host-guest pair.
+
+        Increments the attempt counter each time this is called.
+
+        Args:
+            host_ip: Host's public IP address.
+            guest_ip: Guest's public IP address.
+
+        Returns:
+            PairAttemptInfo with incremented attempt count.
+        """
+        async with self._lock:
+            pair = (host_ip, guest_ip)
+            if pair not in self._pair_attempts:
+                self._pair_attempts[pair] = PairAttemptInfo()
+                logger.info("New pair tracking: %s <-> %s", host_ip, guest_ip)
+
+            info = self._pair_attempts[pair]
+            attempt = info.increment()
+            logger.info(
+                "Pair %s <-> %s: attempt #%d",
+                host_ip,
+                guest_ip,
+                attempt,
+            )
+            return info
+
+    async def update_pair_relay_ports(
+        self, host_ip: str, guest_ip: str, ports: tuple[int, int]
+    ):
+        """
+        Store relay ports for a host-guest pair.
+
+        Args:
+            host_ip: Host's public IP address.
+            guest_ip: Guest's public IP address.
+            ports: Tuple of (port_a, port_b) relay ports.
+        """
+        async with self._lock:
+            pair = (host_ip, guest_ip)
+            if pair in self._pair_attempts:
+                self._pair_attempts[pair].relay_ports = ports
+                logger.info(
+                    "Pair %s <-> %s: assigned relay ports %d, %d",
+                    host_ip,
+                    guest_ip,
+                    ports[0],
+                    ports[1],
+                )
+
+    async def get_pair_info(self, host_ip: str, guest_ip: str) -> PairAttemptInfo | None:
+        """
+        Get attempt info for a host-guest pair without incrementing.
+
+        Args:
+            host_ip: Host's public IP address.
+            guest_ip: Guest's public IP address.
+
+        Returns:
+            PairAttemptInfo if exists, None otherwise.
+        """
+        async with self._lock:
+            return self._pair_attempts.get((host_ip, guest_ip))
+
+    async def cleanup_stale_pairs(self, ttl_seconds: float = 300.0):
+        """
+        Remove pair entries older than TTL.
+
+        Args:
+            ttl_seconds: Time-to-live in seconds (default 5 minutes).
+
+        Returns:
+            List of (host_ip, guest_ip, relay_ports) tuples for released pairs.
+        """
+        released = []
+        async with self._lock:
+            stale_pairs = [
+                pair
+                for pair, info in self._pair_attempts.items()
+                if info.is_stale(ttl_seconds)
+            ]
+
+            for pair in stale_pairs:
+                info = self._pair_attempts.pop(pair)
+                host_ip, guest_ip = pair
+                logger.info(
+                    "Expired pair tracking: %s <-> %s (attempts=%d)",
+                    host_ip,
+                    guest_ip,
+                    info.attempt_count,
+                )
+                if info.relay_ports:
+                    released.append((host_ip, guest_ip, info.relay_ports))
+
+        return released
+
+    def get_pair_count(self) -> int:
+        """Get the number of tracked pairs."""
+        return len(self._pair_attempts)
 
 
 # =============================================================================

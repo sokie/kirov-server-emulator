@@ -56,6 +56,17 @@ class MasterServerSettings(BaseModel):
     enabled: bool = Field(default=True)
 
 
+class RelaySettings(BaseModel):
+    """UDP Relay server settings for NAT traversal fallback."""
+
+    host: str = Field(default="0.0.0.0")
+    port_start: int = Field(default=50000, gt=1024, lt=65536)  # Start of port range
+    port_end: int = Field(default=59999, gt=1024, lt=65536)  # End of port range
+    session_timeout: int = Field(default=120)  # Seconds of inactivity before cleanup
+    pair_ttl: int = Field(default=300)  # Seconds before pair attempt info expires (5 min)
+    enabled: bool = Field(default=True)
+
+
 # Compute config path at module load time for frozen executable support
 _config_path = os.path.join(get_runtime_path(), "config.json")
 
@@ -66,6 +77,7 @@ class AppSettings(BaseSettings):
     gp: GpSettings = Field(default_factory=GpSettings)
     natneg: NatNegSettings = Field(default_factory=NatNegSettings)
     master: MasterServerSettings = Field(default_factory=MasterServerSettings)
+    relay: RelaySettings = Field(default_factory=RelaySettings)
     game: GameSettings = Field()
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
 

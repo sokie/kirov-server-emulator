@@ -14,6 +14,7 @@ from app.servers.fesl_server import start_fesl_server
 from app.servers.gp_server import start_gp_server
 from app.servers.natneg_server import start_natneg_server
 from app.servers.peerchat_server import start_irc_server
+from app.servers.relay_server import start_relay_server
 from app.servers.query_master_tcp import start_master_server
 from app.servers.query_master_udp import start_heartbeat_server
 from app.servers.sessions import SessionManager
@@ -58,13 +59,35 @@ async def lifespan(app: FastAPI):
     gp_server = await start_gp_server(gp_host, gp_port, session_manager)
     print(f"INFO:     GameSpy server is listening on {gp_host}:{gp_port}")
 
+    # Start Relay server (for NAT traversal fallback)
+    relay_server = None
+    if app_config.relay.enabled:
+        relay_host = app_config.relay.host
+        relay_port_start = app_config.relay.port_start
+        relay_port_end = app_config.relay.port_end
+        relay_timeout = app_config.relay.session_timeout
+        print(f"INFO:     Starting Relay server on {relay_host}:{relay_port_start}-{relay_port_end}...")
+        relay_server = await start_relay_server(
+            host=relay_host,
+            port_start=relay_port_start,
+            port_end=relay_port_end,
+            session_timeout=relay_timeout,
+        )
+        print(f"INFO:     Relay server is ready (port range {relay_port_start}-{relay_port_end})")
+
     # Start NAT Negotiation server
     natneg_transport = None
     if app_config.natneg.enabled:
         natneg_host = app_config.natneg.host
         natneg_port = app_config.natneg.port
+        pair_ttl = app_config.relay.pair_ttl if app_config.relay.enabled else 300
         print(f"INFO:     Starting NAT Negotiation server on {natneg_host}:{natneg_port}...")
-        natneg_transport, natneg_protocol = await start_natneg_server(host=natneg_host, port=natneg_port)
+        natneg_transport, natneg_protocol = await start_natneg_server(
+            host=natneg_host,
+            port=natneg_port,
+            relay_server=relay_server,
+            pair_ttl=pair_ttl,
+        )
         print(f"INFO:     NAT Negotiation server is listening on {natneg_host}:{natneg_port}")
 
     # Start Master Server (GameSpy server/room list queries)
@@ -101,6 +124,10 @@ async def lifespan(app: FastAPI):
         natneg_transport.close()
     if heartbeat_transport:
         heartbeat_transport.close()
+
+    # Stop relay server
+    if relay_server:
+        await relay_server.stop()
 
 
 # Create the main FastAPI application
