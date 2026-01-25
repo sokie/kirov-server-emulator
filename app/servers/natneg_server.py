@@ -323,25 +323,21 @@ class NatNegServer(asyncio.DatagramProtocol):
             await self._send_connect_fallback_wan(session)
             return
 
-        # Allocate relay ports if not already done for this pair
-        if pair_info.relay_ports is None:
-            route = await self.relay_server.allocate_route()
-            if route is None:
-                logger.error(
-                    "Session %08X: Failed to allocate relay ports, falling back to WAN",
-                    session.session_id,
-                )
-                await self._send_connect_fallback_wan(session)
-                return
-
-            pair_info.relay_ports = (route.port_a, route.port_b)
-            await self.session_manager.update_pair_relay_ports(
-                session.host.public_ip,
-                session.guest.public_ip,
-                pair_info.relay_ports,
+        # Atomically allocate relay ports if not already done for this pair
+        relay_ports = await self.session_manager.allocate_pair_relay_if_missing(
+            session.host.public_ip,
+            session.guest.public_ip,
+            self.relay_server,
+        )
+        if relay_ports is None:
+            logger.error(
+                "Session %08X: Failed to allocate relay ports, falling back to WAN",
+                session.session_id,
             )
+            await self._send_connect_fallback_wan(session)
+            return
 
-        port_a, port_b = pair_info.relay_ports
+        port_a, port_b = relay_ports
 
         # Get relay server host (use the transport's local address)
         relay_host = self.relay_server.host

@@ -433,6 +433,67 @@ class NatNegSessionManager:
                     ports[1],
                 )
 
+    async def allocate_pair_relay_if_missing(
+        self, host_ip: str, guest_ip: str, relay_server
+    ) -> tuple[int, int] | None:
+        """
+        Atomically check and allocate relay ports for a host-guest pair.
+
+        This method prevents TOCTOU race conditions by holding the lock while
+        checking for existing ports and allocating new ones if needed.
+
+        Args:
+            host_ip: Host's public IP address.
+            guest_ip: Guest's public IP address.
+            relay_server: The relay server to allocate ports from.
+
+        Returns:
+            Tuple of (port_a, port_b) relay ports, or None if allocation failed.
+        """
+        async with self._lock:
+            pair = (host_ip, guest_ip)
+            pair_info = self._pair_attempts.get(pair)
+
+            if pair_info is None:
+                logger.warning(
+                    "Pair %s <-> %s not found during relay allocation",
+                    host_ip,
+                    guest_ip,
+                )
+                return None
+
+            # If already allocated, return existing ports
+            if pair_info.relay_ports is not None:
+                logger.debug(
+                    "Pair %s <-> %s already has relay ports %d, %d",
+                    host_ip,
+                    guest_ip,
+                    pair_info.relay_ports[0],
+                    pair_info.relay_ports[1],
+                )
+                return pair_info.relay_ports
+
+            # Allocate new route while holding the lock
+            route = await relay_server.allocate_route()
+            if route is None:
+                logger.error(
+                    "Failed to allocate relay route for pair %s <-> %s",
+                    host_ip,
+                    guest_ip,
+                )
+                return None
+
+            # Store the allocated ports
+            pair_info.relay_ports = (route.port_a, route.port_b)
+            logger.info(
+                "Pair %s <-> %s: assigned relay ports %d, %d",
+                host_ip,
+                guest_ip,
+                route.port_a,
+                route.port_b,
+            )
+            return pair_info.relay_ports
+
     async def get_pair_info(self, host_ip: str, guest_ip: str) -> PairAttemptInfo | None:
         """
         Get attempt info for a host-guest pair without incrementing.
