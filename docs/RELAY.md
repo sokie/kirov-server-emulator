@@ -20,7 +20,7 @@ Most players connect directly. Relay is only used when truly needed.
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                     RELAY SERVER                            │
 │  ┌───────────────────────────────────────────────────────┐  │
@@ -43,7 +43,7 @@ Most players connect directly. Relay is only used when truly needed.
 
 ## Session Flow
 
-```
+```text
 Host                    Server                    Guest
   |                        |                        |
   |------- INIT x4 ------->|<------- INIT x4 -------|
