@@ -46,7 +46,8 @@ class RelayPortProtocol(asyncio.DatagramProtocol):
         """
         Handle incoming UDP datagram.
 
-        Registers the sender as a client and forwards to peer.
+        Registers the sender as a client (on first packet) and forwards to peer.
+        Once registered, only accepts packets from the registered endpoint.
         """
         client_ip, client_port = addr
 
@@ -56,13 +57,11 @@ class RelayPortProtocol(asyncio.DatagramProtocol):
             logger.warning("No route found for relay port %d", self.port)
             return
 
-        # Update activity
-        route.update_activity()
-
-        # Register client endpoint if not set
+        # Determine which client slot this port corresponds to and validate/register
         client_endpoint = RelayEndpoint(client_ip, client_port)
         if self.port == route.port_a:
             if route.client_a is None:
+                # Initial registration
                 route.client_a = client_endpoint
                 logger.info(
                     "Relay port %d: registered client A at %s:%d",
@@ -70,9 +69,21 @@ class RelayPortProtocol(asyncio.DatagramProtocol):
                     client_ip,
                     client_port,
                 )
+            elif route.client_a != client_endpoint:
+                # Packet from unauthorized endpoint - drop it
+                logger.warning(
+                    "Relay port %d: dropping packet from unauthorized endpoint %s:%d (expected %s:%d)",
+                    self.port,
+                    client_ip,
+                    client_port,
+                    route.client_a.ip,
+                    route.client_a.port,
+                )
+                return
             peer_endpoint = route.client_b
         else:  # port_b
             if route.client_b is None:
+                # Initial registration
                 route.client_b = client_endpoint
                 logger.info(
                     "Relay port %d: registered client B at %s:%d",
@@ -80,7 +91,21 @@ class RelayPortProtocol(asyncio.DatagramProtocol):
                     client_ip,
                     client_port,
                 )
+            elif route.client_b != client_endpoint:
+                # Packet from unauthorized endpoint - drop it
+                logger.warning(
+                    "Relay port %d: dropping packet from unauthorized endpoint %s:%d (expected %s:%d)",
+                    self.port,
+                    client_ip,
+                    client_port,
+                    route.client_b.ip,
+                    route.client_b.port,
+                )
+                return
             peer_endpoint = route.client_a
+
+        # Update activity (only for valid packets from registered endpoints)
+        route.update_activity()
 
         # Forward to peer if known
         if peer_endpoint is not None:
