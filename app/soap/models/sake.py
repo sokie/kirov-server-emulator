@@ -69,13 +69,13 @@ class GetMyRecordsResponse(BaseXmlModel, tag="GetMyRecordsResponse", nsmap={"": 
     def success(cls, records: List[RecordValue]) -> "GetMyRecordsResponse":
         """Create a successful response with record values."""
         if not records:
-            return cls(result="Success", values=None)
+            return cls(result="Success", values=ValuesContainer(arrays=[]))
         return cls(result="Success", values=ValuesContainer.single(records))
 
     @classmethod
     def success_empty(cls) -> "GetMyRecordsResponse":
         """Create a successful response with empty values."""
-        return cls(result="Success", values=None)
+        return cls(result="Success", values=ValuesContainer(arrays=[]))
 
     @classmethod
     def error(cls, message: str = "Error") -> "GetMyRecordsResponse":

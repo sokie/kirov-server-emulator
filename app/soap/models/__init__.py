@@ -6,8 +6,9 @@ This package contains type-safe XML models for request/response serialization.
 
 from app.soap.models.auth import (
     AUTH_NS,
-    LoginRemoteAuthRequest,
+    Certificate,
     LoginRemoteAuthResponse,
+    LoginRemoteAuthResult,
 )
 from app.soap.models.clan import (
     CLAN_NS,
@@ -51,8 +52,9 @@ __all__ = [
     "ShortValueWrapper",
     # Auth
     "AUTH_NS",
-    "LoginRemoteAuthRequest",
+    "Certificate",
     "LoginRemoteAuthResponse",
+    "LoginRemoteAuthResult",
     # Clan
     "CLAN_NS",
     "ClanInfo",

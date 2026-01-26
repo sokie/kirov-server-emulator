@@ -4,17 +4,20 @@ Auth SOAP Service - Certificate management for RA3.
 Endpoint: /AuthService/AuthService.asmx
 
 This service handles:
-- LoginRemoteAuth: Allocates a certificate from the pool for authentication
+- LoginRemoteAuth: Generates certificates with valid cryptographic signatures
 
-Certificates have a 180-second expiry and are returned to the pool after use.
+Certificates are dynamically generated with RSA keys and MD5 signatures
+computed over actual player data.
 """
 
-from datetime import datetime, timedelta
+import base64
+from datetime import datetime
 
 from fastapi import APIRouter, Request, Response
+from sqlmodel import select
 
-from app.db.crud import get_available_certificate
 from app.db.database import create_session
+from app.models.models import Persona, User
 from app.soap.envelope import (
     create_soap_fault,
     extract_soap_body,
@@ -23,60 +26,72 @@ from app.soap.envelope import (
     wrap_soap_envelope,
 )
 from app.soap.models.auth import LoginRemoteAuthResponse
+from app.util.gamespy_crypto import GeneratedCertificate, generate_certificate_for_player
 from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
 
 auth_router = APIRouter()
 
-# Namespace definitions
-AUTH_NS = "http://gamespy.net/AuthService"
-
-# Certificate expiry time in seconds
-CERT_EXPIRY_SECONDS = 180
+# Cache generated certificates per profile to ensure consistency across requests
+_profile_certificates: dict[int, GeneratedCertificate] = {}
 
 
-def handle_login_remote_auth(server_data: str, profile_id: int) -> LoginRemoteAuthResponse:
+def parse_authtoken(authtoken: str) -> tuple[int, int]:
     """
-    Handle LoginRemoteAuth SOAP operation.
+    Parse the authtoken to extract user_id and persona_id.
 
-    Allocates a certificate from the pool and returns it.
-    If no certificates are available, returns a placeholder certificate.
-
-    Args:
-        server_data: Server authentication data from the client.
-        profile_id: The profile ID requesting authentication.
+    The token format is: base64(user_id|persona_id|token)
 
     Returns:
-        LoginRemoteAuthResponse with certificate and expiry.
+        Tuple of (user_id, persona_id).
     """
-    logger.debug(
-        "Auth LoginRemoteAuth: ServerData=%s..., profileId=%s",
-        server_data[:20] if server_data else "",
-        profile_id,
-    )
-
-    session = create_session()
     try:
-        cert = get_available_certificate(session)
-        expiry_time = datetime.utcnow() + timedelta(seconds=CERT_EXPIRY_SECONDS)
-        expiry_str = expiry_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        decoded = base64.b64decode(authtoken).decode("utf-8")
+        parts = decoded.split("|")
+        if len(parts) >= 2:
+            user_id = int(parts[0])
+            persona_id = int(parts[1])
+            return user_id, persona_id
+    except Exception as e:
+        logger.warning("Failed to parse authtoken: %s", e)
+    return 0, 0
 
-        if cert:
-            logger.debug("Auth: Allocated certificate id=%s", cert.id)
-            return LoginRemoteAuthResponse.success(
-                certificate=cert.certificate_data,
-                expiry=expiry_str,
-            )
-        else:
-            logger.debug("Auth: No certificates available, using placeholder")
-            return LoginRemoteAuthResponse.success(
-                certificate="PLACEHOLDER_CERTIFICATE",
-                expiry=expiry_str,
-            )
 
-    finally:
-        session.close()
+def generate_timestamp() -> str:
+    """Generate base64 encoded timestamp in the format used by GameSpy."""
+    # Format: M/d/yyyy h:mm:ss tt (e.g., "1/25/2026 3:30:45 PM")
+    now = datetime.now()
+    hour_12 = now.hour % 12 or 12
+    am_pm = "AM" if now.hour < 12 else "PM"
+    timestamp_str = f"{now.month}/{now.day}/{now.year} {hour_12}:{now.minute:02d}:{now.second:02d} {am_pm}"
+    return base64.b64encode(timestamp_str.encode("utf-8")).decode("utf-8")
+
+
+def get_player_info(session, user_id: int, profile_id: int) -> tuple[str, str]:
+    """
+    Get player nickname and email from database.
+
+    Returns:
+        Tuple of (nickname, email).
+    """
+    nickname = "Player"
+    email = "player@local"
+
+    try:
+        # Get persona (nickname)
+        persona = session.exec(select(Persona).where(Persona.id == profile_id)).first()
+        if persona:
+            nickname = persona.name
+
+        # Get user (email)
+        user = session.exec(select(User).where(User.id == user_id)).first()
+        if user:
+            email = user.email
+    except Exception as e:
+        logger.warning("Failed to get player info: %s", e)
+
+    return nickname, email
 
 
 @auth_router.post("/AuthService/AuthService.asmx")
@@ -99,23 +114,73 @@ async def auth_handler(request: Request) -> Response:
         logger.debug("Auth: Operation=%s", operation_name)
 
         if "LoginRemoteAuth" in soap_action or operation_name == "LoginRemoteAuth":
-            server_data = get_element_text(operation, "ServerData")
-            profile_id_str = get_element_text(operation, "profileId")
-            profile_id = int(profile_id_str) if profile_id_str else 0
+            authtoken = get_element_text(operation, "authtoken")
+            user_id, profile_id = parse_authtoken(authtoken)
+            logger.debug("Auth: Parsed authtoken -> user_id=%s, profile_id=%s", user_id, profile_id)
 
-            response_model = handle_login_remote_auth(server_data, profile_id)
+            # Get real player info from database
+            session = create_session()
+            try:
+                nickname, email = get_player_info(session, user_id, profile_id)
+            finally:
+                session.close()
+
+            # Generate or retrieve cached certificate for this profile
+            # We cache by (profile_id, user_id, nickname) to regenerate if player data changes
+            cache_key = profile_id
+            cached_cert = _profile_certificates.get(cache_key)
+
+            if cached_cert is None:
+                logger.info(
+                    "Auth: Generating new certificate for profile_id=%s, user_id=%s, nickname=%s",
+                    profile_id, user_id, nickname
+                )
+                cert = generate_certificate_for_player(
+                    userid=user_id,
+                    profileid=profile_id,
+                    profilenick=nickname,
+                    uniquenick=nickname,
+                )
+                _profile_certificates[cache_key] = cert
+            else:
+                cert = cached_cert
+                logger.debug("Auth: Using cached certificate for profile_id=%s", profile_id)
+
+            # Generate timestamp
+            timestamp = generate_timestamp()
+
+            logger.debug(
+                "Auth: Building response for profile_id=%s, nickname=%s, modulus=%s...",
+                profile_id, nickname, cert.peerkeymodulus[:32]
+            )
+
+            # Build response with real player data and dynamically generated crypto
+            response_model = LoginRemoteAuthResponse.success(
+                user_id=user_id,
+                profile_id=profile_id,
+                nickname=nickname,
+                email=email,
+                peerkeymodulus=cert.peerkeymodulus,
+                serverdata=cert.serverdata,
+                signature=cert.signature,
+                peerkeyprivate=cert.peerkeyprivate,
+                timestamp=timestamp,
+            )
             response_xml = wrap_soap_envelope(response_model)
+
+            logger.debug("Auth: Response=%s", response_xml[:500])
+
+            return Response(
+                content=response_xml,
+                media_type="text/xml; charset=utf-8",
+            )
         else:
-            # Return generic success for unknown operations
-            response_model = LoginRemoteAuthResponse(result="Success")
-            response_xml = wrap_soap_envelope(response_model)
-
-        logger.debug("Auth: Response=%s", response_xml[:500])
-
-        return Response(
-            content=response_xml,
-            media_type="text/xml; charset=utf-8",
-        )
+            # Return generic fault for unknown operations
+            fault_xml = create_soap_fault("Unknown operation")
+            return Response(
+                content=fault_xml,
+                media_type="text/xml; charset=utf-8",
+            )
 
     except Exception as e:
         logger.exception("Auth: Error processing request: %s", e)

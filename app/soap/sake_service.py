@@ -120,16 +120,16 @@ def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: 
         requested_fields[:5] if requested_fields else [],
     )
 
+    # If no fields requested, return empty values
+    if not requested_fields:
+        return GetMyRecordsResponse.success_empty()
+
     session = create_session()
     try:
         stats = get_player_stats(session, profile_id)
         level = get_player_level(session, profile_id)
 
-        # If no stats exist, return empty values
-        if stats is None and level is None:
-            return GetMyRecordsResponse.success_empty()
-
-        # Build record values for each requested field
+        # Build record values for each requested field (always return values, using defaults if needed)
         records = []
         for field in requested_fields:
             value = 0

@@ -2,48 +2,82 @@
 Pydantic-XML models for Auth SOAP Service.
 
 Endpoint: /AuthService/AuthService.asmx
-Namespace: http://gamespy.net/AuthService
+Namespace: http://gamespy.net/AuthService/
 """
 
 from typing import Optional
 
 from pydantic_xml import BaseXmlModel, element
 
-AUTH_NS = "http://gamespy.net/AuthService"
+AUTH_NS = "http://gamespy.net/AuthService/"
 
 
-class LoginRemoteAuthRequest(BaseXmlModel, tag="LoginRemoteAuth", nsmap={"": AUTH_NS}):
-    """
-    Request model for LoginRemoteAuth operation.
+class Certificate(BaseXmlModel, tag="certificate"):
+    """Certificate data containing player info and crypto keys."""
 
-    The client sends ServerData and profileId to authenticate.
-    """
+    length: int = element(tag="length", default=305)
+    version: int = element(tag="version", default=1)
+    partnercode: int = element(tag="partnercode", default=60)
+    namespaceid: int = element(tag="namespaceid", default=69)
+    userid: int = element(tag="userid")
+    profileid: int = element(tag="profileid")
+    expiretime: int = element(tag="expiretime", default=0)
+    profilenick: str = element(tag="profilenick")
+    uniquenick: str = element(tag="uniquenick")
+    cdkeyhash: str = element(tag="cdkeyhash", default="")
+    peerkeymodulus: str = element(tag="peerkeymodulus")
+    peerkeyexponent: str = element(tag="peerkeyexponent", default="010001")
+    serverdata: str = element(tag="serverdata")
+    signature: str = element(tag="signature")
+    timestamp: str = element(tag="timestamp")
+    email: str = element(tag="email")
 
-    server_data: str = element(tag="ServerData", default="")
-    profile_id: int = element(tag="profileId", default=0)
+
+class LoginRemoteAuthResult(BaseXmlModel, tag="LoginRemoteAuthResult"):
+    """Result container with response code, certificate, and private key."""
+
+    response_code: int = element(tag="responseCode", default=0)
+    certificate: Certificate = element(tag="certificate")
+    peerkeyprivate: str = element(tag="peerkeyprivate")
 
 
 class LoginRemoteAuthResponse(BaseXmlModel, tag="LoginRemoteAuthResponse", nsmap={"": AUTH_NS}):
     """
     Response model for LoginRemoteAuth operation.
 
-    Returns a certificate and expiry time on success.
+    Returns certificate with player info and crypto keys.
     """
 
-    result: str = element(tag="LoginRemoteAuthResult")
-    certificate: Optional[str] = element(tag="certificate", default=None)
-    expiry: Optional[str] = element(tag="expiry", default=None)
+    result: LoginRemoteAuthResult = element(tag="LoginRemoteAuthResult")
 
     @classmethod
-    def success(cls, certificate: str, expiry: str) -> "LoginRemoteAuthResponse":
-        """Create a successful response with certificate and expiry."""
-        return cls(
-            result="Success",
-            certificate=certificate,
-            expiry=expiry,
+    def success(
+        cls,
+        user_id: int,
+        profile_id: int,
+        nickname: str,
+        email: str,
+        peerkeymodulus: str,
+        serverdata: str,
+        signature: str,
+        peerkeyprivate: str,
+        timestamp: str,
+    ) -> "LoginRemoteAuthResponse":
+        """Create a successful response with real player data and hardcoded crypto."""
+        cert = Certificate(
+            userid=user_id,
+            profileid=profile_id,
+            profilenick=nickname,
+            uniquenick=nickname,
+            email=email,
+            peerkeymodulus=peerkeymodulus,
+            serverdata=serverdata,
+            signature=signature,
+            timestamp=timestamp,
         )
-
-    @classmethod
-    def error(cls, message: str = "Error") -> "LoginRemoteAuthResponse":
-        """Create an error response."""
-        return cls(result=message)
+        result = LoginRemoteAuthResult(
+            response_code=0,
+            certificate=cert,
+            peerkeyprivate=peerkeyprivate,
+        )
+        return cls(result=result)
