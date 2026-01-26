@@ -95,7 +95,7 @@ This starts:
 
 ### Creating a User Account
 
-Visit `http://localhost/static/register.html` in your browser to create a new user account. You can add friends ingame.
+Visit `http://localhost/register.html` in your browser to create a new user account. You can add friends ingame.
 
 ### Running Tests
 
@@ -158,4 +158,5 @@ This project is provided for educational and preservation purposes.
 ## Disclaimer
 
 This project is not affiliated with or endorsed by Electronic Arts, Westwood Studios, or any related entities. Red Alert 3 and Command & Conquer are trademarks of Electronic Arts Inc.
+
 
