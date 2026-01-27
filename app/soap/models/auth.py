@@ -5,8 +5,6 @@ Endpoint: /AuthService/AuthService.asmx
 Namespace: http://gamespy.net/AuthService/
 """
 
-from typing import Optional
-
 from pydantic_xml import BaseXmlModel, element
 
 AUTH_NS = "http://gamespy.net/AuthService/"

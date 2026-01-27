@@ -133,7 +133,9 @@ async def auth_handler(request: Request) -> Response:
             if cached_cert is None:
                 logger.info(
                     "Auth: Generating new certificate for profile_id=%s, user_id=%s, nickname=%s",
-                    profile_id, user_id, nickname
+                    profile_id,
+                    user_id,
+                    nickname,
                 )
                 cert = generate_certificate_for_player(
                     userid=user_id,
@@ -151,7 +153,9 @@ async def auth_handler(request: Request) -> Response:
 
             logger.debug(
                 "Auth: Building response for profile_id=%s, nickname=%s, modulus=%s...",
-                profile_id, nickname, cert.peerkeymodulus[:32]
+                profile_id,
+                nickname,
+                cert.peerkeymodulus[:32],
             )
 
             # Build response with real player data and dynamically generated crypto

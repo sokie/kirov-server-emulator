@@ -6,7 +6,7 @@ and parse SOAP request bodies into pydantic_xml models.
 """
 
 import xml.etree.ElementTree as ET
-from typing import Type, TypeVar
+from typing import TypeVar
 
 from pydantic_xml import BaseXmlModel
 
@@ -114,7 +114,7 @@ def get_operation_name(operation: ET.Element) -> str:
     return tag.split("}")[-1] if "}" in tag else tag
 
 
-def parse_soap_body(xml_content: str | bytes, model_class: Type[T]) -> T:
+def parse_soap_body(xml_content: str | bytes, model_class: type[T]) -> T:
     """
     Extract SOAP body and parse with a pydantic_xml model.
 
@@ -166,8 +166,5 @@ def create_soap_fault(fault_string: str, fault_code: str = "soap:Server") -> str
         Complete SOAP fault envelope as an XML string.
     """
     return wrap_soap_envelope_raw(
-        f"<soap:Fault>"
-        f"<faultcode>{fault_code}</faultcode>"
-        f"<faultstring>{fault_string}</faultstring>"
-        f"</soap:Fault>"
+        f"<soap:Fault><faultcode>{fault_code}</faultcode><faultstring>{fault_string}</faultstring></soap:Fault>"
     )

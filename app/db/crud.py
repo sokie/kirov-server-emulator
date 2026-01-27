@@ -806,9 +806,7 @@ def get_available_certificate(session: Session) -> AuthCertificate | None:
     return cert
 
 
-def assign_certificate_to_persona(
-    session: Session, cert_id: int, persona_id: int
-) -> AuthCertificate | None:
+def assign_certificate_to_persona(session: Session, cert_id: int, persona_id: int) -> AuthCertificate | None:
     """Assigns a certificate to a specific persona."""
     cert = session.get(AuthCertificate, cert_id)
     if cert:
@@ -838,5 +836,3 @@ def get_certificate_by_server_data(session: Session, server_data_10: str) -> Aut
     """Gets a certificate by its first 10 characters of server data."""
     stmt = select(AuthCertificate).where(AuthCertificate.server_data_10 == server_data_10)
     return session.exec(stmt).first()
-
-

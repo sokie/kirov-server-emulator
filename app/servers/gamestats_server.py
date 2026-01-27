@@ -28,8 +28,6 @@ from typing import TYPE_CHECKING
 
 from app.db.crud import (
     create_or_update_player_stats,
-    get_gamespy_session_by_sesskey,
-    get_persona_by_id,
     get_player_stats,
     validate_and_consume_preauth_ticket,
 )
@@ -374,7 +372,7 @@ class GameStatsServer(asyncio.Protocol):
 
         pid_str = request_data.get("pid", "")
         lid = request_data.get("lid", "1")
-        keys_str = request_data.get("keys", "")
+        _keys_str = request_data.get("keys", "")  # Reserved for future use
         request_id = request_data.get("id", "1")
 
         if not pid_str:

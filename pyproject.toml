@@ -28,6 +28,7 @@ ignore = [
     "B905",   # zip without strict= (python 3.10+)
     "SIM105", # contextlib.suppress suggestion (prefer explicit try/except)
     "SIM108", # use ternary operator instead of if-else
+    "UP047",  # generic function type parameters (TypeVar pattern is clearer)
 ]
 
 [tool.ruff.lint.per-file-ignores]

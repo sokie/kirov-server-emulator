@@ -5,8 +5,6 @@ Endpoint: /SakeStorageServer/StorageServer.asmx
 Namespace: http://gamespy.net/sake
 """
 
-from typing import List, Optional
-
 from pydantic_xml import BaseXmlModel, element
 
 from app.soap.models.common import ArrayOfRecordValue, RecordValue
@@ -20,7 +18,7 @@ SAKE_NS = "http://gamespy.net/sake"
 class StringList(BaseXmlModel, tag="fields"):
     """List of field name strings."""
 
-    items: List[str] = element(tag="string", default=[])
+    items: list[str] = element(tag="string", default=[])
 
 
 # --- Values container ---
@@ -29,15 +27,15 @@ class StringList(BaseXmlModel, tag="fields"):
 class ValuesContainer(BaseXmlModel, tag="values"):
     """Container for ArrayOfRecordValue elements in responses."""
 
-    arrays: List[ArrayOfRecordValue] = element(tag="ArrayOfRecordValue", default=[])
+    arrays: list[ArrayOfRecordValue] = element(tag="ArrayOfRecordValue", default=[])
 
     @classmethod
-    def single(cls, records: List[RecordValue]) -> "ValuesContainer":
+    def single(cls, records: list[RecordValue]) -> "ValuesContainer":
         """Create a container with a single ArrayOfRecordValue."""
         return cls(arrays=[ArrayOfRecordValue(records=records)])
 
     @classmethod
-    def multiple(cls, record_lists: List[List[RecordValue]]) -> "ValuesContainer":
+    def multiple(cls, record_lists: list[list[RecordValue]]) -> "ValuesContainer":
         """Create a container with multiple ArrayOfRecordValue elements."""
         return cls(arrays=[ArrayOfRecordValue(records=recs) for recs in record_lists])
 
@@ -52,7 +50,7 @@ class GetMyRecordsRequest(BaseXmlModel, tag="GetMyRecords", nsmap={"": SAKE_NS})
     secret_key: str = element(tag="secretKey", default="")
     login_ticket: str = element(tag="loginTicket", default="")
     table_id: str = element(tag="tableid", default="")
-    fields: Optional[StringList] = element(tag="fields", default=None)
+    fields: StringList | None = element(tag="fields", default=None)
 
 
 class GetMyRecordsResponse(BaseXmlModel, tag="GetMyRecordsResponse", nsmap={"": SAKE_NS}):
@@ -63,10 +61,10 @@ class GetMyRecordsResponse(BaseXmlModel, tag="GetMyRecordsResponse", nsmap={"": 
     """
 
     result: str = element(tag="GetMyRecordsResult")
-    values: Optional[ValuesContainer] = element(tag="values", default=None)
+    values: ValuesContainer | None = element(tag="values", default=None)
 
     @classmethod
-    def success(cls, records: List[RecordValue]) -> "GetMyRecordsResponse":
+    def success(cls, records: list[RecordValue]) -> "GetMyRecordsResponse":
         """Create a successful response with record values."""
         if not records:
             return cls(result="Success", values=ValuesContainer(arrays=[]))
@@ -93,7 +91,7 @@ class GetSpecificRecordsRequest(BaseXmlModel, tag="GetSpecificRecords", nsmap={"
     secret_key: str = element(tag="secretKey", default="")
     login_ticket: str = element(tag="loginTicket", default="")
     table_id: str = element(tag="tableid", default="")
-    fields: Optional[StringList] = element(tag="fields", default=None)
+    fields: StringList | None = element(tag="fields", default=None)
 
 
 class GetSpecificRecordsResponse(BaseXmlModel, tag="GetSpecificRecordsResponse", nsmap={"": SAKE_NS}):
@@ -104,10 +102,10 @@ class GetSpecificRecordsResponse(BaseXmlModel, tag="GetSpecificRecordsResponse",
     """
 
     result: str = element(tag="GetSpecificRecordsResult")
-    values: Optional[ValuesContainer] = element(tag="values", default=None)
+    values: ValuesContainer | None = element(tag="values", default=None)
 
     @classmethod
-    def success(cls, records: List[RecordValue]) -> "GetSpecificRecordsResponse":
+    def success(cls, records: list[RecordValue]) -> "GetSpecificRecordsResponse":
         """Create a successful response with record values."""
         if not records:
             return cls(result="Success", values=ValuesContainer(arrays=[]))
@@ -135,7 +133,7 @@ class SearchForRecordsRequest(BaseXmlModel, tag="SearchForRecords", nsmap={"": S
     login_ticket: str = element(tag="loginTicket", default="")
     table_id: str = element(tag="tableid", default="")
     filter_str: str = element(tag="filter", default="")
-    fields: Optional[StringList] = element(tag="fields", default=None)
+    fields: StringList | None = element(tag="fields", default=None)
     max_results: int = element(tag="max", default=100)
 
 
@@ -147,10 +145,10 @@ class SearchForRecordsResponse(BaseXmlModel, tag="SearchForRecordsResponse", nsm
     """
 
     result: str = element(tag="SearchForRecordsResult")
-    values: Optional[ValuesContainer] = element(tag="values", default=None)
+    values: ValuesContainer | None = element(tag="values", default=None)
 
     @classmethod
-    def success(cls, record_lists: List[List[RecordValue]]) -> "SearchForRecordsResponse":
+    def success(cls, record_lists: list[list[RecordValue]]) -> "SearchForRecordsResponse":
         """
         Create a successful response with multiple arrays of record values.
 

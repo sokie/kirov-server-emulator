@@ -180,14 +180,28 @@ def rsa_sign_raw(hash_bytes: bytes, private_key_hex: str, modulus_hex: str) -> s
 
 # MD5 DigestInfo header for PKCS#1 v1.5 (18 bytes)
 # ASN.1 encoding: SEQUENCE { SEQUENCE { OID md5, NULL }, OCTET STRING (16 bytes) }
-MD5_DIGESTINFO = bytes([
-    0x30, 0x20,  # SEQUENCE, 32 bytes total
-    0x30, 0x0C,  # SEQUENCE, 12 bytes
-    0x06, 0x08,  # OID, 8 bytes
-    0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x02, 0x05,  # OID 1.2.840.113549.2.5 (MD5)
-    0x05, 0x00,  # NULL
-    0x04, 0x10,  # OCTET STRING, 16 bytes (hash follows)
-])
+MD5_DIGESTINFO = bytes(
+    [
+        0x30,
+        0x20,  # SEQUENCE, 32 bytes total
+        0x30,
+        0x0C,  # SEQUENCE, 12 bytes
+        0x06,
+        0x08,  # OID, 8 bytes
+        0x2A,
+        0x86,
+        0x48,
+        0x86,
+        0xF7,
+        0x0D,
+        0x02,
+        0x05,  # OID 1.2.840.113549.2.5 (MD5)
+        0x05,
+        0x00,  # NULL
+        0x04,
+        0x10,  # OCTET STRING, 16 bytes (hash follows)
+    ]
+)
 
 
 def rsa_sign_pkcs1v15(hash_bytes: bytes, private_key_hex: str, modulus_hex: str) -> str:

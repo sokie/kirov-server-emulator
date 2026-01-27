@@ -13,7 +13,6 @@ The game relies on this service for displaying stats, ranks, and leaderboards.
 
 import base64
 import xml.etree.ElementTree as ET
-from typing import List
 
 from fastapi import APIRouter, Request, Response
 from sqlmodel import select
@@ -45,15 +44,93 @@ SAKE_NS = "http://gamespy.net/sake"
 
 # XP thresholds for 87 ranks (Levels table)
 LEVEL_THRESHOLDS = [
-    0, 5, 13, 23, 35, 50, 67, 86, 106, 127,
-    150, 175, 202, 231, 262, 295, 330, 367, 406, 447,
-    490, 535, 582, 631, 682, 735, 790, 847, 906, 967,
-    1030, 1095, 1162, 1231, 1302, 1375, 1454, 1538, 1628, 1724,
-    1825, 1927, 2030, 2134, 2239, 2345, 2452, 2560, 2674, 2794,
-    2920, 3049, 3180, 3314, 3451, 3590, 3738, 3894, 4058, 4230,
-    4410, 4595, 4784, 4978, 5177, 5380, 5590, 5807, 6031, 6262,
-    6500, 6744, 6993, 7247, 7506, 7770, 8044, 8328, 8622, 8926,
-    9240, 9562, 9890, 10224, 10564, 10910, 11310,
+    0,
+    5,
+    13,
+    23,
+    35,
+    50,
+    67,
+    86,
+    106,
+    127,
+    150,
+    175,
+    202,
+    231,
+    262,
+    295,
+    330,
+    367,
+    406,
+    447,
+    490,
+    535,
+    582,
+    631,
+    682,
+    735,
+    790,
+    847,
+    906,
+    967,
+    1030,
+    1095,
+    1162,
+    1231,
+    1302,
+    1375,
+    1454,
+    1538,
+    1628,
+    1724,
+    1825,
+    1927,
+    2030,
+    2134,
+    2239,
+    2345,
+    2452,
+    2560,
+    2674,
+    2794,
+    2920,
+    3049,
+    3180,
+    3314,
+    3451,
+    3590,
+    3738,
+    3894,
+    4058,
+    4230,
+    4410,
+    4595,
+    4784,
+    4978,
+    5177,
+    5380,
+    5590,
+    5807,
+    6031,
+    6262,
+    6500,
+    6744,
+    6993,
+    7247,
+    7506,
+    7770,
+    8044,
+    8328,
+    8622,
+    8926,
+    9240,
+    9562,
+    9890,
+    10224,
+    10564,
+    10910,
+    11310,
 ]
 
 # Scoring multipliers (fixed values)
@@ -81,7 +158,7 @@ def parse_login_ticket(login_ticket: str) -> tuple[int, int]:
     return 0, 0
 
 
-def get_requested_fields(operation: ET.Element) -> List[str]:
+def get_requested_fields(operation: ET.Element) -> list[str]:
     """Extract the list of requested field names from the SOAP request."""
     fields = []
     for child in operation:
@@ -94,7 +171,7 @@ def get_requested_fields(operation: ET.Element) -> List[str]:
     return fields
 
 
-def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: List[str]) -> GetMyRecordsResponse:
+def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: list[str]) -> GetMyRecordsResponse:
     """
     Handle GetMyRecords SOAP operation.
 
@@ -126,7 +203,7 @@ def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: 
 
     session = create_session()
     try:
-        stats = get_player_stats(session, profile_id)
+        _stats = get_player_stats(session, profile_id)  # Reserved for future stat fields
         level = get_player_level(session, profile_id)
 
         # Build record values for each requested field (always return values, using defaults if needed)
@@ -194,7 +271,7 @@ def handle_search_for_records(table_id: str, filter_str: str) -> SearchForRecord
     """
     logger.debug("Sake SearchForRecords: tableid=%s, filter=%s", table_id, filter_str)
 
-    record_lists: List[List[RecordValue]] = []
+    record_lists: list[list[RecordValue]] = []
 
     # Handle Levels table - return XP thresholds
     if "Levels" in str(table_id) or "levels" in str(filter_str).lower():
@@ -215,11 +292,13 @@ def handle_search_for_records(table_id: str, filter_str: str) -> SearchForRecord
                 score = level.score if level else 0
 
                 # Each player is an ArrayOfRecordValue with [profileId, rank, score]
-                record_lists.append([
-                    RecordValue.from_int(persona.id),
-                    RecordValue.from_int(rank),
-                    RecordValue.from_int(score),
-                ])
+                record_lists.append(
+                    [
+                        RecordValue.from_int(persona.id),
+                        RecordValue.from_int(rank),
+                        RecordValue.from_int(score),
+                    ]
+                )
         finally:
             session.close()
 

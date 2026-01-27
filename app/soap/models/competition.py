@@ -5,8 +5,6 @@ Endpoint: /competitionservice/competitionservice.asmx
 Namespace: http://gamespy.net/competition
 """
 
-from typing import Optional
-
 from pydantic_xml import BaseXmlModel, element
 
 COMP_NS = "http://gamespy.net/competition"
@@ -29,8 +27,8 @@ class CreateSessionResponse(BaseXmlModel, tag="CreateSessionResponse", nsmap={""
     """
 
     result: str = element(tag="CreateSessionResult")
-    csid: Optional[str] = element(tag="csid", default=None)
-    ccid: Optional[str] = element(tag="ccid", default=None)
+    csid: str | None = element(tag="csid", default=None)
+    ccid: str | None = element(tag="ccid", default=None)
 
     @classmethod
     def success(cls, csid: str, ccid: str) -> "CreateSessionResponse":
@@ -62,7 +60,7 @@ class SetReportIntentionResponse(BaseXmlModel, tag="SetReportIntentionResponse",
     """
 
     result: str = element(tag="SetReportIntentionResult")
-    ccid: Optional[str] = element(tag="ccid", default=None)
+    ccid: str | None = element(tag="ccid", default=None)
 
     @classmethod
     def success(cls, ccid: str) -> "SetReportIntentionResponse":

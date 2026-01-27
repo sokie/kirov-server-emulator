@@ -23,8 +23,6 @@ from app.soap.models.competition import (
 )
 from app.soap.models.sake import (
     GetMyRecordsResponse,
-    GetSpecificRecordsResponse,
-    SearchForRecordsResponse,
 )
 from app.soap.sake_service import (
     LEVEL_THRESHOLDS,
@@ -44,7 +42,7 @@ class TestSakeService:
         """Test GetMyRecordsResponse serializes correctly with score and rank values."""
         records = [
             RecordValue.from_int(1500),  # score
-            RecordValue.from_int(25),    # rank
+            RecordValue.from_int(25),  # rank
         ]
         response = GetMyRecordsResponse.success(records)
         xml = wrap_soap_envelope(response)
@@ -102,6 +100,7 @@ class TestSakeService:
     def test_parse_login_ticket_valid(self):
         """Test parsing a valid base64 login ticket."""
         import base64
+
         ticket = base64.b64encode(b"12345|67890|sometoken").decode("utf-8")
         user_id, persona_id = parse_login_ticket(ticket)
 

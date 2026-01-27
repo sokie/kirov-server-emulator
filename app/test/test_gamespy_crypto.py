@@ -11,8 +11,6 @@ These tests verify:
 import hashlib
 import struct
 
-import pytest
-
 from app.util.gamespy_crypto import (
     MD5_DIGESTINFO,
     SERVER_SIGNING_EXPONENT,
@@ -215,10 +213,7 @@ class TestRSASignPKCS1v15:
 
         # Check DigestInfo header is present before hash
         digest_info_start = 128 - 16 - len(MD5_DIGESTINFO)
-        assert (
-            decrypted[digest_info_start : digest_info_start + len(MD5_DIGESTINFO)]
-            == MD5_DIGESTINFO
-        )
+        assert decrypted[digest_info_start : digest_info_start + len(MD5_DIGESTINFO)] == MD5_DIGESTINFO
 
 
 class TestGenerateCertificateForPlayer:
