@@ -12,6 +12,18 @@ from app.soap.models.common import ArrayOfRecordValue, RecordValue
 SAKE_NS = "http://gamespy.net/sake"
 
 
+# --- Result codes (matching OpenSpy reference implementation) ---
+
+
+class SAKEResultCode:
+    """Result codes for SAKE Storage Service operations."""
+
+    SUCCESS = "Success"
+    LOGIN_TICKET_INVALID = "LoginTicketInvalid"
+    RECORD_NOT_FOUND = "RecordNotFound"
+    UNKNOWN = "Unknown"
+
+
 # --- Shared types ---
 
 
@@ -76,9 +88,9 @@ class GetMyRecordsResponse(BaseXmlModel, tag="GetMyRecordsResponse", nsmap={"": 
         return cls(result="Success", values=ValuesContainer(arrays=[]))
 
     @classmethod
-    def error(cls, message: str = "Error") -> "GetMyRecordsResponse":
-        """Create an error response."""
-        return cls(result=message)
+    def error(cls, code: str = SAKEResultCode.UNKNOWN) -> "GetMyRecordsResponse":
+        """Create an error response with a specific error code."""
+        return cls(result=code)
 
 
 # --- GetSpecificRecords ---
@@ -117,9 +129,9 @@ class GetSpecificRecordsResponse(BaseXmlModel, tag="GetSpecificRecordsResponse",
         return cls(result="Success", values=ValuesContainer(arrays=[]))
 
     @classmethod
-    def error(cls, message: str = "Error") -> "GetSpecificRecordsResponse":
-        """Create an error response."""
-        return cls(result=message)
+    def error(cls, code: str = SAKEResultCode.UNKNOWN) -> "GetSpecificRecordsResponse":
+        """Create an error response with a specific error code."""
+        return cls(result=code)
 
 
 # --- SearchForRecords ---
@@ -164,6 +176,6 @@ class SearchForRecordsResponse(BaseXmlModel, tag="SearchForRecordsResponse", nsm
         return cls(result="Success", values=ValuesContainer(arrays=[]))
 
     @classmethod
-    def error(cls, message: str = "Error") -> "SearchForRecordsResponse":
-        """Create an error response."""
-        return cls(result=message)
+    def error(cls, code: str = SAKEResultCode.UNKNOWN) -> "SearchForRecordsResponse":
+        """Create an error response with a specific error code."""
+        return cls(result=code)

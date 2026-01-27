@@ -31,6 +31,7 @@ from app.soap.models.common import RecordValue
 from app.soap.models.sake import (
     GetMyRecordsResponse,
     GetSpecificRecordsResponse,
+    SAKEResultCode,
     SearchForRecordsResponse,
 )
 from app.util.logging_helper import get_logger
@@ -185,10 +186,13 @@ def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: 
     Returns:
         GetMyRecordsResponse with record values.
     """
-    # Extract profile ID from login ticket if possible
+    # Validate and extract profile ID from login ticket
     user_id, ticket_profile_id = parse_login_ticket(login_ticket)
-    if ticket_profile_id > 0:
-        profile_id = ticket_profile_id
+    if user_id == 0 or ticket_profile_id == 0:
+        logger.warning("Sake GetMyRecords: Invalid login ticket")
+        return GetMyRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
+
+    profile_id = ticket_profile_id
 
     logger.debug(
         "Sake GetMyRecords: profileId=%s, num_fields=%d, fields=%s",
@@ -225,7 +229,7 @@ def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: 
         session.close()
 
 
-def handle_get_specific_records(table_id: str) -> GetSpecificRecordsResponse:
+def handle_get_specific_records(table_id: str, login_ticket: str) -> GetSpecificRecordsResponse:
     """
     Handle GetSpecificRecords SOAP operation.
 
@@ -233,10 +237,17 @@ def handle_get_specific_records(table_id: str) -> GetSpecificRecordsResponse:
 
     Args:
         table_id: The table identifier.
+        login_ticket: The login ticket for authentication validation.
 
     Returns:
         GetSpecificRecordsResponse with record values.
     """
+    # Validate login ticket
+    user_id, profile_id = parse_login_ticket(login_ticket)
+    if user_id == 0 or profile_id == 0:
+        logger.warning("Sake GetSpecificRecords: Invalid login ticket")
+        return GetSpecificRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
+
     logger.debug("Sake GetSpecificRecords: tableid=%s", table_id)
 
     records = []
@@ -252,7 +263,7 @@ def handle_get_specific_records(table_id: str) -> GetSpecificRecordsResponse:
         return GetSpecificRecordsResponse.success_empty()
 
 
-def handle_search_for_records(table_id: str, filter_str: str) -> SearchForRecordsResponse:
+def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str) -> SearchForRecordsResponse:
     """
     Handle SearchForRecords SOAP operation.
 
@@ -265,10 +276,17 @@ def handle_search_for_records(table_id: str, filter_str: str) -> SearchForRecord
     Args:
         table_id: The table identifier.
         filter_str: The filter string for the search.
+        login_ticket: The login ticket for authentication validation.
 
     Returns:
         SearchForRecordsResponse with search results.
     """
+    # Validate login ticket
+    user_id, profile_id = parse_login_ticket(login_ticket)
+    if user_id == 0 or profile_id == 0:
+        logger.warning("Sake SearchForRecords: Invalid login ticket")
+        return SearchForRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
+
     logger.debug("Sake SearchForRecords: tableid=%s, filter=%s", table_id, filter_str)
 
     record_lists: list[list[RecordValue]] = []
@@ -348,13 +366,15 @@ async def sake_storage_handler(request: Request) -> Response:
 
         elif "GetSpecificRecords" in soap_action or operation_name == "GetSpecificRecords":
             table_id = get_element_text(operation, "tableid")
-            response_model = handle_get_specific_records(table_id)
+            login_ticket = get_element_text(operation, "loginTicket")
+            response_model = handle_get_specific_records(table_id, login_ticket)
             response_xml = wrap_soap_envelope(response_model)
 
         elif "SearchForRecords" in soap_action or operation_name == "SearchForRecords":
             table_id = get_element_text(operation, "tableid")
             filter_str = get_element_text(operation, "filter")
-            response_model = handle_search_for_records(table_id, filter_str)
+            login_ticket = get_element_text(operation, "loginTicket")
+            response_model = handle_search_for_records(table_id, filter_str, login_ticket)
             response_xml = wrap_soap_envelope(response_model)
 
         else:

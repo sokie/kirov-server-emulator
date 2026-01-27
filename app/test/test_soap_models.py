@@ -23,6 +23,7 @@ from app.soap.models.competition import (
 )
 from app.soap.models.sake import (
     GetMyRecordsResponse,
+    SAKEResultCode,
 )
 from app.soap.sake_service import (
     LEVEL_THRESHOLDS,
@@ -33,6 +34,9 @@ from app.soap.sake_service import (
     handle_search_for_records,
     parse_login_ticket,
 )
+
+# Valid test login ticket: base64("12345|67890|testtoken")
+VALID_LOGIN_TICKET = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
 
 
 class TestSakeService:
@@ -56,7 +60,7 @@ class TestSakeService:
 
     def test_get_specific_records_scoring_multipliers(self):
         """Test GetSpecificRecords returns ScoringMultipliers as short values."""
-        response = handle_get_specific_records("ScoringMultipliers")
+        response = handle_get_specific_records("ScoringMultipliers", VALID_LOGIN_TICKET)
         xml = wrap_soap_envelope(response)
 
         assert "GetSpecificRecordsResponse" in xml
@@ -67,7 +71,7 @@ class TestSakeService:
 
     def test_get_specific_records_unknown_table_returns_empty(self):
         """Test GetSpecificRecords returns empty values for unknown tables."""
-        response = handle_get_specific_records("UnknownTable")
+        response = handle_get_specific_records("UnknownTable", VALID_LOGIN_TICKET)
         xml = wrap_soap_envelope(response)
 
         assert "GetSpecificRecordsResponse" in xml
@@ -75,9 +79,17 @@ class TestSakeService:
         # Should have empty values container (self-closing when empty)
         assert "<values/>" in xml or "<values></values>" in xml
 
+    def test_get_specific_records_invalid_login_ticket(self):
+        """Test GetSpecificRecords returns LoginTicketInvalid for invalid ticket."""
+        response = handle_get_specific_records("ScoringMultipliers", "invalid_ticket")
+        xml = wrap_soap_envelope(response)
+
+        assert "GetSpecificRecordsResponse" in xml
+        assert f"<GetSpecificRecordsResult>{SAKEResultCode.LOGIN_TICKET_INVALID}</GetSpecificRecordsResult>" in xml
+
     def test_search_for_records_levels_filter(self):
         """Test SearchForRecords returns XP thresholds for Levels table."""
-        response = handle_search_for_records("Levels", "")
+        response = handle_search_for_records("Levels", "", VALID_LOGIN_TICKET)
         xml = wrap_soap_envelope(response)
 
         assert "SearchForRecordsResponse" in xml
@@ -91,11 +103,27 @@ class TestSakeService:
 
     def test_search_for_records_news_ticker_returns_empty(self):
         """Test SearchForRecords returns empty for NewsTicker table."""
-        response = handle_search_for_records("NewsTicker", "")
+        response = handle_search_for_records("NewsTicker", "", VALID_LOGIN_TICKET)
         xml = wrap_soap_envelope(response)
 
         assert "SearchForRecordsResponse" in xml
         assert "<SearchForRecordsResult>Success</SearchForRecordsResult>" in xml
+
+    def test_search_for_records_invalid_login_ticket(self):
+        """Test SearchForRecords returns LoginTicketInvalid for invalid ticket."""
+        response = handle_search_for_records("Levels", "", "invalid_ticket")
+        xml = wrap_soap_envelope(response)
+
+        assert "SearchForRecordsResponse" in xml
+        assert f"<SearchForRecordsResult>{SAKEResultCode.LOGIN_TICKET_INVALID}</SearchForRecordsResult>" in xml
+
+    def test_get_my_records_invalid_login_ticket(self):
+        """Test GetMyRecords returns LoginTicketInvalid for invalid ticket."""
+        response = handle_get_my_records("invalid_ticket", 0, ["score", "rank"])
+        xml = wrap_soap_envelope(response)
+
+        assert "GetMyRecordsResponse" in xml
+        assert f"<GetMyRecordsResult>{SAKEResultCode.LOGIN_TICKET_INVALID}</GetMyRecordsResult>" in xml
 
     def test_parse_login_ticket_valid(self):
         """Test parsing a valid base64 login ticket."""
@@ -315,7 +343,8 @@ class TestSakeServiceIntegration:
         assert filter_str == "ownerid=12345"
 
         # Call the handler with parsed values
-        response = handle_search_for_records(table_id, filter_str)
+        login_ticket = get_element_text(operation, "loginTicket")
+        response = handle_search_for_records(table_id, filter_str, login_ticket)
         xml = wrap_soap_envelope(response)
 
         # Verify response structure
@@ -447,7 +476,8 @@ class TestSakeServiceIntegration:
         assert filter_str == "Level>0"
 
         # Call the handler with parsed values
-        response = handle_search_for_records(table_id, filter_str)
+        login_ticket = get_element_text(operation, "loginTicket")
+        response = handle_search_for_records(table_id, filter_str, login_ticket)
         xml = wrap_soap_envelope(response)
 
         # Verify response structure
