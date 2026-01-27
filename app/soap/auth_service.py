@@ -25,7 +25,7 @@ from app.soap.envelope import (
     get_operation_name,
     wrap_soap_envelope,
 )
-from app.soap.models.auth import LoginRemoteAuthResponse
+from app.soap.models.auth import LoginRemoteAuthResponse, LoginResponseCode
 from app.util.gamespy_crypto import GeneratedCertificate, generate_certificate_for_player
 from app.util.logging_helper import get_logger
 
@@ -68,32 +68,6 @@ def generate_timestamp() -> str:
     return base64.b64encode(timestamp_str.encode("utf-8")).decode("utf-8")
 
 
-def get_player_info(session, user_id: int, profile_id: int) -> tuple[str, str]:
-    """
-    Get player nickname and email from database.
-
-    Returns:
-        Tuple of (nickname, email).
-    """
-    nickname = "Player"
-    email = "player@local"
-
-    try:
-        # Get persona (nickname)
-        persona = session.exec(select(Persona).where(Persona.id == profile_id)).first()
-        if persona:
-            nickname = persona.name
-
-        # Get user (email)
-        user = session.exec(select(User).where(User.id == user_id)).first()
-        if user:
-            email = user.email
-    except Exception as e:
-        logger.warning("Failed to get player info: %s", e)
-
-    return nickname, email
-
-
 @auth_router.post("/AuthService/AuthService.asmx")
 async def auth_handler(request: Request) -> Response:
     """
@@ -118,10 +92,54 @@ async def auth_handler(request: Request) -> Response:
             user_id, profile_id = parse_authtoken(authtoken)
             logger.debug("Auth: Parsed authtoken -> user_id=%s, profile_id=%s", user_id, profile_id)
 
-            # Get real player info from database
+            # Validate authtoken parsing succeeded
+            if user_id == 0 or profile_id == 0:
+                logger.warning("Auth: Invalid authtoken - failed to parse user_id/profile_id")
+                response_model = LoginRemoteAuthResponse.error(LoginResponseCode.INVALID_PASSWORD)
+                return Response(
+                    content=wrap_soap_envelope(response_model),
+                    media_type="text/xml; charset=utf-8",
+                )
+
+            # Get real player info from database and verify user/persona exist
             session = create_session()
             try:
-                nickname, email = get_player_info(session, user_id, profile_id)
+                # Verify user exists
+                user = session.exec(select(User).where(User.id == user_id)).first()
+                if not user:
+                    logger.warning("Auth: User not found for user_id=%s", user_id)
+                    response_model = LoginRemoteAuthResponse.error(LoginResponseCode.USER_NOT_FOUND)
+                    return Response(
+                        content=wrap_soap_envelope(response_model),
+                        media_type="text/xml; charset=utf-8",
+                    )
+
+                # Verify persona exists
+                persona = session.exec(select(Persona).where(Persona.id == profile_id)).first()
+                if not persona:
+                    logger.warning("Auth: Persona not found for profile_id=%s", profile_id)
+                    response_model = LoginRemoteAuthResponse.error(LoginResponseCode.INVALID_PROFILE)
+                    return Response(
+                        content=wrap_soap_envelope(response_model),
+                        media_type="text/xml; charset=utf-8",
+                    )
+
+                # Verify persona belongs to user
+                if persona.user_id != user_id:
+                    logger.warning(
+                        "Auth: Persona %s does not belong to user %s (actual owner: %s)",
+                        profile_id,
+                        user_id,
+                        persona.user_id,
+                    )
+                    response_model = LoginRemoteAuthResponse.error(LoginResponseCode.INVALID_PROFILE)
+                    return Response(
+                        content=wrap_soap_envelope(response_model),
+                        media_type="text/xml; charset=utf-8",
+                    )
+
+                nickname = persona.name
+                email = user.email
             finally:
                 session.close()
 

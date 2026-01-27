@@ -370,10 +370,20 @@ class GameStatsServer(asyncio.Protocol):
         """
         logger.debug("GameStats: Processing getpd")
 
+        request_id = request_data.get("id", "1")
+
+        # Require both game and player authentication
+        if not self.authenticated_game:
+            logger.debug("GameStats: getpd rejected - game not authenticated")
+            return self._format_error("Game not authenticated", request_id)
+
+        if not self.authenticated_player:
+            logger.debug("GameStats: getpd rejected - player not authenticated")
+            return self._format_error("Player not authenticated", request_id)
+
         pid_str = request_data.get("pid", "")
         lid = request_data.get("lid", "1")
         _keys_str = request_data.get("keys", "")  # Reserved for future use
-        request_id = request_data.get("id", "1")
 
         if not pid_str:
             return self._format_error("Missing pid", request_id)
@@ -462,10 +472,20 @@ class GameStatsServer(asyncio.Protocol):
         """
         logger.debug("GameStats: Processing setpd")
 
+        request_id = request_data.get("id", "1")
+
+        # Require both game and player authentication
+        if not self.authenticated_game:
+            logger.debug("GameStats: setpd rejected - game not authenticated")
+            return self._format_error("Game not authenticated", request_id)
+
+        if not self.authenticated_player:
+            logger.debug("GameStats: setpd rejected - player not authenticated")
+            return self._format_error("Player not authenticated", request_id)
+
         pid_str = request_data.get("pid", "")
         data_str = request_data.get("data", "{}")
         lid = request_data.get("lid", "1")
-        request_id = request_data.get("id", "1")
 
         if not pid_str:
             return self._format_error("Missing pid", request_id)
@@ -474,6 +494,15 @@ class GameStatsServer(asyncio.Protocol):
             pid = int(pid_str)
         except ValueError:
             return self._format_error("Invalid pid", request_id)
+
+        # Verify player can only modify their own stats
+        if pid != self.persona_id:
+            logger.debug(
+                "GameStats: setpd rejected - pid mismatch (requested=%d, authenticated=%s)",
+                pid,
+                self.persona_id,
+            )
+            return self._format_error("Cannot modify other player's stats", request_id)
 
         # Parse the stats data
         try:

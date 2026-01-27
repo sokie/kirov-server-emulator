@@ -14,7 +14,7 @@ from sqlmodel import SQLModel
 
 from app.db.database import engine
 from app.soap.envelope import extract_soap_body, get_element_text, wrap_soap_envelope
-from app.soap.models.auth import LoginRemoteAuthResponse
+from app.soap.models.auth import LoginRemoteAuthResponse, LoginResponseCode
 from app.soap.models.common import RecordValue
 from app.soap.models.competition import (
     CreateSessionResponse,
@@ -199,6 +199,32 @@ class TestAuthModels:
         assert "<peerkeyexponent>010001</peerkeyexponent>" in xml
         assert "<partnercode>60</partnercode>" in xml
         assert "<namespaceid>69</namespaceid>" in xml
+
+    def test_login_remote_auth_response_error_user_not_found(self):
+        """Test LoginRemoteAuthResponse error with USER_NOT_FOUND code."""
+        response = LoginRemoteAuthResponse.error(LoginResponseCode.USER_NOT_FOUND)
+        xml = wrap_soap_envelope(response)
+
+        # Check SOAP envelope structure
+        assert "soap:Envelope" in xml
+        assert "soap:Body" in xml
+        assert "LoginRemoteAuthResponse" in xml
+
+        # Check error response code (2 = USER_NOT_FOUND)
+        assert "<responseCode>2</responseCode>" in xml
+
+        # Error response should NOT have actual certificate data (userid, profileid, etc.)
+        assert "<userid>" not in xml
+        assert "<profileid>" not in xml
+        assert "<profilenick>" not in xml
+
+    def test_login_remote_auth_response_error_invalid_profile(self):
+        """Test LoginRemoteAuthResponse error with INVALID_PROFILE code."""
+        response = LoginRemoteAuthResponse.error(LoginResponseCode.INVALID_PROFILE)
+        xml = wrap_soap_envelope(response)
+
+        # Check error response code (4 = INVALID_PROFILE)
+        assert "<responseCode>4</responseCode>" in xml
 
 
 class TestRecordValueSerialization:

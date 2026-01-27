@@ -3,11 +3,29 @@ Pydantic-XML models for Auth SOAP Service.
 
 Endpoint: /AuthService/AuthService.asmx
 Namespace: http://gamespy.net/AuthService/
+
+Response codes from GameSpy AuthService:
+https://github.com/openspy/webservices/blob/master/AuthService/modules/ResponseCode.py
 """
+
+from enum import IntEnum
 
 from pydantic_xml import BaseXmlModel, element
 
 AUTH_NS = "http://gamespy.net/AuthService/"
+
+
+class LoginResponseCode(IntEnum):
+    """Response codes for LoginRemoteAuth operation."""
+
+    SUCCESS = 0
+    SERVER_INIT_FAILED = 1
+    USER_NOT_FOUND = 2
+    INVALID_PASSWORD = 3
+    INVALID_PROFILE = 4
+    UNIQUE_NICK_EXPIRED = 5
+    DB_ERROR = 6
+    SERVER_ERROR = 7
 
 
 class Certificate(BaseXmlModel, tag="certificate"):
@@ -35,8 +53,8 @@ class LoginRemoteAuthResult(BaseXmlModel, tag="LoginRemoteAuthResult"):
     """Result container with response code, certificate, and private key."""
 
     response_code: int = element(tag="responseCode", default=0)
-    certificate: Certificate = element(tag="certificate")
-    peerkeyprivate: str = element(tag="peerkeyprivate")
+    certificate: Certificate | None = element(tag="certificate", default=None)
+    peerkeyprivate: str | None = element(tag="peerkeyprivate", default=None)
 
 
 class LoginRemoteAuthResponse(BaseXmlModel, tag="LoginRemoteAuthResponse", nsmap={"": AUTH_NS}):
@@ -74,8 +92,14 @@ class LoginRemoteAuthResponse(BaseXmlModel, tag="LoginRemoteAuthResponse", nsmap
             timestamp=timestamp,
         )
         result = LoginRemoteAuthResult(
-            response_code=0,
+            response_code=LoginResponseCode.SUCCESS,
             certificate=cert,
             peerkeyprivate=peerkeyprivate,
         )
+        return cls(result=result)
+
+    @classmethod
+    def error(cls, code: LoginResponseCode) -> "LoginRemoteAuthResponse":
+        """Create an error response with only a response code."""
+        result = LoginRemoteAuthResult(response_code=code)
         return cls(result=result)
