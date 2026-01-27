@@ -124,18 +124,20 @@ class TestCompetitionModels:
         xml = wrap_soap_envelope(response)
 
         assert "CreateSessionResponse" in xml
-        assert "<CreateSessionResult>Success</CreateSessionResult>" in xml
+        assert "<CreateSessionResult>" in xml
+        assert "<result>0</result>" in xml  # 0 = SUCCESS
         assert "<csid>session123</csid>" in xml
         assert "<ccid>channel456</ccid>" in xml
         assert "soap:Envelope" in xml
 
     def test_create_session_response_error(self):
         """Test CreateSessionResponse error serialization."""
-        response = CreateSessionResponse.error("InvalidProfile")
+        response = CreateSessionResponse.error(code=1)
         xml = wrap_soap_envelope(response)
 
         assert "CreateSessionResponse" in xml
-        assert "<CreateSessionResult>InvalidProfile</CreateSessionResult>" in xml
+        assert "<CreateSessionResult>" in xml
+        assert "<result>1</result>" in xml  # 1 = ERROR
 
     def test_set_report_intention_response_success(self):
         """Test SetReportIntentionResponse success serialization with ccid echo."""
@@ -143,7 +145,8 @@ class TestCompetitionModels:
         xml = wrap_soap_envelope(response)
 
         assert "SetReportIntentionResponse" in xml
-        assert "<SetReportIntentionResult>Success</SetReportIntentionResult>" in xml
+        assert "<SetReportIntentionResult>" in xml
+        assert "<result>0</result>" in xml  # 0 = SUCCESS
         assert "<ccid>channel789</ccid>" in xml
 
     def test_submit_report_response_success(self):
@@ -152,7 +155,8 @@ class TestCompetitionModels:
         xml = wrap_soap_envelope(response)
 
         assert "SubmitReportResponse" in xml
-        assert "<SubmitReportResult>Success</SubmitReportResult>" in xml
+        assert "<SubmitReportResult>" in xml
+        assert "<result>0</result>" in xml  # 0 = SUCCESS
 
 
 class TestAuthModels:
