@@ -52,11 +52,7 @@ class ValueType(IntEnum):
 
 
 # Faction key map - maps player section keys to factions
-FACTION_KEY_MAP: list[tuple[int, str]] = [
-    (1, Faction.ALLIED),
-    (6, Faction.SOVIET),
-    (11, Faction.EMPIRE)
-]
+FACTION_KEY_MAP: list[tuple[int, str]] = [(1, Faction.ALLIED), (6, Faction.SOVIET), (11, Faction.EMPIRE)]
 
 
 @dataclass

@@ -713,9 +713,7 @@ def get_k_factor(games_played: int, current_rating: int) -> int:
     return 20
 
 
-def calculate_new_elo(
-    player_rating: int, opponent_rating: int, actual_score: float, k_factor: int
-) -> int:
+def calculate_new_elo(player_rating: int, opponent_rating: int, actual_score: float, k_factor: int) -> int:
     """
     Calculate new ELO rating after a match.
 
@@ -978,9 +976,7 @@ def get_all_report_intents(session: Session, csid: str) -> list[PlayerReportInte
     return list(session.exec(stmt).all())
 
 
-def mark_report_intent_reported(
-    session: Session, ccid: str, full_id: str = ""
-) -> PlayerReportIntent | None:
+def mark_report_intent_reported(session: Session, ccid: str, full_id: str = "") -> PlayerReportIntent | None:
     """Marks a report intent as reported and updates full_id if provided."""
     intent = get_report_intent_by_ccid(session, ccid)
     if intent:

@@ -220,7 +220,9 @@ def handle_set_report_intention(csid: str, ccid: str, profile_id: int) -> SetRep
         session.close()
 
 
-def handle_submit_report(csid: str, ccid: str, profile_id: int, raw_report: bytes, request_id: str) -> SubmitReportResponse:
+def handle_submit_report(
+    csid: str, ccid: str, profile_id: int, raw_report: bytes, request_id: str
+) -> SubmitReportResponse:
     """
     Handle SubmitReport SOAP operation.
 
@@ -474,7 +476,7 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
     raw_report = b""
     bin_pos = body.find(bin_marker)
     if bin_pos != -1:
-        raw_report = body[bin_pos + len(bin_marker):]
+        raw_report = body[bin_pos + len(bin_marker) :]
         logger.info("[%s] Found binary report at position %d, size=%d bytes", request_id, bin_pos, len(raw_report))
     else:
         logger.warning("[%s] No binary report marker found in request!", request_id)
