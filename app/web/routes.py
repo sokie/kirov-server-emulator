@@ -112,13 +112,15 @@ def get_current_matches() -> list[dict]:
             # Use 'name' or 'player' field for display name
             name = p.get("name") or p.get("player") or ""
             if name:
-                players.append({
-                    "name": name,
-                    "pid": p.get("pid", ""),
-                    "faction": p.get("faction", ""),
-                    "wins": p.get("wins", "0"),
-                    "losses": p.get("losses", "0"),
-                })
+                players.append(
+                    {
+                        "name": name,
+                        "pid": p.get("pid", ""),
+                        "faction": p.get("faction", ""),
+                        "wins": p.get("wins", "0"),
+                        "losses": p.get("losses", "0"),
+                    }
+                )
 
         match = {
             "hostname": fields.get("hostname", "Unknown"),
