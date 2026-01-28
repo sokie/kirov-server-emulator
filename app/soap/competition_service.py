@@ -23,7 +23,6 @@ from app.db.crud import (
     complete_competition_session,
     create_competition_session,
     finalize_match,
-    get_competition_session,
     increment_received_reports,
     mark_report_intent_reported,
     set_report_intention,
@@ -508,7 +507,6 @@ async def competition_handler(request: Request) -> Response:
 
     try:
         soap_action = request.headers.get("SOAPAction", "").strip('"')
-        operation_name_from_action = soap_action.split("/")[-1] if "/" in soap_action else soap_action
 
         logger.info(
             "[%s] === REQUEST === time=%s, SOAPAction=%s",

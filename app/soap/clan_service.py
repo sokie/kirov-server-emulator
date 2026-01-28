@@ -4,7 +4,6 @@ Clan Service - Stub endpoints for clan functionality.
 These endpoints are called by the game but we return empty/default responses.
 """
 
-import base64
 import os
 
 from fastapi import APIRouter, Response

@@ -343,14 +343,12 @@ class MatchReport:
                 return GameType.UNKNOWN
 
         if winner_count == loser_count:
-            if winner_count == 1:
-                return GameType.AUTO_MATCH_1V1 if self.is_auto_match else GameType.VALID_1V1
-            elif winner_count == 2:
-                return GameType.AUTO_MATCH_2V2 if self.is_auto_match else GameType.VALID_2V2
-            elif winner_count == 3:
-                return GameType.VALID_3V3
-            else:
-                return GameType.VALID_OTHER
+            game_type_map = {
+                1: GameType.AUTO_MATCH_1V1 if self.is_auto_match else GameType.VALID_1V1,
+                2: GameType.AUTO_MATCH_2V2 if self.is_auto_match else GameType.VALID_2V2,
+                3: GameType.VALID_3V3,
+            }
+            return game_type_map.get(winner_count, GameType.VALID_OTHER)
 
         return GameType.VALID_OTHER
 
