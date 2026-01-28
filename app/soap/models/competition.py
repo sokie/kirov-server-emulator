@@ -12,7 +12,7 @@ from enum import IntEnum
 
 from pydantic_xml import BaseXmlModel, element
 
-COMP_NS = "http://gamespy.net/competition"
+COMP_NS = "http://gamespy.net/competition/"
 
 
 class CompetitionResultCode(IntEnum):

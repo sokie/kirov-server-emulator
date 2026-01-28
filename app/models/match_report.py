@@ -19,19 +19,10 @@ class Faction:
     ALLIED = "Allied"
     SOVIET = "Soviet"
     EMPIRE = "Empire"
-    CELESTIAL = "Celestial"
     AI = "AI"
     OBSERVER = "Observer"
     COMMENTATOR = "Commentator"
     RANDOM = "Random"
-
-    # ArmorRush mod
-    ARMOR_RUSH_ARMOR = "ArmorRushArmor"
-    ARMOR_RUSH_TESLA = "ArmorRushTesla"
-    ARMOR_RUSH_AIR_FORCE = "ArmorRushAirForce"
-    ARMOR_RUSH_ICE = "ArmorRushIce"
-    ARMOR_RUSH_KAMIKAZE = "ArmorRushKamikaze"
-    ARMOR_RUSH_FLEET = "ArmorRushFleet"
 
 
 class GameType:
@@ -60,27 +51,11 @@ class ValueType(IntEnum):
     STRING = 3
 
 
-# Faction hash map (from reference implementation)
-FACTION_MAP: dict[int, str] = {
-    0x86051F0D & 0xFFFFFFFF: Faction.ALLIED,
-    0xB610276B & 0xFFFFFFFF: Faction.SOVIET,
-    0x3D6743E8 & 0xFFFFFFFF: Faction.EMPIRE,
-    0xE89AA720 & 0xFFFFFFFF: Faction.CELESTIAL,
-    # ArmorRush
-    0xAE23FA66 & 0xFFFFFFFF: Faction.ARMOR_RUSH_ARMOR,
-    0x8C9CD2E1 & 0xFFFFFFFF: Faction.ARMOR_RUSH_TESLA,
-    0x4ACA5F3D & 0xFFFFFFFF: Faction.ARMOR_RUSH_AIR_FORCE,
-    0xC2D463F5 & 0xFFFFFFFF: Faction.ARMOR_RUSH_ICE,
-    0x01C90266 & 0xFFFFFFFF: Faction.ARMOR_RUSH_KAMIKAZE,
-    0x052296A8 & 0xFFFFFFFF: Faction.ARMOR_RUSH_FLEET,
-}
-
-# Old faction map (for backwards compatibility)
-OLD_FACTION_MAP: list[tuple[int, str]] = [
+# Faction key map - maps player section keys to factions
+FACTION_KEY_MAP: list[tuple[int, str]] = [
     (1, Faction.ALLIED),
     (6, Faction.SOVIET),
-    (11, Faction.EMPIRE),
-    (65532, Faction.CELESTIAL),
+    (11, Faction.EMPIRE)
 ]
 
 
@@ -304,43 +279,19 @@ class MatchReport:
             faction = Faction.UNKNOWN
             player_data = self.player_section[i] if i < len(self.player_section) else {}
 
-            # Try old format first (fallback for old reports)
-            is_old = False
-            for key, faction_name in OLD_FACTION_MAP:
+            # Detect faction from player section keys
+            for key, faction_name in FACTION_KEY_MAP:
                 if key in player_data and player_data[key].value_type == ValueType.INT16:
-                    is_old = True
                     faction = faction_name
                     break
                 if (key + 1) in player_data and player_data[key + 1].value_type == ValueType.INT16:
-                    is_old = True
                     faction = faction_name
                     auto_match_count += 1
                     break
                 if (key + 2) in player_data and player_data[key + 2].value_type == ValueType.INT16:
-                    is_old = True
                     faction = faction_name
                     auto_match_count += 1
                     break
-
-            # New format
-            if not is_old:
-                # Custom game
-                if 1 in player_data:
-                    faction_id = player_data[1].value
-                    if isinstance(faction_id, int):
-                        faction = FACTION_MAP.get(faction_id & 0xFFFFFFFF, f"{Faction.UNKNOWN}_{faction_id:X}")
-                # AutoMatch 1v1
-                if 2 in player_data:
-                    faction_id = player_data[2].value
-                    if isinstance(faction_id, int):
-                        faction = FACTION_MAP.get(faction_id & 0xFFFFFFFF, f"{Faction.UNKNOWN}_{faction_id:X}")
-                    auto_match_count += 1
-                # AutoMatch 4 players
-                if 3 in player_data:
-                    faction_id = player_data[3].value
-                    if isinstance(faction_id, int):
-                        faction = FACTION_MAP.get(faction_id & 0xFFFFFFFF, f"{Faction.UNKNOWN}_{faction_id:X}")
-                    auto_match_count += 1
 
             # Result: 0=win, 1=loss, 3=disconnect, 4=dsync
             result = 0

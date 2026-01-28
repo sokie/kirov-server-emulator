@@ -4,10 +4,13 @@ Clan Service - Stub endpoints for clan functionality.
 These endpoints are called by the game but we return empty/default responses.
 """
 
+import base64
 import os
 
 from fastapi import APIRouter, Response
 
+from app.db.crud import get_player_stats, parse_ticket
+from app.db.database import create_session
 from app.soap.envelope import wrap_soap_envelope
 from app.soap.models.clan import ClanInfo
 from app.util.logging_helper import get_logger
@@ -43,16 +46,39 @@ async def get_player_ladder_ratings(gp: str = ""):
     Returns ladder ratings for a player in CSV format.
     Format: statID,value,rank,elo,statID,value,rank,elo,...
 
-    Reference stat IDs from C&C:Online:
-    - 72587-72743, 75643, 75677-75686: Various game stats (value=1, rank/elo=-1)
-    - 58938: RA3 1v1 ladder (value=32034 base, rank/elo from ladder)
-    - 58940: Corona 1v1 ladder (value=1088 base, rank/elo from ladder)
+    The gp parameter is a login ticket (base64 encoded userID|profileID|token).
     """
     logger.debug("GetPlayerLadderRatings: gp=%s...", gp[:20] if gp else "")
 
-    # Default ratings (not ranked = -1)
+    # Default ratings
     default_rank = -1
-    default_elo = 1000
+    elo_1v1 = 1200
+    elo_2v2 = 1200
+
+    # Parse the login ticket to get persona_id
+    persona_id = 0
+    if gp:
+        ticket_data = parse_ticket(gp)
+        if ticket_data:
+            _, persona_id, _ = ticket_data
+            logger.debug("GetPlayerLadderRatings: parsed persona_id=%d from ticket", persona_id)
+
+    # Fetch actual ELO from database if we have a persona_id
+    if persona_id > 0:
+        session = create_session()
+        try:
+            stats = get_player_stats(session, persona_id)
+            if stats:
+                elo_1v1 = stats.elo_ranked_1v1
+                elo_2v2 = stats.elo_ranked_2v2
+                logger.debug(
+                    "GetPlayerLadderRatings: persona=%d, elo_1v1=%d, elo_2v2=%d",
+                    persona_id,
+                    elo_1v1,
+                    elo_2v2,
+                )
+        finally:
+            session.close()
 
     # Build CSV response matching C&C:Online format
     # Format: statID,value,rank,elo (repeated)
@@ -71,9 +97,9 @@ async def get_player_ladder_ratings(gp: str = ""):
         "75685,1,-1,-1",
         "75686,1,-1,-1",
         # RA3 v1.12 AutoMatch 1v1 ladder
-        f"58938,32034,{default_rank},{default_elo}",
+        f"58938,32034,{default_rank},{elo_1v1}",
         # Corona AutoMatch 1v1 ladder
-        f"58940,1088,{default_rank},{default_elo}",
+        f"58940,1088,{default_rank},{elo_1v1}",
     ]
 
     response_content = ",".join(ratings) + ","

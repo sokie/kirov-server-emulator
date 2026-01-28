@@ -307,7 +307,6 @@ def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str)
 
     # Handle PlayerStats_v5 - leaderboard or ownerid lookup
     elif "PlayerStats" in str(table_id) or "playerstats" in str(filter_str).lower():
-        # Check for ownerid filter - returns [rank, ownerId] per C# reference
         if "ownerid=" in filter_str.lower():
             # Extract owner ID from filter
             filter_lower = filter_str.lower()
@@ -323,7 +322,7 @@ def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str)
             # Return single ArrayOfRecordValue with [rank, ownerId]
             record_lists.append(
                 [
-                    RecordValue.from_int(57),  # Default rank (per C# reference)
+                    RecordValue.from_int(57),
                     RecordValue.from_int(owner_id),
                 ]
             )

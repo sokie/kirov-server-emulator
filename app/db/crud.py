@@ -19,6 +19,7 @@ from app.models.models import (
     MatchReport,
     Persona,
     PlayerLevel,
+    PlayerReportIntent,
     PlayerStats,
     User,
     UserCreate,
@@ -669,6 +670,206 @@ def create_or_update_player_level(session: Session, persona_id: int, rank: int =
 
 
 # =============================================================================
+# ELO Rating Operations
+# =============================================================================
+
+
+def calculate_expected_score(player_rating: int, opponent_rating: int) -> float:
+    """
+    Calculate the expected score for a player against an opponent.
+
+    Formula: Expected = 1 / (1 + 10^((OpponentRating - PlayerRating) / 400))
+
+    Args:
+        player_rating: The player's current ELO rating.
+        opponent_rating: The opponent's current ELO rating.
+
+    Returns:
+        Expected score between 0.0 and 1.0.
+    """
+    return 1.0 / (1.0 + pow(10, (opponent_rating - player_rating) / 400.0))
+
+
+def get_k_factor(games_played: int, current_rating: int) -> int:
+    """
+    Determine the K-factor for ELO calculation.
+
+    K-factors:
+    - K=40 for new players (<30 games)
+    - K=20 for established players
+    - K=10 for elite players (2400+ rating)
+
+    Args:
+        games_played: Number of games played in this game type.
+        current_rating: Current ELO rating.
+
+    Returns:
+        K-factor value (10, 20, or 40).
+    """
+    if current_rating >= 2400:
+        return 10
+    if games_played < 30:
+        return 40
+    return 20
+
+
+def calculate_new_elo(
+    player_rating: int, opponent_rating: int, actual_score: float, k_factor: int
+) -> int:
+    """
+    Calculate new ELO rating after a match.
+
+    Formula: New = Old + K * (Actual - Expected)
+
+    Args:
+        player_rating: Current player rating.
+        opponent_rating: Opponent's rating.
+        actual_score: 1.0 for win, 0.5 for draw, 0.0 for loss.
+        k_factor: K-factor for calculation.
+
+    Returns:
+        New ELO rating (minimum 100).
+    """
+    expected = calculate_expected_score(player_rating, opponent_rating)
+    new_rating = player_rating + k_factor * (actual_score - expected)
+    return max(100, int(round(new_rating)))
+
+
+def update_player_elo(
+    session: Session,
+    persona_id: int,
+    game_type: str,
+    opponent_rating: int,
+    won: bool,
+    disconnected: bool = False,
+) -> PlayerStats:
+    """
+    Update a player's ELO rating after a match.
+
+    Args:
+        session: Database session.
+        persona_id: Player's persona ID.
+        game_type: Game type (ranked_1v1, ranked_2v2, clan_1v1, clan_2v2).
+        opponent_rating: Opponent's ELO rating.
+        won: True if player won, False if lost.
+        disconnected: True if player disconnected (1.5x K-factor penalty on loss).
+
+    Returns:
+        Updated PlayerStats.
+    """
+    stats = get_player_stats(session, persona_id)
+    if stats is None:
+        stats = PlayerStats(persona_id=persona_id)
+        session.add(stats)
+        session.commit()
+        session.refresh(stats)
+
+    # Map game type to field names
+    elo_field = f"elo_{game_type}"
+    games_field = f"games_{game_type}"
+
+    current_elo = getattr(stats, elo_field, 1200)
+    games_played = getattr(stats, games_field, 0)
+
+    # Calculate K-factor
+    k_factor = get_k_factor(games_played, current_elo)
+
+    # Apply disconnect penalty (1.5x K on loss)
+    if disconnected and not won:
+        k_factor = int(k_factor * 1.5)
+
+    # Calculate new rating
+    actual_score = 1.0 if won else 0.0
+    new_elo = calculate_new_elo(current_elo, opponent_rating, actual_score, k_factor)
+
+    # Update stats
+    setattr(stats, elo_field, new_elo)
+    setattr(stats, games_field, games_played + 1)
+    stats.updated_at = datetime.utcnow()
+
+    session.add(stats)
+    session.commit()
+    session.refresh(stats)
+    return stats
+
+
+def update_player_win_loss(
+    session: Session,
+    persona_id: int,
+    game_type: str,
+    result: int,
+    duration: int = 0,
+) -> PlayerStats:
+    """
+    Update a player's win/loss/disconnect/dsync counters.
+
+    Args:
+        session: Database session.
+        persona_id: Player's persona ID.
+        game_type: Game type (unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2).
+        result: Match result (0=win, 1=loss, 3=disconnect, 4=dsync).
+        duration: Match duration in seconds.
+
+    Returns:
+        Updated PlayerStats.
+    """
+    stats = get_player_stats(session, persona_id)
+    if stats is None:
+        stats = PlayerStats(persona_id=persona_id)
+        session.add(stats)
+        session.commit()
+        session.refresh(stats)
+
+    # Update win/loss/dc/dsync counters
+    if result == 0:  # Win
+        wins_field = f"wins_{game_type}"
+        current_wins = getattr(stats, wins_field, 0)
+        setattr(stats, wins_field, current_wins + 1)
+    elif result == 1:  # Loss
+        losses_field = f"losses_{game_type}"
+        current_losses = getattr(stats, losses_field, 0)
+        setattr(stats, losses_field, current_losses + 1)
+    elif result == 3:  # Disconnect
+        dc_field = f"disconnects_{game_type}"
+        current_dc = getattr(stats, dc_field, 0)
+        setattr(stats, dc_field, current_dc + 1)
+    elif result == 4:  # Dsync
+        dsync_field = f"desyncs_{game_type}"
+        current_dsync = getattr(stats, dsync_field, 0)
+        setattr(stats, dsync_field, current_dsync + 1)
+
+    # Update average game length
+    if duration > 0:
+        avg_field = f"avg_game_length_{game_type}"
+        wins_field = f"wins_{game_type}"
+        losses_field = f"losses_{game_type}"
+        total_games = getattr(stats, wins_field, 0) + getattr(stats, losses_field, 0)
+        if total_games > 0:
+            current_avg = getattr(stats, avg_field, 0)
+            new_avg = int((current_avg * (total_games - 1) + duration) / total_games)
+            setattr(stats, avg_field, new_avg)
+
+    # Update win ratio
+    wins_field = f"wins_{game_type}"
+    losses_field = f"losses_{game_type}"
+    wins = getattr(stats, wins_field, 0)
+    losses = getattr(stats, losses_field, 0)
+    total = wins + losses
+    if total > 0:
+        ratio_field = f"win_ratio_{game_type}"
+        setattr(stats, ratio_field, (wins / total) * 100)
+
+    # Update total matches online
+    stats.total_matches_online += 1
+    stats.updated_at = datetime.utcnow()
+
+    session.add(stats)
+    session.commit()
+    session.refresh(stats)
+    return stats
+
+
+# =============================================================================
 # Competition Session Operations
 # =============================================================================
 
@@ -716,21 +917,80 @@ def get_competition_session(session: Session, csid: str) -> CompetitionSession |
     return session.exec(stmt).first()
 
 
-def set_report_intention(session: Session, csid: str, persona_id: int) -> bool:
+def set_report_intention(
+    session: Session, csid: str, ccid: str, persona_id: int, full_id: str = ""
+) -> PlayerReportIntent | None:
     """
     Signals that a player intends to submit a match report.
 
+    Creates a PlayerReportIntent record and generates a new ccid for this player.
+
     Args:
-        session: Database session
-        csid: Competition Session ID
-        persona_id: Persona ID
+        session: Database session.
+        csid: Competition Session ID.
+        ccid: Competition Channel ID (passed in from request).
+        persona_id: Persona ID.
+        full_id: Player's full GUID from the game.
 
     Returns:
-        True if successful
+        PlayerReportIntent if successful, None otherwise.
     """
-    # For now, just verify the session exists
     comp_session = get_competition_session(session, csid)
-    return comp_session is not None
+    if comp_session is None:
+        return None
+
+    # Generate a unique ccid for this player
+    player_ccid = generate_ccid()
+
+    # Create the report intent record
+    intent = PlayerReportIntent(
+        csid=csid,
+        ccid=player_ccid,
+        persona_id=persona_id,
+        full_id=full_id,
+        reported=False,
+    )
+    session.add(intent)
+    session.commit()
+    session.refresh(intent)
+
+    return intent
+
+
+def get_report_intent(session: Session, csid: str, persona_id: int) -> PlayerReportIntent | None:
+    """Gets a report intent by csid and persona_id."""
+    stmt = select(PlayerReportIntent).where(
+        PlayerReportIntent.csid == csid,
+        PlayerReportIntent.persona_id == persona_id,
+    )
+    return session.exec(stmt).first()
+
+
+def get_report_intent_by_ccid(session: Session, ccid: str) -> PlayerReportIntent | None:
+    """Gets a report intent by ccid."""
+    stmt = select(PlayerReportIntent).where(PlayerReportIntent.ccid == ccid)
+    return session.exec(stmt).first()
+
+
+def get_all_report_intents(session: Session, csid: str) -> list[PlayerReportIntent]:
+    """Gets all report intents for a competition session."""
+    stmt = select(PlayerReportIntent).where(PlayerReportIntent.csid == csid)
+    return list(session.exec(stmt).all())
+
+
+def mark_report_intent_reported(
+    session: Session, ccid: str, full_id: str = ""
+) -> PlayerReportIntent | None:
+    """Marks a report intent as reported and updates full_id if provided."""
+    intent = get_report_intent_by_ccid(session, ccid)
+    if intent:
+        intent.reported = True
+        if full_id:
+            intent.full_id = full_id
+        session.add(intent)
+        session.commit()
+        session.refresh(intent)
+    return intent
 
 
 def submit_match_report(
@@ -780,6 +1040,126 @@ def complete_competition_session(session: Session, csid: str) -> bool:
         session.commit()
         return True
     return False
+
+
+def increment_received_reports(session: Session, csid: str) -> CompetitionSession | None:
+    """Increments the received_reports counter for a competition session."""
+    comp_session = get_competition_session(session, csid)
+    if comp_session:
+        comp_session.received_reports += 1
+        session.add(comp_session)
+        session.commit()
+        session.refresh(comp_session)
+    return comp_session
+
+
+def get_match_reports_for_session(session: Session, csid: str) -> list[MatchReport]:
+    """Gets all match reports for a competition session."""
+    stmt = select(MatchReport).where(MatchReport.csid == csid)
+    return list(session.exec(stmt).all())
+
+
+def finalize_match(session: Session, csid: str) -> bool:
+    """
+    Finalize a match by calculating and updating ELO ratings.
+
+    This function should be called when all reports have been received.
+    It correlates winners/losers from the reports and updates player stats.
+
+    Args:
+        session: Database session.
+        csid: Competition Session ID.
+
+    Returns:
+        True if match was finalized successfully.
+    """
+    comp_session = get_competition_session(session, csid)
+    if comp_session is None or comp_session.finalized:
+        return False
+
+    # Get all match reports for this session
+    reports = get_match_reports_for_session(session, csid)
+    if not reports:
+        return False
+
+    # Calculate match duration from session creation time
+    duration = int((datetime.utcnow() - comp_session.created_at).total_seconds())
+
+    # Determine game type string from the gametype int
+    # 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=clan_1v1, 4=clan_2v2
+    game_type_map = {
+        0: "unranked",
+        1: "ranked_1v1",
+        2: "ranked_2v2",
+        3: "clan_1v1",
+        4: "clan_2v2",
+    }
+
+    # Collect player results from reports
+    player_results: dict[int, dict] = {}  # persona_id -> {result, faction, elo}
+
+    for report in reports:
+        persona_id = report.persona_id
+        if persona_id not in player_results:
+            # Get current ELO for this player
+            stats = get_player_stats(session, persona_id)
+            game_type = game_type_map.get(report.gametype, "unranked")
+
+            # Get current ELO based on game type
+            current_elo = 1200
+            if stats and game_type != "unranked":
+                elo_field = f"elo_{game_type}"
+                current_elo = getattr(stats, elo_field, 1200)
+
+            player_results[persona_id] = {
+                "result": report.result,
+                "faction": report.faction,
+                "gametype": report.gametype,
+                "elo": current_elo,
+            }
+
+    # If we have at least 2 players, update stats
+    if len(player_results) >= 2:
+        # Separate winners and losers
+        winners = [pid for pid, data in player_results.items() if data["result"] == 0]
+        losers = [pid for pid, data in player_results.items() if data["result"] in (1, 3, 4)]
+
+        # Calculate average opponent ELO for each group
+        winner_avg_elo = sum(player_results[pid]["elo"] for pid in winners) / len(winners) if winners else 1200
+        loser_avg_elo = sum(player_results[pid]["elo"] for pid in losers) / len(losers) if losers else 1200
+
+        # Get game type from first report
+        first_report = reports[0]
+        game_type = game_type_map.get(first_report.gametype, "unranked")
+
+        # Update each player
+        for persona_id, data in player_results.items():
+            result = data["result"]
+            is_winner = result == 0
+            is_disconnect = result == 3
+
+            # Update win/loss counters
+            update_player_win_loss(session, persona_id, game_type, result, duration)
+
+            # Update ELO if this is a ranked game type
+            if game_type != "unranked":
+                opponent_elo = int(loser_avg_elo if is_winner else winner_avg_elo)
+                update_player_elo(
+                    session,
+                    persona_id,
+                    game_type,
+                    opponent_elo,
+                    won=is_winner,
+                    disconnected=is_disconnect,
+                )
+
+    # Mark session as finalized
+    comp_session.finalized = True
+    comp_session.status = "completed"
+    session.add(comp_session)
+    session.commit()
+
+    return True
 
 
 # =============================================================================

@@ -364,6 +364,19 @@ class PlayerStats(SQLModel, table=True):
     win_ratio_clan_2v2: float = Field(default=0.0)
 
     total_matches_online: int = Field(default=0)
+
+    # ELO ratings per game type (initial 1200)
+    elo_ranked_1v1: int = Field(default=1200)
+    elo_ranked_2v2: int = Field(default=1200)
+    elo_clan_1v1: int = Field(default=1200)
+    elo_clan_2v2: int = Field(default=1200)
+
+    # Game counts for K-factor calculation
+    games_ranked_1v1: int = Field(default=0)
+    games_ranked_2v2: int = Field(default=0)
+    games_clan_1v1: int = Field(default=0)
+    games_clan_2v2: int = Field(default=0)
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -408,6 +421,20 @@ class MatchReport(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PlayerReportIntent(SQLModel, table=True):
+    """Tracks player report intentions for match correlation."""
+
+    __tablename__ = "player_report_intent"
+
+    id: int | None = Field(default=None, primary_key=True)
+    csid: str = Field(index=True)
+    ccid: str = Field(index=True)
+    persona_id: int = Field(foreign_key="persona.id", index=True)
+    full_id: str = Field(default="")  # Player's full GUID from report
+    reported: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class CompetitionSession(SQLModel, table=True):
     """
     Competition Session - Match session tracking for Competition service.
@@ -422,6 +449,9 @@ class CompetitionSession(SQLModel, table=True):
     ccid: str = Field(index=True)  # Competition Channel ID
     host_persona_id: int = Field(foreign_key="persona.id")
     status: str = Field(default="active")  # active, completed
+    expected_players: int = Field(default=2)
+    received_reports: int = Field(default=0)
+    finalized: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

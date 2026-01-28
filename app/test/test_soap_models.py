@@ -314,7 +314,6 @@ class TestSakeServiceIntegration:
         """
         Test SearchForRecords for PlayerStats_v5 with ownerid filter.
 
-        Based on C# reference: returns [rank, ownerId] in a single ArrayOfRecordValue.
         """
         # Test login ticket: base64("12345|67890|testtoken")
         login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
@@ -368,7 +367,6 @@ class TestSakeServiceIntegration:
 
         assert xml.count("<ArrayOfRecordValue>") == 1
         assert xml.count("<RecordValue>") == 2
-        # Default rank is 57 per C# reference
         assert "<intValue><value>57</value></intValue>" in xml
         # Owner ID echoed back
         assert "<intValue><value>12345</value></intValue>" in xml
