@@ -429,17 +429,20 @@ class MatchReport:
         winner_count = sum(1 for p in self.parsed_players if p.result == 0)
 
         # Map game_type_int to GameType string
-        if game_type_int == 0:
-            return GameType.VALID_OTHER  # unranked
-        elif game_type_int == 1:
-            return GameType.AUTO_MATCH_1V1 if self.is_auto_match else GameType.VALID_1V1
-        elif game_type_int == 2:
-            return GameType.AUTO_MATCH_2V2 if self.is_auto_match else GameType.VALID_2V2
-        elif game_type_int == 4:
-            # Clan 1v1 - game_type 4 is specifically clan_1v1
-            return GameType.CLAN_1V1
-        elif game_type_int == 5:
-            return GameType.CLAN_2V2
+        # Values are (auto_match_type, non_auto_match_type) or single type
+        game_type_map = {
+            0: GameType.VALID_OTHER,  # unranked
+            1: (GameType.AUTO_MATCH_1V1, GameType.VALID_1V1),
+            2: (GameType.AUTO_MATCH_2V2, GameType.VALID_2V2),
+            4: GameType.CLAN_1V1,
+            5: GameType.CLAN_2V2,
+        }
+
+        if game_type_int in game_type_map:
+            result = game_type_map[game_type_int]
+            if isinstance(result, tuple):
+                return result[0] if self.is_auto_match else result[1]
+            return result
 
         # Fallback: use winner/loser count method
         winner_count = 0

@@ -154,6 +154,7 @@ async def get_current_user_required(
     """
     if user is None:
         from fastapi import HTTPException, status
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
