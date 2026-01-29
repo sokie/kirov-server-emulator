@@ -2,14 +2,32 @@ import os
 import re
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 
-from app.db.crud import get_leaderboard
+from app.db.crud import (
+    get_all_clans,
+    get_clan_by_id,
+    get_clan_leader,
+    get_clan_member_count,
+    get_clan_members,
+    get_leaderboard,
+    get_persona_by_id,
+    get_persona_clan,
+    get_persona_clan_membership,
+    get_personas_for_user,
+)
 from app.db.database import get_session
+from app.models.models import User
 from app.servers.sessions import GameSessionRegistry
 from app.util.paths import get_base_path
+from app.web.auth import (
+    SESSION_COOKIE_NAME,
+    clear_session_cookie,
+    get_current_user_optional,
+    invalidate_web_session,
+)
 
 router = APIRouter(tags=["Web"])
 
@@ -148,19 +166,56 @@ def get_current_matches() -> list[dict]:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def home_page(request: Request):
+async def home_page(
+    request: Request,
+    user: User | None = Depends(get_current_user_optional),
+):
     """
     Render the home page.
     """
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {"request": request, "user": user})
 
 
 @router.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request):
+async def register_page(
+    request: Request,
+    user: User | None = Depends(get_current_user_optional),
+):
     """
     Render the registration page.
     """
-    return templates.TemplateResponse("register.html", {"request": request})
+    return templates.TemplateResponse("register.html", {"request": request, "user": user})
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(
+    request: Request,
+    user: User | None = Depends(get_current_user_optional),
+):
+    """
+    Render the login page.
+    """
+    # Redirect if already logged in
+    if user:
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse("login.html", {"request": request, "user": user})
+
+
+@router.get("/logout")
+async def logout_page(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    """
+    Handle logout and redirect to home.
+    """
+    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if session_token:
+        invalidate_web_session(session, session_token)
+
+    response = RedirectResponse(url="/", status_code=302)
+    clear_session_cookie(response)
+    return response
 
 
 @router.get("/leaderboard", response_class=HTMLResponse)
@@ -168,6 +223,7 @@ async def leaderboard_page(
     request: Request,
     game_type: str = "ranked_1v1",
     session: Session = Depends(get_session),
+    user: User | None = Depends(get_current_user_optional),
 ):
     """
     Render the leaderboard page with player statistics.
@@ -182,6 +238,7 @@ async def leaderboard_page(
         "leaderboard.html",
         {
             "request": request,
+            "user": user,
             "players": players,
             "game_type": game_type,
             "game_types": GAME_TYPES,
@@ -190,7 +247,10 @@ async def leaderboard_page(
 
 
 @router.get("/matches", response_class=HTMLResponse)
-async def matches_page(request: Request):
+async def matches_page(
+    request: Request,
+    user: User | None = Depends(get_current_user_optional),
+):
     """
     Render the current matches page.
     """
@@ -200,8 +260,178 @@ async def matches_page(request: Request):
         "matches.html",
         {
             "request": request,
+            "user": user,
             "matches": matches,
             "total_matches": len(matches),
             "total_players": sum(m["num_players"] for m in matches),
+        },
+    )
+
+
+# =============================================================================
+# Clan Web Routes
+# =============================================================================
+
+
+@router.get("/clans", response_class=HTMLResponse)
+async def clans_page(
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(get_current_user_optional),
+):
+    """
+    Render the clans list page.
+    """
+    clans = get_all_clans(session)
+
+    # Build clan data with leader names and member counts
+    clan_data = []
+    for clan in clans:
+        leader = get_clan_leader(session, clan.id)
+        clan_data.append(
+            {
+                "id": clan.id,
+                "name": clan.name,
+                "tag": clan.tag,
+                "description": clan.description,
+                "member_count": get_clan_member_count(session, clan.id),
+                "leader_name": leader.name if leader else None,
+            }
+        )
+
+    # Check if user can create a clan (has personas not in clans)
+    can_create_clan = False
+    if user:
+        personas = get_personas_for_user(session, user.id)
+        for persona in personas:
+            if not get_persona_clan(session, persona.id):
+                can_create_clan = True
+                break
+
+    return templates.TemplateResponse(
+        "clans.html",
+        {
+            "request": request,
+            "user": user,
+            "clans": clan_data,
+            "can_create_clan": can_create_clan,
+        },
+    )
+
+
+@router.get("/clans/create", response_class=HTMLResponse)
+async def clan_create_page(
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(get_current_user_optional),
+):
+    """
+    Render the clan creation page.
+    """
+    # Require login
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    # Get personas that aren't in a clan
+    personas = get_personas_for_user(session, user.id)
+    available_personas = []
+    for persona in personas:
+        if not get_persona_clan(session, persona.id):
+            available_personas.append(persona)
+
+    # If no available personas, redirect to clans page
+    if not available_personas:
+        return RedirectResponse(url="/clans", status_code=302)
+
+    return templates.TemplateResponse(
+        "clan_create.html",
+        {
+            "request": request,
+            "user": user,
+            "personas": available_personas,
+        },
+    )
+
+
+@router.get("/clans/{clan_id}", response_class=HTMLResponse)
+async def clan_detail_page(
+    request: Request,
+    clan_id: int,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(get_current_user_optional),
+):
+    """
+    Render the clan detail page.
+    """
+    clan = get_clan_by_id(session, clan_id)
+    if not clan:
+        return RedirectResponse(url="/clans", status_code=302)
+
+    leader = get_clan_leader(session, clan.id)
+    memberships = get_clan_members(session, clan.id)
+
+    members = []
+    applicants = []
+    for m in memberships:
+        persona = get_persona_by_id(session, m.persona_id)
+        info = {
+            "persona_id": m.persona_id,
+            "name": persona.name if persona else "Unknown",
+            "position": m.position,
+            "joined_at": m.joined_at.isoformat(),
+        }
+        if m.position >= 1:
+            members.append(info)
+        else:
+            applicants.append(info)
+
+    # Sort members: leader first, then by name
+    members.sort(key=lambda x: (-x["position"], x["name"]))
+
+    # Check if current user is the leader
+    is_leader = False
+    user_membership = None
+    personas = []
+
+    if user:
+        user_personas = get_personas_for_user(session, user.id)
+        personas = [p for p in user_personas if not get_persona_clan(session, p.id)]
+
+        for p in user_personas:
+            membership = get_persona_clan_membership(session, p.id)
+            if membership:
+                if membership.clan_id == clan.id:
+                    user_membership = {
+                        "persona_id": p.id,
+                        "clan_id": membership.clan_id,
+                        "position": membership.position,
+                    }
+                    if membership.position == 7:
+                        is_leader = True
+                else:
+                    # User has a persona in a different clan
+                    user_membership = {
+                        "persona_id": p.id,
+                        "clan_id": membership.clan_id,
+                        "position": membership.position,
+                    }
+
+    return templates.TemplateResponse(
+        "clan_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "clan": {
+                "id": clan.id,
+                "name": clan.name,
+                "tag": clan.tag,
+                "description": clan.description,
+            },
+            "leader": {"name": leader.name} if leader else None,
+            "members": members,
+            "applicants": applicants,
+            "is_leader": is_leader,
+            "user_membership": user_membership,
+            "personas": personas,
         },
     )

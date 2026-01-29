@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Login - RA3 Server{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="text-center mb-4">
+            <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(218, 54, 51, 0.2) 0%, rgba(218, 54, 51, 0.1) 100%);">
+                <i class="bi bi-person-fill fs-2 text-danger"></i>
+            </div>
+            <h1 class="h3 mb-2">Welcome Back</h1>
+            <p class="text-secondary">Sign in to your account</p>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form id="loginForm">
+                    <div class="mb-3">
+                        <label for="username" class="form-label small text-secondary">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-secondary">
+                                <i class="bi bi-person"></i>
+                            </span>
+                            <input type="text" class="form-control" id="username" name="username" placeholder="Your username" required minlength="3">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="password" class="form-label small text-secondary">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-secondary">
+                                <i class="bi bi-lock"></i>
+                            </span>
+                            <input type="password" class="form-control" id="password" name="password" placeholder="Your password" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                    </button>
+                </form>
+
+                <div id="messageArea" class="mt-3"></div>
+            </div>
+        </div>
+
+        <p class="text-center mt-4 text-secondary small">
+            Don't have an account? <a href="/register">Register here</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function showMessage(message, type) {
+        const messageArea = document.getElementById('messageArea');
+        const icon = type === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill';
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        messageArea.innerHTML = `
+            <div class="alert ${alertClass} d-flex align-items-center" role="alert">
+                <i class="bi bi-${icon} me-2"></i>
+                <div>${message}</div>
+            </div>
+        `;
+    }
+
+    const form = document.getElementById('loginForm');
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Signing in...';
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        try {
+            const response = await fetch('/api/rest/users/web-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showMessage('Login successful! Redirecting...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } else {
+                showMessage(result.detail || 'Login failed', 'danger');
+            }
+        } catch (error) {
+            showMessage('Network error. Please try again.', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    });
+</script>
+{% endblock %}

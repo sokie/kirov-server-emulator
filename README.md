@@ -30,7 +30,7 @@ This project aims to:
 - [x] (done)**Stats server** - Stats
 - [x] (done)**Competition server** - Post-match stats
 - [x] (done)**Web Portal** - Account registration, leaderboards, and live match viewer
-- [ ] **Clan System** - See, create and join clans
+- [x] (done)**Clan System** - Create, join, and manage clans with in-game integration
 
 ## Quick Start
 

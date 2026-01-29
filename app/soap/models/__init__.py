@@ -12,8 +12,11 @@ from app.soap.models.auth import (
 )
 from app.soap.models.clan import (
     CLAN_NS,
-    ClanInfo,
-    LadderRatings,
+    ClanElement,
+    ClanInfoResponse,
+    ClanMember,
+    ClanResult,
+    NotMemberResponse,
 )
 from app.soap.models.common import (
     ArrayOfRecordValue,
@@ -57,8 +60,11 @@ __all__ = [
     "LoginRemoteAuthResult",
     # Clan
     "CLAN_NS",
-    "ClanInfo",
-    "LadderRatings",
+    "ClanElement",
+    "ClanInfoResponse",
+    "ClanMember",
+    "ClanResult",
+    "NotMemberResponse",
     # Competition
     "COMP_NS",
     "CreateSessionRequest",

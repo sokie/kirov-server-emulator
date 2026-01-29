@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Create Clan - RA3 Server{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="/clans" class="text-muted text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>Back to Clans
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="text-center mb-4">
+            <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(218, 54, 51, 0.2) 0%, rgba(218, 54, 51, 0.1) 100%);">
+                <i class="bi bi-shield-plus fs-2 text-danger"></i>
+            </div>
+            <h1 class="h3 mb-2">Create a Clan</h1>
+            <p class="text-secondary">Start your own clan and recruit members</p>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form id="createClanForm">
+                    <div class="mb-3">
+                        <label for="name" class="form-label small text-secondary">Clan Name</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-secondary">
+                                <i class="bi bi-shield"></i>
+                            </span>
+                            <input type="text" class="form-control" id="name" name="name" placeholder="e.g., Red Legion" required minlength="3" maxlength="50">
+                        </div>
+                        <div class="form-text text-secondary small">3-50 characters, must be unique</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="tag" class="form-label small text-secondary">Clan Tag</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-secondary">
+                                <i class="bi bi-tag"></i>
+                            </span>
+                            <input type="text" class="form-control" id="tag" name="tag" placeholder="e.g., RL" required minlength="2" maxlength="10">
+                        </div>
+                        <div class="form-text text-secondary small">2-10 characters, shown next to member names</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label small text-secondary">Description (optional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Tell others about your clan..." maxlength="500"></textarea>
+                        <div class="form-text text-secondary small">Max 500 characters</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="leader_persona_id" class="form-label small text-secondary">Leader Persona</label>
+                        <select class="form-select" id="leader_persona_id" name="leader_persona_id" required>
+                            {% for persona in personas %}
+                            <option value="{{ persona.id }}">{{ persona.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text text-secondary small">This persona will become the clan leader</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2">
+                        <i class="bi bi-plus-circle me-2"></i>Create Clan
+                    </button>
+                </form>
+
+                <div id="messageArea" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function showMessage(message, type) {
+        const messageArea = document.getElementById('messageArea');
+        const icon = type === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill';
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        messageArea.innerHTML = `
+            <div class="alert ${alertClass} d-flex align-items-center" role="alert">
+                <i class="bi bi-${icon} me-2"></i>
+                <div>${message}</div>
+            </div>
+        `;
+    }
+
+    const form = document.getElementById('createClanForm');
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+
+        const formData = new FormData(form);
+        const data = {
+            name: formData.get('name'),
+            tag: formData.get('tag'),
+            description: formData.get('description') || null,
+            leader_persona_id: parseInt(formData.get('leader_persona_id')),
+        };
+
+        try {
+            const response = await fetch('/api/rest/clans', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showMessage(`Clan '${result.name}' created successfully!`, 'success');
+                setTimeout(() => {
+                    window.location.href = `/clans/${result.id}`;
+                }, 1500);
+            } else {
+                showMessage(result.detail || 'Failed to create clan', 'danger');
+            }
+        } catch (error) {
+            showMessage('Network error. Please try again.', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    });
+</script>
+{% endblock %}

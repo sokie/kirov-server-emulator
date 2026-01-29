@@ -1,0 +1,38 @@
+{
+  "save_time": "2026-01-29T11:56:42.491781",
+  "csid": "__DBUbLBLZUUyvLt9hwsFA",
+  "ccid": "AAAAAwJzi4atayYzk",
+  "protocol_version": 2,
+  "developer_version": 5,
+  "game_status": 0,
+  "flags": 1,
+  "player_count": 2,
+  "team_count": 2,
+  "map_path": "Battlebase Beta (2)",
+  "replay_guid": "",
+  "game_type": "Valid1v1",
+  "is_auto_match": false,
+  "is_final_report": true,
+  "players": [
+    {
+      "full_id": "000aaaaa-0000-0000-0a3b-00a8203bfe00",
+      "persona_id": 11018299,
+      "persona_id_valid": true,
+      "faction": "Unknown",
+      "is_winner": true
+    },
+    {
+      "full_id": "000aaaaa-0007-0000-0025-80007e007c60",
+      "persona_id": 2147515904,
+      "persona_id_valid": false,
+      "faction": "Unknown",
+      "is_winner": false
+    }
+  ],
+  "winner_ids": [
+    11018299
+  ],
+  "loser_ids": [
+    2147515904
+  ]
+}

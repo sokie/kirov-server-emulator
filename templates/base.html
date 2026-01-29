@@ -427,8 +427,25 @@
                         <a class="nav-link" href="/leaderboard"><i class="bi bi-trophy me-1"></i>Leaderboard</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/clans"><i class="bi bi-shield me-1"></i>Clans</a>
+                    </li>
+                    {% if user %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle me-1"></i>{{ user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/login"><i class="bi bi-box-arrow-in-right me-1"></i>Login</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/register"><i class="bi bi-person-plus me-1"></i>Register</a>
                     </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="/docs"><i class="bi bi-code-slash me-1"></i>API</a>
                     </li>

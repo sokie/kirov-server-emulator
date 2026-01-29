@@ -1,41 +1,101 @@
 """
 Pydantic-XML models for Clan Service.
 
-Endpoint: /clans/ClanActions.asmx/*
-Namespace: http://gamespy.net
+Endpoint: /clans/ClanActions.asmx/ClanInfoByProfileID
 
-Note: These are simple XML responses (not SOAP envelopes).
+Note: This endpoint returns plain XML (not SOAP-wrapped).
 """
 
-from pydantic_xml import BaseXmlModel, element
+from pydantic_xml import BaseXmlModel, attr, element
 
 CLAN_NS = "http://gamespy.net"
-CLAN_NSMAP = {
-    "": CLAN_NS,
-    "xsi": "http://www.w3.org/2001/XMLSchema-instance",
-    "xsd": "http://www.w3.org/2001/XMLSchema",
-}
 
 
-class ClanInfo(BaseXmlModel, tag="ClanInfo", nsmap=CLAN_NSMAP):
-    """Response model for ClanInfoByProfileID."""
+class ClanResult(BaseXmlModel, tag="result"):
+    """Result element containing status text and code."""
 
-    clan_id: int = element(tag="ClanID", default=0)
-    clan_name: str = element(tag="ClanName", default="")
-    clan_tag: str = element(tag="ClanTag", default="")
+    result_text: str = element(tag="resultText")
+    result_value: int = element(tag="resultValue")
 
     @classmethod
-    def no_clan(cls) -> "ClanInfo":
-        """Create a response indicating no clan membership."""
-        return cls(clan_id=0, clan_name="", clan_tag="")
-
-
-class LadderRatings(BaseXmlModel, tag="LadderRatings", nsmap=CLAN_NSMAP):
-    """Response model for GetPlayerLadderRatings."""
-
-    ratings: str = element(tag="Ratings", default="1500,1500,1500,1500")
+    def success(cls) -> "ClanResult":
+        """Create a success result."""
+        return cls(result_text="None: No error", result_value=0)
 
     @classmethod
-    def default(cls) -> "LadderRatings":
-        """Create a response with default ratings (1500 for all ladders)."""
-        return cls(ratings="1500,1500,1500,1500")
+    def not_member(cls) -> "ClanResult":
+        """Create a not-member error result."""
+        return cls(result_text="NotMember: Specified profileid is not a member", result_value=-305)
+
+
+class ClanMember(BaseXmlModel, tag="Member"):
+    """Member element with rank attribute."""
+
+    rank: int = attr(name="rank", default=0)
+
+
+class ClanElement(BaseXmlModel, tag="clan"):
+    """Clan element with attributes for clan info."""
+
+    clanid: int = attr(name="clanid")
+    clantag: str = attr(name="clantag")
+    clanname: str = attr(name="clanname")
+    arena_team_id: int = attr(name="ArenaTeamId", default=0)
+    arena_member_id: int = attr(name="ArenaMemberId")
+    picid: int = attr(name="picid", default=0)
+    member: ClanMember = element(tag="Member")
+
+
+class ClanInfoResponse(BaseXmlModel, tag="ClanInfo"):
+    """
+    Response model for ClanInfoByProfileID when the player is in a clan.
+
+    Returns clan info with member details.
+    """
+
+    result: ClanResult = element(tag="result")
+    asof: str = element(tag="asof")
+    clan: ClanElement = element(tag="clan")
+
+    @classmethod
+    def for_member(
+        cls,
+        clan_id: int,
+        clan_tag: str,
+        clan_name: str,
+        member_id: int,
+        member_rank: int,
+        asof: str,
+    ) -> "ClanInfoResponse":
+        """Create a response for a clan member."""
+        return cls(
+            result=ClanResult.success(),
+            asof=asof,
+            clan=ClanElement(
+                clanid=clan_id,
+                clantag=clan_tag,
+                clanname=clan_name,
+                arena_team_id=clan_id,
+                arena_member_id=member_id,
+                member=ClanMember(rank=member_rank),
+            ),
+        )
+
+
+class NotMemberResponse(BaseXmlModel, tag="result"):
+    """
+    Response model for ClanInfoByProfileID when the player is not in a clan.
+
+    This is a standalone <result> element (not wrapped in ClanInfo).
+    """
+
+    result_text: str = element(tag="resultText")
+    result_value: int = element(tag="resultValue")
+
+    @classmethod
+    def create(cls) -> "NotMemberResponse":
+        """Create the standard not-member response."""
+        return cls(
+            result_text="NotMember: Specified profileid is not a member",
+            result_value=-305,
+        )

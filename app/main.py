@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app._version import __version__
 from app.config.app_settings import app_config
 from app.db.database import create_db_and_tables
+from app.rest.routes import clans_api_router
 from app.rest.routes import router as rest_router
 from app.servers.fesl_server import start_fesl_server
 from app.servers.gamestats_server import start_gamestats_server
@@ -157,6 +158,7 @@ app = FastAPI(
 
 # Mount the REST API router
 app.include_router(rest_router, prefix="/api/rest")
+app.include_router(clans_api_router, prefix="/api/rest")
 
 # Mount the SOAP router (native FastAPI integration)
 app.include_router(soap_router)

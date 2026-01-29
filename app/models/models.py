@@ -471,3 +471,73 @@ class AuthCertificate(SQLModel, table=True):
     in_use: bool = Field(default=False)
     persona_id: int | None = Field(default=None)
     assigned_at: datetime | None = Field(default=None)
+
+
+# =============================================================================
+# Clan Models
+# =============================================================================
+
+
+class Clan(SQLModel, table=True):
+    """
+    Clan - Represents a player clan/guild.
+
+    Clans have a unique name and tag. Players can be members, applicants, or leaders.
+    Position values: 0=applicant, 1=member, 7=leader
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True, index=True, max_length=50)
+    tag: str = Field(unique=True, index=True, max_length=10)
+    description: str | None = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # One-to-many relationship with ClanMembership
+    members: list["ClanMembership"] = Relationship(back_populates="clan")
+
+
+class ClanMembership(SQLModel, table=True):
+    """
+    Clan Membership - Links personas to clans with their position.
+
+    Position values:
+    - 0: Applicant (pending approval)
+    - 1: Member (regular member)
+    - 7: Leader (clan leader)
+
+    A persona can only be in one clan at a time (unique persona_id).
+    """
+
+    __tablename__ = "clan_membership"
+
+    id: int | None = Field(default=None, primary_key=True)
+    clan_id: int = Field(foreign_key="clan.id", index=True)
+    persona_id: int = Field(foreign_key="persona.id", index=True, unique=True)
+    position: int = Field(default=0)  # 0=applicant, 1=member, 7=leader
+    joined_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Relationships
+    clan: Clan | None = Relationship(back_populates="members")
+
+
+# =============================================================================
+# Web Session Models
+# =============================================================================
+
+
+class WebSession(SQLModel, table=True):
+    """
+    Web Session - Tracks web portal login sessions.
+
+    Used for session-based authentication on the web portal.
+    Sessions expire after 7 days by default.
+    """
+
+    __tablename__ = "web_session"
+
+    id: int | None = Field(default=None, primary_key=True)
+    session_token: str = Field(unique=True, index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime = Field(default_factory=lambda: datetime.utcnow() + timedelta(days=7))
+    is_active: bool = Field(default=True)

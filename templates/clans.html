@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Clans - RA3 Server{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h1><i class="bi bi-shield-fill me-2 text-danger"></i>Clans</h1>
+        <p>Browse and join player clans</p>
+    </div>
+    {% if user and can_create_clan %}
+    <a href="/clans/create" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Create Clan
+    </a>
+    {% elif not user %}
+    <a href="/login" class="btn btn-outline-light">
+        <i class="bi bi-box-arrow-in-right me-2"></i>Login to Create Clan
+    </a>
+    {% endif %}
+</div>
+
+{% if clans %}
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Clan</th>
+                    <th>Tag</th>
+                    <th>Leader</th>
+                    <th class="text-center">Members</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for clan in clans %}
+                <tr>
+                    <td>
+                        <a href="/clans/{{ clan.id }}" class="fw-semibold">{{ clan.name }}</a>
+                        {% if clan.description %}
+                        <div class="small text-muted text-truncate" style="max-width: 300px;">{{ clan.description }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary">[{{ clan.tag }}]</span>
+                    </td>
+                    <td>{{ clan.leader_name or 'Unknown' }}</td>
+                    <td class="text-center">
+                        <span class="badge bg-dark border border-secondary">{{ clan.member_count }}</span>
+                    </td>
+                    <td class="text-end">
+                        <a href="/clans/{{ clan.id }}" class="btn btn-sm btn-outline-light">
+                            <i class="bi bi-eye me-1"></i>View
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-shield display-4 text-muted mb-3"></i>
+        <h5 class="text-muted">No Clans Yet</h5>
+        <p class="text-secondary mb-4">Be the first to create a clan!</p>
+        {% if user and can_create_clan %}
+        <a href="/clans/create" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>Create Clan
+        </a>
+        {% elif not user %}
+        <a href="/login" class="btn btn-primary">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Login to Get Started
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

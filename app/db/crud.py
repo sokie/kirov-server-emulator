@@ -9,6 +9,8 @@ from sqlmodel import Session, select
 from app.models.models import (
     AuthCertificate,
     BuddyRequest,
+    Clan,
+    ClanMembership,
     CompetitionSession,
     FeslSession,
     Friend,
@@ -23,6 +25,7 @@ from app.models.models import (
     PlayerStats,
     User,
     UserCreate,
+    WebSession,
 )
 from app.security import hash_password, verify_password
 
@@ -1310,3 +1313,345 @@ def get_leaderboard(
         )
 
     return leaderboard
+
+
+# =============================================================================
+# Clan Operations
+# =============================================================================
+
+
+def create_clan(
+    session: Session,
+    name: str,
+    tag: str,
+    leader_persona_id: int,
+    description: str | None = None,
+) -> Clan:
+    """
+    Create a new clan with the specified persona as leader.
+
+    Args:
+        session: Database session
+        name: Clan name (unique)
+        tag: Clan tag (unique, max 10 chars)
+        leader_persona_id: Persona ID of the clan leader
+        description: Optional clan description
+
+    Returns:
+        Created Clan
+
+    Raises:
+        ValueError: If persona is already in a clan
+    """
+    # Check if persona is already in a clan
+    existing = get_persona_clan(session, leader_persona_id)
+    if existing:
+        raise ValueError("Persona is already in a clan")
+
+    # Create the clan
+    clan = Clan(name=name, tag=tag, description=description)
+    session.add(clan)
+    session.commit()
+    session.refresh(clan)
+
+    # Create leader membership
+    membership = ClanMembership(
+        clan_id=clan.id,
+        persona_id=leader_persona_id,
+        position=7,  # Leader
+    )
+    session.add(membership)
+    session.commit()
+
+    return clan
+
+
+def get_clan_by_id(session: Session, clan_id: int) -> Clan | None:
+    """Get a clan by ID."""
+    return session.get(Clan, clan_id)
+
+
+def get_clan_by_name(session: Session, name: str) -> Clan | None:
+    """Get a clan by name."""
+    stmt = select(Clan).where(Clan.name == name)
+    return session.exec(stmt).first()
+
+
+def get_clan_by_tag(session: Session, tag: str) -> Clan | None:
+    """Get a clan by tag."""
+    stmt = select(Clan).where(Clan.tag == tag)
+    return session.exec(stmt).first()
+
+
+def get_all_clans(session: Session, limit: int = 100, offset: int = 0) -> list[Clan]:
+    """Get all clans with pagination."""
+    stmt = select(Clan).offset(offset).limit(limit).order_by(Clan.created_at.desc())
+    return list(session.exec(stmt).all())
+
+
+def get_clan_members(session: Session, clan_id: int, position: int | None = None) -> list[ClanMembership]:
+    """
+    Get clan members, optionally filtered by position.
+
+    Args:
+        session: Database session
+        clan_id: Clan ID
+        position: Optional position filter (0=applicant, 1=member, 7=leader)
+
+    Returns:
+        List of ClanMembership objects
+    """
+    stmt = select(ClanMembership).where(ClanMembership.clan_id == clan_id)
+    if position is not None:
+        stmt = stmt.where(ClanMembership.position == position)
+    return list(session.exec(stmt).all())
+
+
+def get_clan_leader(session: Session, clan_id: int) -> Persona | None:
+    """Get the leader persona of a clan."""
+    stmt = select(ClanMembership).where(
+        ClanMembership.clan_id == clan_id,
+        ClanMembership.position == 7,
+    )
+    membership = session.exec(stmt).first()
+    if membership:
+        return get_persona_by_id(session, membership.persona_id)
+    return None
+
+
+def get_persona_clan(session: Session, persona_id: int) -> Clan | None:
+    """Get the clan a persona belongs to (if any)."""
+    stmt = select(ClanMembership).where(ClanMembership.persona_id == persona_id)
+    membership = session.exec(stmt).first()
+    if membership:
+        return get_clan_by_id(session, membership.clan_id)
+    return None
+
+
+def get_persona_clan_membership(session: Session, persona_id: int) -> ClanMembership | None:
+    """Get the clan membership for a persona."""
+    stmt = select(ClanMembership).where(ClanMembership.persona_id == persona_id)
+    return session.exec(stmt).first()
+
+
+def join_clan_as_applicant(session: Session, clan_id: int, persona_id: int) -> ClanMembership:
+    """
+    Request to join a clan as an applicant.
+
+    Args:
+        session: Database session
+        clan_id: Clan ID to join
+        persona_id: Persona ID requesting to join
+
+    Returns:
+        Created ClanMembership (with position=0)
+
+    Raises:
+        ValueError: If persona is already in a clan
+    """
+    existing = get_persona_clan_membership(session, persona_id)
+    if existing:
+        raise ValueError("Persona is already in a clan")
+
+    membership = ClanMembership(
+        clan_id=clan_id,
+        persona_id=persona_id,
+        position=0,  # Applicant
+    )
+    session.add(membership)
+    session.commit()
+    session.refresh(membership)
+    return membership
+
+
+def approve_clan_applicant(session: Session, clan_id: int, persona_id: int) -> ClanMembership | None:
+    """
+    Approve a clan applicant (promote from position 0 to 1).
+
+    Args:
+        session: Database session
+        clan_id: Clan ID
+        persona_id: Persona ID to approve
+
+    Returns:
+        Updated ClanMembership or None if not found
+    """
+    stmt = select(ClanMembership).where(
+        ClanMembership.clan_id == clan_id,
+        ClanMembership.persona_id == persona_id,
+        ClanMembership.position == 0,
+    )
+    membership = session.exec(stmt).first()
+    if membership:
+        membership.position = 1  # Member
+        membership.joined_at = datetime.utcnow()
+        session.add(membership)
+        session.commit()
+        session.refresh(membership)
+    return membership
+
+
+def reject_clan_applicant(session: Session, clan_id: int, persona_id: int) -> bool:
+    """
+    Reject a clan applicant (remove from clan).
+
+    Args:
+        session: Database session
+        clan_id: Clan ID
+        persona_id: Persona ID to reject
+
+    Returns:
+        True if removed, False if not found
+    """
+    stmt = select(ClanMembership).where(
+        ClanMembership.clan_id == clan_id,
+        ClanMembership.persona_id == persona_id,
+        ClanMembership.position == 0,
+    )
+    membership = session.exec(stmt).first()
+    if membership:
+        session.delete(membership)
+        session.commit()
+        return True
+    return False
+
+
+def leave_clan(session: Session, persona_id: int) -> bool:
+    """
+    Leave a clan. Leaders cannot leave unless they transfer leadership first.
+
+    Args:
+        session: Database session
+        persona_id: Persona ID leaving
+
+    Returns:
+        True if left, False if not in clan or is leader
+
+    Raises:
+        ValueError: If persona is the clan leader
+    """
+    membership = get_persona_clan_membership(session, persona_id)
+    if not membership:
+        return False
+    if membership.position == 7:
+        raise ValueError("Leaders must transfer leadership before leaving")
+
+    session.delete(membership)
+    session.commit()
+    return True
+
+
+def kick_from_clan(session: Session, clan_id: int, persona_id: int) -> bool:
+    """
+    Kick a member from the clan. Cannot kick the leader.
+
+    Args:
+        session: Database session
+        clan_id: Clan ID
+        persona_id: Persona ID to kick
+
+    Returns:
+        True if kicked, False if not found or is leader
+    """
+    stmt = select(ClanMembership).where(
+        ClanMembership.clan_id == clan_id,
+        ClanMembership.persona_id == persona_id,
+    )
+    membership = session.exec(stmt).first()
+    if not membership or membership.position == 7:
+        return False
+
+    session.delete(membership)
+    session.commit()
+    return True
+
+
+def promote_to_leader(session: Session, clan_id: int, old_leader_persona_id: int, new_leader_persona_id: int) -> bool:
+    """
+    Transfer leadership from one persona to another.
+
+    Args:
+        session: Database session
+        clan_id: Clan ID
+        old_leader_persona_id: Current leader persona ID
+        new_leader_persona_id: New leader persona ID
+
+    Returns:
+        True if transferred, False if failed
+    """
+    # Get current leader membership
+    old_leader_stmt = select(ClanMembership).where(
+        ClanMembership.clan_id == clan_id,
+        ClanMembership.persona_id == old_leader_persona_id,
+        ClanMembership.position == 7,
+    )
+    old_leader = session.exec(old_leader_stmt).first()
+    if not old_leader:
+        return False
+
+    # Get new leader membership (must be a member, not applicant)
+    new_leader_stmt = select(ClanMembership).where(
+        ClanMembership.clan_id == clan_id,
+        ClanMembership.persona_id == new_leader_persona_id,
+        ClanMembership.position >= 1,
+    )
+    new_leader = session.exec(new_leader_stmt).first()
+    if not new_leader:
+        return False
+
+    # Transfer leadership
+    old_leader.position = 1  # Demote to member
+    new_leader.position = 7  # Promote to leader
+
+    session.add(old_leader)
+    session.add(new_leader)
+    session.commit()
+    return True
+
+
+def get_clan_member_count(session: Session, clan_id: int) -> int:
+    """Get the number of members in a clan (excluding applicants)."""
+    stmt = select(ClanMembership).where(
+        ClanMembership.clan_id == clan_id,
+        ClanMembership.position >= 1,
+    )
+    return len(list(session.exec(stmt).all()))
+
+
+# =============================================================================
+# Web Session Operations
+# =============================================================================
+
+
+def create_web_session_record(session: Session, user_id: int, token: str) -> WebSession:
+    """Create a new web session record."""
+    web_session = WebSession(
+        session_token=token,
+        user_id=user_id,
+        is_active=True,
+    )
+    session.add(web_session)
+    session.commit()
+    session.refresh(web_session)
+    return web_session
+
+
+def get_web_session_record(session: Session, token: str) -> WebSession | None:
+    """Get an active web session by token."""
+    stmt = select(WebSession).where(
+        WebSession.session_token == token,
+        WebSession.is_active == True,
+        WebSession.expires_at > datetime.utcnow(),
+    )
+    return session.exec(stmt).first()
+
+
+def delete_web_session_record(session: Session, token: str) -> bool:
+    """Delete/invalidate a web session."""
+    web_session = get_web_session_record(session, token)
+    if web_session:
+        web_session.is_active = False
+        session.add(web_session)
+        session.commit()
+        return True
+    return False

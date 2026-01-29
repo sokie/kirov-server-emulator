@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}{{ clan.name }} - RA3 Server{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="/clans" class="text-muted text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>Back to Clans
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Clan Header -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex align-items-start">
+                    <div class="me-3">
+                        <div class="d-flex align-items-center justify-content-center rounded" style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(218, 54, 51, 0.3) 0%, rgba(218, 54, 51, 0.15) 100%);">
+                            <i class="bi bi-shield-fill fs-2 text-danger"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h1 class="h3 mb-1">{{ clan.name }}</h1>
+                        <span class="badge bg-secondary fs-6 mb-2">[{{ clan.tag }}]</span>
+                        {% if clan.description %}
+                        <p class="text-secondary mb-0 mt-2">{{ clan.description }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Members Table -->
+        <div class="card mb-4">
+            <div class="card-header bg-transparent border-bottom border-secondary">
+                <h5 class="mb-0"><i class="bi bi-people me-2"></i>Members ({{ members|length }})</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Role</th>
+                            <th>Joined</th>
+                            {% if is_leader %}
+                            <th class="text-end">Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for member in members %}
+                        <tr>
+                            <td>
+                                {% if member.position == 7 %}
+                                <i class="bi bi-star-fill text-warning me-1"></i>
+                                {% endif %}
+                                {{ member.name }}
+                            </td>
+                            <td>
+                                {% if member.position == 7 %}
+                                <span class="badge bg-warning text-dark">Leader</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Member</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small">{{ member.joined_at[:10] }}</td>
+                            {% if is_leader %}
+                            <td class="text-end">
+                                {% if member.position != 7 %}
+                                <button class="btn btn-sm btn-outline-warning me-1" onclick="promoteToLeader({{ member.persona_id }})" title="Transfer Leadership">
+                                    <i class="bi bi-star"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="kickMember({{ member.persona_id }})" title="Kick">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Applicants (Leader only) -->
+        {% if is_leader and applicants %}
+        <div class="card mb-4">
+            <div class="card-header bg-transparent border-bottom border-secondary">
+                <h5 class="mb-0"><i class="bi bi-hourglass me-2"></i>Pending Applications ({{ applicants|length }})</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Applied</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for applicant in applicants %}
+                        <tr>
+                            <td>{{ applicant.name }}</td>
+                            <td class="text-muted small">{{ applicant.joined_at[:10] }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-success me-1" onclick="approveApplicant({{ applicant.persona_id }})">
+                                    <i class="bi bi-check-lg me-1"></i>Approve
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="rejectApplicant({{ applicant.persona_id }})">
+                                    <i class="bi bi-x-lg me-1"></i>Reject
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Actions Card -->
+        <div class="card">
+            <div class="card-header bg-transparent border-bottom border-secondary">
+                <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Actions</h5>
+            </div>
+            <div class="card-body">
+                {% if not user %}
+                <p class="text-secondary mb-3">Login to interact with this clan.</p>
+                <a href="/login" class="btn btn-primary w-100">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                </a>
+
+                {% elif user_membership and user_membership.clan_id == clan.id %}
+                    {% if user_membership.position == 7 %}
+                    <p class="text-secondary mb-3">You are the leader of this clan.</p>
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Transfer leadership to another member before leaving.
+                    </div>
+                    {% elif user_membership.position >= 1 %}
+                    <p class="text-secondary mb-3">You are a member of this clan.</p>
+                    <button class="btn btn-outline-danger w-100" onclick="leaveClan()">
+                        <i class="bi bi-box-arrow-left me-2"></i>Leave Clan
+                    </button>
+                    {% else %}
+                    <p class="text-secondary mb-3">Your application is pending review.</p>
+                    <div class="alert alert-info small">
+                        <i class="bi bi-hourglass me-1"></i>
+                        Waiting for the clan leader to approve your application.
+                    </div>
+                    {% endif %}
+
+                {% elif user_membership %}
+                <p class="text-secondary mb-3">You are already in another clan.</p>
+                <div class="alert alert-warning small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Leave your current clan before joining a new one.
+                </div>
+
+                {% elif personas %}
+                <p class="text-secondary mb-3">Select a persona to join this clan:</p>
+                <form id="joinForm">
+                    <select class="form-select mb-3" id="personaSelect" required>
+                        {% for persona in personas %}
+                        <option value="{{ persona.id }}">{{ persona.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-person-plus me-2"></i>Request to Join
+                    </button>
+                </form>
+                <div id="joinMessageArea" class="mt-3"></div>
+
+                {% else %}
+                <p class="text-secondary">You don't have any personas to join with.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="messageArea" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const clanId = {{ clan.id }};
+
+    function showToast(message, type) {
+        const messageArea = document.getElementById('messageArea');
+        const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+        const toast = document.createElement('div');
+        toast.className = `toast show align-items-center text-white ${bgClass} border-0`;
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.parentElement.parentElement.remove()"></button>
+            </div>
+        `;
+        messageArea.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+    }
+
+    {% if personas %}
+    document.getElementById('joinForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const personaId = document.getElementById('personaSelect').value;
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+
+        try {
+            const response = await fetch(`/api/rest/clans/${clanId}/join?persona_id=${personaId}`, {
+                method: 'POST',
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showToast('Application submitted!', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(result.detail || 'Failed to join', 'danger');
+            }
+        } catch (error) {
+            showToast('Network error', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    });
+    {% endif %}
+
+    {% if user_membership and user_membership.position >= 1 and user_membership.position != 7 %}
+    async function leaveClan() {
+        if (!confirm('Are you sure you want to leave this clan?')) return;
+
+        try {
+            const response = await fetch(`/api/rest/clans/leave?persona_id={{ user_membership.persona_id }}`, {
+                method: 'POST',
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showToast('Left clan successfully', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(result.detail || 'Failed to leave', 'danger');
+            }
+        } catch (error) {
+            showToast('Network error', 'danger');
+        }
+    }
+    {% endif %}
+
+    {% if is_leader %}
+    async function approveApplicant(personaId) {
+        try {
+            const response = await fetch(`/api/rest/clans/${clanId}/approve/${personaId}`, {
+                method: 'POST',
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showToast('Applicant approved', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(result.detail || 'Failed to approve', 'danger');
+            }
+        } catch (error) {
+            showToast('Network error', 'danger');
+        }
+    }
+
+    async function rejectApplicant(personaId) {
+        if (!confirm('Are you sure you want to reject this applicant?')) return;
+
+        try {
+            const response = await fetch(`/api/rest/clans/${clanId}/reject/${personaId}`, {
+                method: 'POST',
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showToast('Applicant rejected', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(result.detail || 'Failed to reject', 'danger');
+            }
+        } catch (error) {
+            showToast('Network error', 'danger');
+        }
+    }
+
+    async function kickMember(personaId) {
+        if (!confirm('Are you sure you want to kick this member?')) return;
+
+        try {
+            const response = await fetch(`/api/rest/clans/${clanId}/kick/${personaId}`, {
+                method: 'POST',
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showToast('Member kicked', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(result.detail || 'Failed to kick', 'danger');
+            }
+        } catch (error) {
+            showToast('Network error', 'danger');
+        }
+    }
+
+    async function promoteToLeader(personaId) {
+        if (!confirm('Are you sure you want to transfer leadership to this member? You will become a regular member.')) return;
+
+        try {
+            const response = await fetch(`/api/rest/clans/${clanId}/promote/${personaId}`, {
+                method: 'POST',
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showToast('Leadership transferred', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(result.detail || 'Failed to transfer', 'danger');
+            }
+        } catch (error) {
+            showToast('Network error', 'danger');
+        }
+    }
+    {% endif %}
+</script>
+{% endblock %}
