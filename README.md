@@ -31,6 +31,9 @@ This project aims to:
 - [x] (done)**Competition server** - Post-match stats
 - [x] (done)**Web Portal** - Account registration, leaderboards, and live match viewer
 - [x] (done)**Clan System** - Create, join, and manage clans with in-game integration
+- [ ] **Auto matchmaking** - Add support for automatic ELO based matchmaking bot
+- [ ] **CNC3 & Kane's Wrath** - Add support for CNC3 titles
+- [ ] **Generals** - (low prio) Support generals games
 
 ## Quick Start
 
@@ -161,6 +164,7 @@ This project is provided for educational and preservation purposes.
 ## Disclaimer
 
 This project is not affiliated with or endorsed by Electronic Arts, Westwood Studios, or any related entities. Red Alert 3 and Command & Conquer are trademarks of Electronic Arts Inc.
+
 
 
 
