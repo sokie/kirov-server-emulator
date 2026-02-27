@@ -144,7 +144,7 @@ SCORING_MULTIPLIERS = [1, 2, 2, 5]
 
 # News ticker messages shown in-game
 NEWS_TICKER_MESSAGES = [
-    "Welcome to the server! Enjoy your games.",
+    "Welcome to Kirov server! Enjoy your games.",
 ]
 
 # Custom maps static data
@@ -207,8 +207,6 @@ def _build_kw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     """
     Build 420-element KW career stats array.
 
-    Layout matches reference getmyrecordskw.php with 6-element groups
-    (5 modes + total) for each stat category.
     """
     wins = _get_mode_values(stats, "wins")
     losses = _get_mode_values(stats, "losses")
@@ -297,8 +295,6 @@ def _build_tw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     """
     Build 160-element TW career stats array.
 
-    Layout matches reference getmyrecordstw.php with 5-element groups
-    (5 modes, no totals) for each stat category.
     """
     wins = _get_mode_values(stats, "wins")
     losses = _get_mode_values(stats, "losses")

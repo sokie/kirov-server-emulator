@@ -1,0 +1,30 @@
+http://na.llnet.eadownloads.ea.com/u/f/eagames/redalert3/patches/ftpsite
+patch_self |  | | | 
+run | patch112/patchprepare.exe |     99600 | d76ccedc | 
+patch | patch111/RetailExe/RA3_1_11_GAME.RTP |  13380567 | 404e684a | 
+patch | patch111/Maps/MAPS11_BIG.RTP |  51102664 | 8a4c1139 | 
+patch | patch111/Core/CORE11_BIG.RTP |  93679673 | c5628dbf | 
+patch | patch111/Lang-Spanish/LANG-SPANISH11_BIG.RTP |    404577 | 0031df42 | 
+copy | patch111/RA3_spanish_1.11.SkuDef |       147 | 13883121 | RA3_spanish_1.11.SkuDef
+copy | patch112/RA3.exe |   1172752 | e6e4a641 | RA3.exe
+copy | patch112/Launcher/Patch/csf0015.dat |      6396 | e6565222 | Launcher\Patch\csf0015.dat
+copy | patch112/Launcher/Patch/csf0010.dat |     10448 | 360e5a1e | Launcher\Patch\csf0010.dat
+copy | patch112/Launcher/Patch/csf0001.dat |     10090 | 5862033e | Launcher\Patch\csf0001.dat
+copy | patch112/Launcher/Patch/csf0002.dat |     11042 | 38a5e94e | Launcher\Patch\csf0002.dat
+copy | patch112/Launcher/Patch/csf0003.dat |     11148 | 4db6c391 | Launcher\Patch\csf0003.dat
+copy | patch112/Launcher/Patch/csf0011.dat |     10750 | c54313c4 | Launcher\Patch\csf0011.dat
+copy | patch112/Launcher/Patch/csf0005.dat |     10648 | 3e60e9ab | Launcher\Patch\csf0005.dat
+copy | patch112/Launcher/Patch/csf0013.dat |      7346 | abcc64fd | Launcher\Patch\csf0013.dat
+copy | patch112/Launcher/Patch/csf0009.dat |     10608 | b6f1dc90 | Launcher\Patch\csf0009.dat
+copy | patch112/Launcher/Patch/csf0007.dat |     10314 | c17fe86b | Launcher\Patch\csf0007.dat
+copy | patch112/Launcher/Patch/csf0006.dat |     10914 | 38042fd9 | Launcher\Patch\csf0006.dat
+copy | patch112/Launcher/Patch/csf0016.dat |     10082 | 47c5b2cd | Launcher\Patch\csf0016.dat
+patch | patch112/RetailExe/RA3_1_12_GAME.RTP |  13397983 | 5167db04 | 
+patch | patch112/Maps/MAPS12_BIG.RTP |       333 | d9ae5015 | 
+patch | patch112/Core/CORE12_BIG.RTP |   3490633 | 40ee1894 | 
+copy | patch112/Support/patch_ES.txt |     37846 | 24e0994d | Support\patch_ES.txt
+copy | patch112/Support/patch_ES.ini |        39 | 99a48d6b | Support\patchdoc.ini
+copy | patch112/RA3_spanish_1.12.SkuDef |       114 | 060799d4 | RA3_spanish_1.12.SkuDef
+run | patch112/patchupdate.exe |    107792 | 48b749a0 | 
+*
+

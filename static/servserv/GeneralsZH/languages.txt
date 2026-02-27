@@ -1,0 +1,8 @@
+brazilian
+chinese
+french
+german
+italian
+korean
+polish
+spanish

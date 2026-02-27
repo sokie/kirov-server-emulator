@@ -1,0 +1,658 @@
+ftp://ftp.ea.com/pub/eapacific/cnc3/patch19
+patch_self |  | | | 
+run | patchprepare.exe |     99856 | 982eb047 | 
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.1\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.1\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.1\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.1\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.1\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.1\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.1\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.1\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.1\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.1\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.1\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.1\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.1\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.1\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.1\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.1\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.1\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.1\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.1\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.1\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.1\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.1\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.1\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.1\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.1\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.1\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.1\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.1\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.1\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.1\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.1\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.1\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.1\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.1\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.1\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.1\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.1\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.1\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.1\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.1\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.1\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.1\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.1\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.1\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.1\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.1\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.1\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.1\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.1\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.1\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.1\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.1\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.1\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.1\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.1\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.1\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.1\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.1\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.1\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.1\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.1\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.2\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.2\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.2\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.2\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.2\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.2\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.2\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.2\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.2\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.2\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.2\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.2\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.2\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.2\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.2\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.2\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.2\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.2\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.2\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.2\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.2\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.2\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.2\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.2\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.2\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.2\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.2\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.2\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.2\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.2\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.2\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.2\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.2\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.2\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.2\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.2\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.2\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.2\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.2\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.2\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.2\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.2\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.2\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.2\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.2\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.2\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.2\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.2\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.2\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.2\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.2\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.2\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.2\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.2\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.2\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.2\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.2\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.2\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.2\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.2\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.2\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.3\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.3\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.3\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.3\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.3\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.3\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.3\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.3\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.3\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.3\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.3\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.3\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.3\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.3\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.3\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.3\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.3\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.3\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.3\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.3\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.3\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.3\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.3\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.3\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.3\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.3\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.3\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.3\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.3\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.3\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.3\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.3\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.3\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.3\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.3\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.3\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.3\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.3\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.3\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.3\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.3\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.3\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.3\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.3\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.3\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.3\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.3\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.3\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.3\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.3\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.3\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.3\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.3\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.3\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.3\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.3\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.3\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.3\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.3\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.3\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.3\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.4\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.4\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.4\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.4\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.4\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.4\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.4\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.4\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.4\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.4\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.4\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.4\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.4\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.4\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.4\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.4\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.4\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.4\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.4\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.4\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.4\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.4\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.4\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.4\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.4\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.4\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.4\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.4\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.4\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.4\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.4\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.4\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.4\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.4\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.4\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.4\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.4\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.4\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.4\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.4\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.4\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.4\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.4\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.4\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.4\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.4\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.4\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.4\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.4\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.4\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.4\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.4\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.4\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.4\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.4\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.4\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.4\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.4\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.4\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.4\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.4\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.5\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.5\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.5\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.5\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.5\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.5\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.5\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.5\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.5\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.5\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.5\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.5\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.5\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.5\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.5\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.5\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.5\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.5\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.5\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.5\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.5\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.5\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.5\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.5\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.5\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.5\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.5\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.5\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.5\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.5\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.5\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.5\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.5\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.5\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.5\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.5\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.5\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.5\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.5\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.5\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.5\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.5\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.5\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.5\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.5\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.5\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.5\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.5\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.5\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.5\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.5\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.5\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.5\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.5\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.5\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.5\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.5\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.5\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.5\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.5\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.5\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.6\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.6\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.6\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.6\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.6\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.6\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.6\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.6\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.6\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.6\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.6\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.6\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.6\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.6\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.6\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.6\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.6\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.6\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.6\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.6\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.6\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.6\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.6\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.6\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.6\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.6\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.6\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.6\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.6\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.6\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.6\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.6\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.6\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.6\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.6\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.6\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.6\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.6\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.6\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.6\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.6\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.6\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.6\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.6\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.6\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.6\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.6\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.6\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.6\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.6\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.6\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.6\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.6\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.6\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.6\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.6\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.6\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.6\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.6\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.6\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.6\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.7\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.7\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.7\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.7\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.7\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.7\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.7\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.7\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.7\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.7\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.7\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.7\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.7\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.7\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.7\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.7\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.7\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.7\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.7\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.7\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.7\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.7\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.7\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.7\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.7\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.7\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.7\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.7\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.7\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.7\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.7\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.7\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.7\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.7\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.7\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.7\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.7\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.7\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.7\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.7\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.7\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.7\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.7\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.7\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.7\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.7\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.7\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.7\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.7\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.7\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.7\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.7\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.7\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.7\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.7\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.7\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.7\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.7\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.7\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.7\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.7\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.8\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.8\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.8\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.8\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.8\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.8\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.8\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.8\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.8\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.8\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.8\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.8\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.8\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.8\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.8\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.8\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.8\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.8\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.8\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.8\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.8\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.8\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.8\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.8\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.8\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.8\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.8\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.8\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.8\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.8\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.8\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.8\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.8\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.8\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.8\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.8\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.8\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.8\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.8\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.8\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.8\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.8\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.8\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.8\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.8\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.8\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.8\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.8\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.8\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.8\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.8\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.8\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.8\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.8\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.8\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.8\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.8\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.8\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.8\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.8\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.8\config.txt
+local_copy | RetailExe\1.0\dbghelp.dll | | | RetailExe\1.9\dbghelp.dll
+local_copy | RetailExe\1.0\data\cursors\beam.ani | | | RetailExe\1.9\data\cursors\beam.ani
+local_copy | RetailExe\1.0\data\cursors\forceattackmove.ani | | | RetailExe\1.9\data\cursors\forceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackmove.ani | | | RetailExe\1.9\data\cursors\sccattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccattacknew.ani | | | RetailExe\1.9\data\cursors\sccattacknew.ani
+local_copy | RetailExe\1.0\data\cursors\sccattackoor.ani | | | RetailExe\1.9\data\cursors\sccattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccbasicselectgreen.ani | | | RetailExe\1.9\data\cursors\sccbasicselectgreen.ani
+local_copy | RetailExe\1.0\data\cursors\sccbeacon.ani | | | RetailExe\1.9\data\cursors\sccbeacon.ani
+local_copy | RetailExe\1.0\data\cursors\scccantpower.ani | | | RetailExe\1.9\data\cursors\scccantpower.ani
+local_copy | RetailExe\1.0\data\cursors\scccantrepair.ani | | | RetailExe\1.9\data\cursors\scccantrepair.ani
+local_copy | RetailExe\1.0\data\cursors\scccantsell.ani | | | RetailExe\1.9\data\cursors\scccantsell.ani
+local_copy | RetailExe\1.0\data\cursors\scccapture.ani | | | RetailExe\1.9\data\cursors\scccapture.ani
+local_copy | RetailExe\1.0\data\cursors\sccchargedefenses.ani | | | RetailExe\1.9\data\cursors\sccchargedefenses.ani
+local_copy | RetailExe\1.0\data\cursors\scccleargarrison.ani | | | RetailExe\1.9\data\cursors\scccleargarrison.ani
+local_copy | RetailExe\1.0\data\cursors\scccombine.ani | | | RetailExe\1.9\data\cursors\scccombine.ani
+local_copy | RetailExe\1.0\data\cursors\scccommandeer.ani | | | RetailExe\1.9\data\cursors\scccommandeer.ani
+local_copy | RetailExe\1.0\data\cursors\sccconversionbeam.ani | | | RetailExe\1.9\data\cursors\sccconversionbeam.ani
+local_copy | RetailExe\1.0\data\cursors\sccexplosivecharge.ani | | | RetailExe\1.9\data\cursors\sccexplosivecharge.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackir.ani | | | RetailExe\1.9\data\cursors\sccforceattackir.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackmove.ani | | | RetailExe\1.9\data\cursors\sccforceattackmove.ani
+local_copy | RetailExe\1.0\data\cursors\sccforceattackoor.ani | | | RetailExe\1.9\data\cursors\sccforceattackoor.ani
+local_copy | RetailExe\1.0\data\cursors\sccforcemove.ani | | | RetailExe\1.9\data\cursors\sccforcemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccgarrison.ani | | | RetailExe\1.9\data\cursors\sccgarrison.ani
+local_copy | RetailExe\1.0\data\cursors\sccharvest.ani | | | RetailExe\1.9\data\cursors\sccharvest.ani
+local_copy | RetailExe\1.0\data\cursors\sccmanipulator.ani | | | RetailExe\1.9\data\cursors\sccmanipulator.ani
+local_copy | RetailExe\1.0\data\cursors\sccmovenew.ani | | | RetailExe\1.9\data\cursors\sccmovenew.ani
+local_copy | RetailExe\1.0\data\cursors\sccpointer.cur | | | RetailExe\1.9\data\cursors\sccpointer.cur
+local_copy | RetailExe\1.0\data\cursors\sccpowermode.ani | | | RetailExe\1.9\data\cursors\sccpowermode.ani
+local_copy | RetailExe\1.0\data\cursors\sccrallypoint.ani | | | RetailExe\1.9\data\cursors\sccrallypoint.ani
+local_copy | RetailExe\1.0\data\cursors\sccreflectlaser.ani | | | RetailExe\1.9\data\cursors\sccreflectlaser.ani
+local_copy | RetailExe\1.0\data\cursors\sccrepairmode.ani | | | RetailExe\1.9\data\cursors\sccrepairmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccreversemove.ani | | | RetailExe\1.9\data\cursors\sccreversemove.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ani | | | RetailExe\1.9\data\cursors\sccscroll0.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.cur | | | RetailExe\1.9\data\cursors\sccscroll0.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll0.ico | | | RetailExe\1.9\data\cursors\sccscroll0.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ani | | | RetailExe\1.9\data\cursors\sccscroll1.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.cur | | | RetailExe\1.9\data\cursors\sccscroll1.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll1.ico | | | RetailExe\1.9\data\cursors\sccscroll1.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ani | | | RetailExe\1.9\data\cursors\sccscroll2.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.cur | | | RetailExe\1.9\data\cursors\sccscroll2.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll2.ico | | | RetailExe\1.9\data\cursors\sccscroll2.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ani | | | RetailExe\1.9\data\cursors\sccscroll3.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.cur | | | RetailExe\1.9\data\cursors\sccscroll3.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll3.ico | | | RetailExe\1.9\data\cursors\sccscroll3.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ani | | | RetailExe\1.9\data\cursors\sccscroll4.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.cur | | | RetailExe\1.9\data\cursors\sccscroll4.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll4.ico | | | RetailExe\1.9\data\cursors\sccscroll4.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ani | | | RetailExe\1.9\data\cursors\sccscroll5.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.cur | | | RetailExe\1.9\data\cursors\sccscroll5.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll5.ico | | | RetailExe\1.9\data\cursors\sccscroll5.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ani | | | RetailExe\1.9\data\cursors\sccscroll6.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.cur | | | RetailExe\1.9\data\cursors\sccscroll6.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll6.ico | | | RetailExe\1.9\data\cursors\sccscroll6.ico
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ani | | | RetailExe\1.9\data\cursors\sccscroll7.ani
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.cur | | | RetailExe\1.9\data\cursors\sccscroll7.cur
+local_copy | RetailExe\1.0\data\cursors\sccscroll7.ico | | | RetailExe\1.9\data\cursors\sccscroll7.ico
+local_copy | RetailExe\1.0\data\cursors\sccsellmode.ani | | | RetailExe\1.9\data\cursors\sccsellmode.ani
+local_copy | RetailExe\1.0\data\cursors\sccstop.ani | | | RetailExe\1.9\data\cursors\sccstop.ani
+local_copy | RetailExe\1.0\data\cursors\scctargetability.ani | | | RetailExe\1.9\data\cursors\scctargetability.ani
+local_copy | RetailExe\1.0\data\cursors\scctelestrator.ani | | | RetailExe\1.9\data\cursors\scctelestrator.ani
+local_copy | RetailExe\1.0\config.txt | | | RetailExe\1.9\config.txt
+copy | CNC3.exe |   1111304 | ffe709d0 | CNC3.exe
+copy | Launcher/Patch/csf0014.dat |      5881 | 01c9c36b | Launcher\Patch\csf0014.dat
+copy | Launcher/Patch/csf0015.dat |      5939 | 430a3907 | Launcher\Patch\csf0015.dat
+copy | Launcher/Patch/csf0010.dat |      9427 | e68442f4 | Launcher\Patch\csf0010.dat
+copy | Launcher/Patch/csf0008.dat |      9731 | feb9fe51 | Launcher\Patch\csf0008.dat
+copy | Launcher/Patch/csf0001.dat |      9075 | b834421c | Launcher\Patch\csf0001.dat
+copy | Launcher/Patch/csf0002.dat |     10141 | ec91ea83 | Launcher\Patch\csf0002.dat
+copy | Launcher/Patch/csf0003.dat |     10081 | 6f35c79d | Launcher\Patch\csf0003.dat
+copy | Launcher/Patch/csf0004.dat |     10081 | 6f35c79d | Launcher\Patch\csf0004.dat
+copy | Launcher/Patch/csf0011.dat |      9251 | 39efe67f | Launcher\Patch\csf0011.dat
+copy | Launcher/Patch/csf0005.dat |      9771 | 5e0df39e | Launcher\Patch\csf0005.dat
+copy | Launcher/Patch/csf0013.dat |      6771 | 037c7f5c | Launcher\Patch\csf0013.dat
+copy | Launcher/Patch/csf0009.dat |      9879 | cb622521 | Launcher\Patch\csf0009.dat
+copy | Launcher/Patch/csf0007.dat |      9195 | 30a9e56c | Launcher\Patch\csf0007.dat
+copy | Launcher/Patch/csf0006.dat |      9793 | ec8995be | Launcher\Patch\csf0006.dat
+copy | Launcher/Patch/csf0012.dat |      9507 | 94da33cb | Launcher\Patch\csf0012.dat
+copy | Launcher/Patch/csf0016.dat |      8791 | cc151f53 | Launcher\Patch\csf0016.dat
+patch | RetailExe/1.1/CNC3GAME_DAT.RTP |  10530058 | dc1cd24b | 
+patch | RetailExe/1.2/CNC3GAME_DAT.RTP |  10900220 | e79f51be | 
+patch | RetailExe/1.3/CNC3GAME_DAT.RTP |  10904335 | 54508488 | 
+patch | RetailExe/1.4/CNC3GAME_DAT.RTP |  10892282 | f705abdf | 
+patch | RetailExe/1.5/CNC3GAME_DAT.RTP |  11124451 | 762adbf1 | 
+patch | RetailExe/1.6/CNC3GAME_DAT.RTP |  11119212 | 25edd458 | 
+patch | RetailExe/1.7/CNC3GAME_DAT.RTP |  10988285 | 7c143a3f | 
+patch | RetailExe/1.8/CNC3GAME_DAT.RTP |  10987007 | 3ce6e0c4 | 
+patch | RetailExe/1.9/CNC3GAME_DAT.RTP |  11008095 | 7bed012a | 
+copy | Core/1.1/config.txt |        50 | 83786ff3 | Core\1.1\config.txt
+patch | Core/1.1/PATCH1_BIG.RTP |   2096951 | 2e71887c | 
+copy | Core/1.4/config.txt |        50 | 736b411e | Core\1.4\config.txt
+patch | Core/1.4/PATCH4_BIG.RTP |    858480 | 2097b938 | 
+copy | MP/1.5/config.txt |        50 | db8e80ce | MP\1.5\config.txt
+patch | MP/1.5/PATCH5_BIG.RTP |  29177773 | 14d88c6a | 
+copy | EnglishAudio/1.5/config.txt |        50 | db8e80ce | EnglishAudio\1.5\config.txt
+patch | EnglishAudio/1.5/PATCH5_BIG.RTP |   3577201 | 7bedc870 | 
+copy | Kane/1.5/config.txt |        50 | db8e80ce | Kane\1.5\config.txt
+patch | Kane/1.5/PATCH5_BIG.RTP |    122174 | 3a700d2d | 
+copy | SP/1.5/config.txt |        50 | db8e80ce | SP\1.5\config.txt
+patch | SP/1.5/PATCH5_BIG.RTP |   8427849 | ad5ae153 | 
+copy | Core/1.5/config.txt |        50 | ad398579 | Core\1.5\config.txt
+patch | Core/1.5/PATCH5_BIG.RTP |  18756351 | 5585f8f5 | 
+copy | MP/1.6/config.txt |        50 | 0308ab29 | MP\1.6\config.txt
+patch | MP/1.6/PATCH6_BIG.RTP |   5327963 | fc04140c | 
+copy | SP/1.6/config.txt |        50 | 0308ab29 | SP\1.6\config.txt
+patch | SP/1.6/PATCH6_BIG.RTP |   5883821 | 97c44b63 | 
+copy | Core/1.6/config.txt |        50 | 0308ab29 | Core\1.6\config.txt
+patch | Core/1.6/PATCH6_BIG.RTP |   1468201 | 2c9f1440 | 
+copy | MP/1.7/config.txt |        50 | acc78e8b | MP\1.7\config.txt
+patch | MP/1.7/PATCH7_BIG.RTP |   6039317 | 157c927f | 
+copy | EnglishAudio/1.7/config.txt |        50 | 2bb4194d | EnglishAudio\1.7\config.txt
+patch | EnglishAudio/1.7/PATCH7_BIG.RTP |    297993 | a928b202 | 
+copy | Kane/1.7/config.txt |        50 | 2bb4194d | Kane\1.7\config.txt
+patch | Kane/1.7/PATCH7_BIG.RTP |    120389 | 4998453d | 
+copy | SP/1.7/config.txt |        50 | acc78e8b | SP\1.7\config.txt
+patch | SP/1.7/PATCH7_BIG.RTP |   8167973 | 0cb418cf | 
+copy | Core/1.7/config.txt |        50 | acc78e8b | Core\1.7\config.txt
+patch | Core/1.7/PATCH7_BIG.RTP |  38844130 | 68776b24 | 
+copy | MP/1.8/config.txt |        50 | 42d7e186 | MP\1.8\config.txt
+patch | MP/1.8/PATCH8_BIG.RTP |   5327963 | ffb62f86 | 
+copy | SP/1.8/config.txt |        50 | 42d7e186 | SP\1.8\config.txt
+patch | SP/1.8/PATCH8_BIG.RTP |   5922020 | 07431d41 | 
+copy | Core/1.8/config.txt |        50 | 42d7e186 | Core\1.8\config.txt
+patch | Core/1.8/PATCH8_BIG.RTP |   1434775 | 22b775a9 | 
+copy | MP/1.9/config.txt |        50 | 9a890738 | MP\1.9\config.txt
+patch | MP/1.9/PATCH9_BIG.RTP |  23891128 | 7ad97a3d | 
+copy | Kane/1.9/config.txt |        50 | 38a870b3 | Kane\1.9\config.txt
+patch | Kane/1.9/PATCH9_BIG.RTP |   5957332 | b36dd427 | 
+copy | SP/1.9/config.txt |        50 | 9a890738 | SP\1.9\config.txt
+patch | SP/1.9/PATCH9_BIG.RTP |   6610134 | 72ee2177 | 
+copy | Core/1.9/config.txt |        50 | 9a890738 | Core\1.9\config.txt
+patch | Core/1.9/PATCH9_BIG.RTP |   2540101 | bb5f61fb | 
+copy | Lang-chinese_s/1.1/config.txt |        50 | 83786ff3 | Lang-chinese_s\1.1\config.txt
+patch | Lang-chinese_s/1.1/PATCH1_BIG.RTP |    282479 | a5242a1e | 
+copy | Lang-chinese_s/1.5/config.txt |        50 | ad398579 | Lang-chinese_s\1.5\config.txt
+patch | Lang-chinese_s/1.5/PATCH5_BIG.RTP |    285495 | 87840954 | 
+copy | Lang-chinese_s/1.6/config.txt |        50 | 0308ab29 | Lang-chinese_s\1.6\config.txt
+patch | Lang-chinese_s/1.6/PATCH6_BIG.RTP |    284335 | 5ddd9ad9 | 
+copy | Lang-chinese_s/1.7/config.txt |        50 | acc78e8b | Lang-chinese_s\1.7\config.txt
+patch | Lang-chinese_s/1.7/PATCH7_BIG.RTP |    284272 | cf7c2854 | 
+copy | Lang-chinese_s/1.8/config.txt |        50 | 42d7e186 | Lang-chinese_s\1.8\config.txt
+patch | Lang-chinese_s/1.8/PATCH8_BIG.RTP |    284272 | dc54af63 | 
+copy | Lang-chinese_s/1.9/config.txt |        50 | 9a890738 | Lang-chinese_s\1.9\config.txt
+patch | Lang-chinese_s/1.9/PATCH9_BIG.RTP |    285259 | afa638ab | 
+copy | Support/patch_SC.txt |     30223 | dbd2d96c | Support\patch_SC.txt
+copy | Support/patch_SC.ini |        39 | aedee428 | Support\patchdoc.ini
+copy | Support/zh-cn/readme.txt |     18884 | badfdfa8 | Support\zh-cn\readme.txt
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.1.SkuDef
+patch | SKUDEFS-CHINESE_S-1_1.RTP |       285 | 9e203206 | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.2.SkuDef
+patch | SKUDEFS-CHINESE_S-1_2.RTP |       284 | 01eb7f5a | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.3.SkuDef
+patch | SKUDEFS-CHINESE_S-1_3.RTP |       284 | 9a2c6fd3 | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.4.SkuDef
+patch | SKUDEFS-CHINESE_S-1_4.RTP |       284 | 51ea7884 | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.5.SkuDef
+patch | SKUDEFS-CHINESE_S-1_5.RTP |       304 | a5413762 | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.6.SkuDef
+patch | SKUDEFS-CHINESE_S-1_6.RTP |       301 | 9cfa7829 | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.7.SkuDef
+patch | SKUDEFS-CHINESE_S-1_7.RTP |       304 | dad324ad | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.8.SkuDef
+patch | SKUDEFS-CHINESE_S-1_8.RTP |       301 | cb59e045 | 
+local_copy | CNC3_chinese_s_1.0.SkuDef | | | CNC3_chinese_s_1.9.SkuDef
+patch | SKUDEFS-CHINESE_S-1_9.RTP |       308 | d75bfd84 | 
+run | patchupdate.exe |    111880 | 7ef8de61 | 
+*
+

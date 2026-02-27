@@ -1,0 +1,60 @@
+http://na.llnet.eadownloads.ea.com/u/f/eagames/redalert3/patches/ftpsite
+patch_self |  | | | 
+run | patch112/patchprepare.exe |     99600 | d76ccedc | 
+patch | patch15/RetailExe/GL_INI.RTP |     39773 | 368b5953 | 
+patch | patch15/RetailExe/PAUL_DLL.RTP |    147826 | 831dadf3 | 
+patch | patch15/RetailExe/RA3_1_5_GAME.RTP |  13535843 | 50a1ff59 | 
+patch | patch15/RetailExe/WINUI_DLL.RTP |    119704 | 3c169d04 | 
+patch | patch15/Maps/MAPS5_BIG.RTP |  31888486 | 64abb89c | 
+patch | patch15/Core/CORE5_BIG.RTP |  21778909 | 01b8bf6d | 
+patch | patch15/Lang-ChineseT/LANG-CHINESET5_BIG.RTP |    331783 | aac494e1 | 
+copy | patch15/RA3_chinese_t_1.5.SkuDef |       145 | 6789b745 | RA3_chinese_t_1.5.SkuDef
+patch | patch16/RetailExe/RA3_1_6_GAME.RTP |  13558712 | f11a2e3a | 
+patch | patch16/Core/CORE6_BIG.RTP |   3593738 | c15d29eb | 
+patch | patch16/Lang-ChineseT/LANG-CHINESET6_BIG.RTP |    331447 | 34e7f50a | 
+copy | patch16/RA3_chinese_t_1.6.SkuDef |       121 | 27b03cfc | RA3_chinese_t_1.6.SkuDef
+patch | patch17/RetailExe/RA3_1_7_GAME.RTP |  12175021 | 194fc6b5 | 
+patch | patch17/Core/CORE7_BIG.RTP |   1070325 | 1b420bd3 | 
+patch | patch17/Lang-ChineseT/LANG-CHINESET7_BIG.RTP |    331372 | 458c8ebb | 
+copy | patch17/RA3_chinese_t_1.7.SkuDef |       121 | 5124805a | RA3_chinese_t_1.7.SkuDef
+patch | patch18/RetailExe/RA3_1_8_GAME.RTP |  13250788 | 2570d492 | 
+patch | patch18/Maps/MAPS8_BIG.RTP |   7111634 | 6e7b5f1c | 
+patch | patch18/Core/CORE8_BIG.RTP |   8017189 | ce452279 | 
+patch | patch18/Lang-ChineseT/LANG-CHINESET8_BIG.RTP |    332303 | 9f2490ed | 
+copy | patch18/RA3_chinese_t_1.8.SkuDef |       145 | bb2b6343 | RA3_chinese_t_1.8.SkuDef
+patch | patch19/RetailExe/RA3_1_9_GAME.RTP |  13282607 | 61bd01f5 | 
+patch | patch19/Maps/MAPS9_BIG.RTP |  23282703 | 0c66a0fa | 
+patch | patch19/Core/CORE9_BIG.RTP |  15179731 | 3eddece9 | 
+patch | patch19/Lang-ChineseT/LANG-CHINESET9_BIG.RTP |    332261 | 4a9fef01 | 
+copy | patch19/RA3_chinese_t_1.9.SkuDef |       145 | 3308a57b | RA3_chinese_t_1.9.SkuDef
+patch | patch110/RetailExe/RA3_1_10_GAME.RTP |  13274571 | 0c463142 | 
+patch | patch110/Maps/MAPS10_BIG.RTP |   7222928 | 4585c0bf | 
+patch | patch110/Core/CORE10_BIG.RTP |   4649376 | 3b5012ba | 
+copy | patch110/RA3_chinese_t_1.10.SkuDef |       115 | 3b2802ae | RA3_chinese_t_1.10.SkuDef
+patch | patch111/RetailExe/RA3_1_11_GAME.RTP |  13380567 | 404e684a | 
+patch | patch111/Maps/MAPS11_BIG.RTP |  51102664 | 8a4c1139 | 
+patch | patch111/Core/CORE11_BIG.RTP |  93679673 | c5628dbf | 
+patch | patch111/Lang-ChineseT/LANG-CHINESET11_BIG.RTP |    332627 | 0b646fd3 | 
+copy | patch111/RA3_chinese_t_1.11.SkuDef |       150 | 1fa62517 | RA3_chinese_t_1.11.SkuDef
+copy | patch112/RA3.exe |   1172752 | e6e4a641 | RA3.exe
+copy | patch112/Launcher/Patch/csf0015.dat |      6396 | e6565222 | Launcher\Patch\csf0015.dat
+copy | patch112/Launcher/Patch/csf0010.dat |     10448 | 360e5a1e | Launcher\Patch\csf0010.dat
+copy | patch112/Launcher/Patch/csf0001.dat |     10090 | 5862033e | Launcher\Patch\csf0001.dat
+copy | patch112/Launcher/Patch/csf0002.dat |     11042 | 38a5e94e | Launcher\Patch\csf0002.dat
+copy | patch112/Launcher/Patch/csf0003.dat |     11148 | 4db6c391 | Launcher\Patch\csf0003.dat
+copy | patch112/Launcher/Patch/csf0011.dat |     10750 | c54313c4 | Launcher\Patch\csf0011.dat
+copy | patch112/Launcher/Patch/csf0005.dat |     10648 | 3e60e9ab | Launcher\Patch\csf0005.dat
+copy | patch112/Launcher/Patch/csf0013.dat |      7346 | abcc64fd | Launcher\Patch\csf0013.dat
+copy | patch112/Launcher/Patch/csf0009.dat |     10608 | b6f1dc90 | Launcher\Patch\csf0009.dat
+copy | patch112/Launcher/Patch/csf0007.dat |     10314 | c17fe86b | Launcher\Patch\csf0007.dat
+copy | patch112/Launcher/Patch/csf0006.dat |     10914 | 38042fd9 | Launcher\Patch\csf0006.dat
+copy | patch112/Launcher/Patch/csf0016.dat |     10082 | 47c5b2cd | Launcher\Patch\csf0016.dat
+patch | patch112/RetailExe/RA3_1_12_GAME.RTP |  13397983 | 5167db04 | 
+patch | patch112/Maps/MAPS12_BIG.RTP |       333 | d9ae5015 | 
+patch | patch112/Core/CORE12_BIG.RTP |   3490633 | 40ee1894 | 
+copy | patch112/Support/patch_TC.txt |     27228 | ed14d5b4 | Support\patch_TC.txt
+copy | patch112/Support/patch_TC.ini |        39 | d1740b09 | Support\patchdoc.ini
+copy | patch112/RA3_chinese_t_1.12.SkuDef |       116 | 19d3fbfd | RA3_chinese_t_1.12.SkuDef
+run | patch112/patchupdate.exe |    107792 | 48b749a0 | 
+*
+

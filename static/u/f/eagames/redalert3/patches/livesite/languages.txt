@@ -1,0 +1,12 @@
+chinese_s
+chinese_t
+czech
+french
+german
+hungarian
+italian
+korean
+polish
+russian
+spanish
+thai

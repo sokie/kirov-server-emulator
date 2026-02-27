@@ -1,0 +1,51 @@
+<QMMaps>
+BAMAP_RH01_4
+BAMAP_DC05_2
+MAP_MP_2_WILL1
+MAP_MP_2_BLACK5
+MAP_MP_2_BASS1
+MAP_MP_2_BLACK7
+BAMAP_EW01_4
+BAMAP_DC06_4
+BAMAP_DC01_4
+BAMAP_EW03_04
+MAP_MP_4_BASS
+MAP_MP_4_CHUCK2
+</QMMaps>
+
+<Manglers>
+  mangler1.generals.ea.com:4321
+  mangler2.generals.ea.com:4321
+  mangler3.generals.ea.com:4321
+  mangler4.generals.ea.com:4321
+</Manglers>
+
+<PingServers>
+  203.166.93.50
+  211.233.72.38
+  159.153.224.10
+  211.72.252.17
+</PingServers>
+
+<PingDuration>
+  reps = 1
+  timeout = 1000
+  low = 100
+  med = 400
+</PingDuration>
+
+<Ladders>
+</Ladders>
+
+<VIP>
+  95243469
+  95701019
+  1001007650 
+  1000713834
+  456108849
+  1001633642
+</VIP>
+
+<Custom>
+  restricted = 1
+</Custom>

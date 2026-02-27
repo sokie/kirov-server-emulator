@@ -1,0 +1,224 @@
+<QMBot>
+  ID=17461195
+</QMBot>
+
+<QMMaps>
+Alpine Assault
+BarrenBadlands
+Bitter Winter
+Bombardment Beach
+Desert Fury
+Dust Devil
+Final Crusade
+Flash Fire
+ForgottenForestZH
+Heartland Shield
+Killing Fields
+Leipzig Lowlands
+NorthAmerica
+Sand Serpent
+Seaside Mutiny
+Silent River
+TheFrontLine
+Tournament Desert
+Tournament Plains
+Wasteland Warlords
+Winding River
+Winter Wolf
+Cairo Commandos
+Flash Effect
+Bear Town Beatdown
+Dark Mountain
+Dark Night
+DogsOfWar
+Eastern Everglades
+El Scorcho
+Fallen Empire
+FloodedPlains
+Golden Oasis
+Homeland Alliance
+Lights Out
+Lone Eagle
+Manic Aggression
+MountainFox
+Overland
+Rocky Rampage
+Rogue Agent
+Tournament Continent
+Tournament Island
+Tournament Lake
+Tournament Tundra
+Tournament Urban
+TournamentA
+TournamentB
+Victory Valley
+Mountain Guns
+Defcon6
+Free Fire Zone
+Green Pastures
+Hostile Dawn
+Red Rock
+Tournament City
+Death Valley
+Destruction Station
+Fortress Avalanche
+Iron Dragon
+Twilight Flame
+Whiteout
+</QMMaps>
+
+<Manglers>
+  mangler1.generals.ea.com:4321
+  mangler2.generals.ea.com:4321
+  mangler3.generals.ea.com:4321
+  mangler4.generals.ea.com:4321
+</Manglers>
+
+<PingServers>
+  211.233.72.38
+  211.13.230.102
+  159.153.224.10
+  159.153.176.3
+  211.72.252.17
+  12.161.70.198
+</PingServers>
+
+<PingDuration>
+  reps = 1
+  timeout = 1000
+  low = 100
+  med = 400
+</PingDuration>
+
+<Ladders>
+  <Ladder 12.129.199.239 8000 http://generals.igl.net/>
+    Name Zero Hour Official 1 vs 1 Ladder
+    Desc Case's Ladder runs the Official Ladder
+    Loc The world's largest gaming league!
+    TeamSize 1
+    RandomMaps 1
+    RandomFactions 0
+    MinWins 0
+    MaxWins 0
+    Map Alpine Assault
+    Map BarrenBadlands
+    Map Bitter Winter
+    Map Bombardment Beach
+    Map Desert Fury
+    Map Dust Devil
+    Map Final Crusade
+    Map Flash Fire
+    Map Heartland Shield
+    Map Killing Fields
+    Map Leipzig Lowlands
+    Map Sand Serpent
+    Map Silent River
+    Map Tournament Desert
+    Map Tournament Plains
+    Map Wasteland Warlords
+    Map Winding River
+    Map Winter Wolf
+  </Ladder>
+  <Ladder 66.246.55.250 7483 http://www.clanleagues.net/>
+     Name ClanLeagues.Net 1v1
+     Desc 1v1 Random Opponent All Teams Ladder
+     Loc Gaming Without Limits - ClanLeagues.Net
+     TeamSize 1
+     RandomMaps 1
+     RandomFactions 0
+     MinWins 0
+     MaxWins 0
+     Map Alpine Assault
+     Map BarrenBadlands
+     Map Bitter Winter
+     Map Bombardment Beach
+     Map Desert Fury
+     Map Dust Devil
+     Map Final Crusade
+     Map Flash Fire
+     Map Heartland Shield
+     Map Killing Fields
+     Map Leipzig Lowlands
+     Map Sand Serpent
+     Map Silent River
+     Map Tournament Desert
+     Map Tournament Plains
+     Map Wasteland Warlords
+     Map Winding River
+     Map Winter Wolf
+     Map Cairo Commandos
+     Map Flash Effect
+     Map Bear Town Beatdown
+     Map Dark Mountain
+     Map Dark Night
+     Map Eastern Everglades
+     Map El Scorcho
+     Map Fallen Empire
+     Map Golden Oasis
+     Map Homeland Alliance
+     Map Lights Out
+     Map Lone Eagle
+     Map Overland Offensive
+     Map Rocky Rampage
+     Map Rogue Agent
+     Map Tournament Continent
+     Map Tournament Island
+     Map Tournament Lake
+     Map Tournament Tundra
+     Map Tournament Urban
+     Map Victory Valley
+  </Ladder>
+  <Ladder 66.246.55.250 7583 http://www.clanleagues.net/>
+     Name ClanLeagues.Net Original Armies 1v1
+     Desc 1v1 Random Opponent Original Armies Ladder
+     Loc Gaming Without Limits - ClanLeagues.Net
+     TeamSize 1
+     RandomMaps 1
+     RandomFactions 0
+     Faction America
+     Faction China
+     Faction GLA
+     MinWins 0
+     MaxWins 0
+     Map Alpine Assault
+     Map BarrenBadlands
+     Map Bitter Winter
+     Map Bombardment Beach
+     Map Desert Fury
+     Map Dust Devil
+     Map Final Crusade
+     Map Heartland Shield
+     Map Killing Fields
+     Map Leipzig Lowlands
+     Map Winding River
+     Map Cairo Commandos
+     Map Flash Effect
+     Map Bear Town Beatdown
+     Map Dark Night
+     Map Eastern Everglades
+     Map El Scorcho
+     Map Lights Out
+     Map Tournament Continent
+     Map Tournament Urban
+     Map Victory Valley
+  </Ladder>
+</Ladders>
+
+<VIP>
+  27553059
+</VIP>
+
+<NAT>
+  retryInterval = 1000
+  manglerRetries = 25
+  manglerInterval = 300
+  keepaliveInterval = 15000
+  portTimeout = 10000
+  roundTimeout = 10000
+</NAT>
+
+<Custom>
+  restricted = 1
+</Custom>
+
+  

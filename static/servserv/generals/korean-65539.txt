@@ -1,0 +1,1 @@
+patch 1 ftp://ftp.ea.com/pub/eapacific/generals/generals/65544_65539_korean.rtp
