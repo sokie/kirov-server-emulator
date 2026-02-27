@@ -439,7 +439,9 @@ class TestSakeServiceIntegration:
         # 20 fields (>10) triggers positional stats mode
         requested_fields = [f"field_{i}" for i in range(20)]
 
-        response = handle_get_my_records(login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_RA)
+        response = handle_get_my_records(
+            login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_RA
+        )
         xml = wrap_soap_envelope(response)
 
         assert "GetMyRecordsResponse" in xml
@@ -454,7 +456,9 @@ class TestSakeServiceIntegration:
         login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
         requested_fields = [f"field_{i}" for i in range(20)]
 
-        response = handle_get_my_records(login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_KW)
+        response = handle_get_my_records(
+            login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_KW
+        )
         xml = wrap_soap_envelope(response)
 
         assert "GetMyRecordsResponse" in xml
@@ -469,7 +473,9 @@ class TestSakeServiceIntegration:
         login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
         requested_fields = [f"field_{i}" for i in range(20)]
 
-        response = handle_get_my_records(login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_TW)
+        response = handle_get_my_records(
+            login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_TW
+        )
         xml = wrap_soap_envelope(response)
 
         assert "GetMyRecordsResponse" in xml

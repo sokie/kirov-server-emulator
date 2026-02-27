@@ -620,20 +620,24 @@ def handle_search_for_records(
     # Handle NewsTicker - return news messages
     elif "NewsTicker" in str(table_id) or "ticker" in str(filter_str).lower():
         for msg in NEWS_TICKER_MESSAGES:
-            record_lists.append([
-                RecordValue.from_unicode_string(msg),
-                RecordValue.from_int(0),
-                RecordValue.from_short(1),
-            ])
+            record_lists.append(
+                [
+                    RecordValue.from_unicode_string(msg),
+                    RecordValue.from_int(0),
+                    RecordValue.from_short(1),
+                ]
+            )
 
     # Handle RatingPlayer - return player rating data
     elif "RatingPlayer" in str(table_id):
-        record_lists.append([
-            RecordValue.from_ascii_string(""),
-            RecordValue.from_int(profile_id),
-            RecordValue.from_int(0),
-            RecordValue.from_int(0),
-        ])
+        record_lists.append(
+            [
+                RecordValue.from_ascii_string(""),
+                RecordValue.from_int(profile_id),
+                RecordValue.from_int(0),
+                RecordValue.from_int(0),
+            ]
+        )
 
     # Handle custom_maps - return static map data
     elif "custom_maps" in str(table_id) or "maps" in str(filter_str).lower():

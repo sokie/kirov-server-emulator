@@ -271,7 +271,9 @@ class FeslServer(asyncio.Protocol):
                 if isinstance(parsed_model, HelloClient) and parsed_model.clientString:
                     self.active_game = CLIENT_STRING_MAP.get(parsed_model.clientString)
                     self.client_data["active_game"] = self.active_game
-                    logger.debug("Detected game type: %s (clientString=%s)", self.active_game, parsed_model.clientString)
+                    logger.debug(
+                        "Detected game type: %s (clientString=%s)", self.active_game, parsed_model.clientString
+                    )
 
                 # Set client_data context for handlers
                 client_data_var.set(self.client_data)
