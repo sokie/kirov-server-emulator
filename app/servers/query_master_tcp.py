@@ -17,6 +17,8 @@ from app.servers.query_master_parsing import (
     build_game_list_response,
     build_room_list_response,
     create_default_rooms,
+    create_rooms_by_game,
+    get_field_types_for_game,
     is_room_list_request,
     parse_filter_string,
     parse_tcp_query,
@@ -50,12 +52,17 @@ class QueryMasterHandler:
         self.master_ip = master_ip
         self.master_port = master_port
         self.gamekeys = gamekeys or app_config.game.gamekeys
-        self.rooms: list = []  # List of RoomEntry
+        self.rooms: list = []  # List of RoomEntry (legacy, RA3 default)
+        self.rooms_by_game: dict[str, list] = {}  # GameSpy game name -> rooms
         self.games: list = []  # List of GameEntry
 
     def set_rooms(self, rooms: list):
-        """Set the list of available rooms."""
+        """Set the list of available rooms (legacy, used as fallback)."""
         self.rooms = rooms
+
+    def set_rooms_by_game(self, rooms_by_game: dict[str, list]):
+        """Set per-game room lists keyed by GameSpy game name."""
+        self.rooms_by_game = rooms_by_game
 
     def set_games(self, games: list):
         """Set the list of available game sessions."""
@@ -126,8 +133,13 @@ class QueryMasterHandler:
             return response
 
     def _handle_room_list_request(self, request: QueryRequest, client_ip: str) -> bytes:
-        """Handle a room list request."""
+        """Handle a room list request, returning game-specific rooms."""
         logger.info("Handling room list request for %s", request.game_name)
+
+        # Look up rooms for this specific game, fall back to legacy list
+        game_name = request.game_name.lower()
+        rooms = self.rooms_by_game.get(game_name, self.rooms)
+        logger.debug("Returning %d rooms for game %s", len(rooms), game_name)
 
         # Use requested fields or defaults
         fields = (
@@ -144,13 +156,13 @@ class QueryMasterHandler:
         )
 
         return build_room_list_response(
-            rooms=self.rooms,
+            rooms=rooms,
             fields=fields,
             client_ip=client_ip,
         )
 
     def _handle_game_list_request(self, request: QueryRequest, client_ip: str) -> bytes:
-        """Handle a game list request."""
+        """Handle a game list request with per-game field types."""
         logger.info("Handling game list request for %s", request.game_name)
 
         # Parse filter conditions
@@ -166,14 +178,16 @@ class QueryMasterHandler:
 
         logger.info("Game list: %d total, %d after filter", len(all_games), len(filtered_games))
 
-        # Use requested fields
+        # Use requested fields and per-game field types
         fields = request.fields if request.fields else []
+        field_types = get_field_types_for_game(request.game_name.lower())
 
         return build_game_list_response(
             games=filtered_games,
             fields=fields,
             client_ip=client_ip,
             validate_token=request.validate_token,
+            field_types=field_types,
         )
 
     def _filter_games(self, games: list, filter_conditions: list) -> list:
@@ -268,6 +282,7 @@ class QueryMasterServer(asyncio.Protocol):
         if cls._handler is None:
             cls._handler = QueryMasterHandler()
             cls._handler.set_rooms(create_default_rooms())
+            cls._handler.set_rooms_by_game(create_rooms_by_game())
         return cls._handler
 
     def __init__(self):
@@ -374,6 +389,7 @@ async def start_master_server(
         gamekeys=gamekeys,
     )
     handler.set_rooms(create_default_rooms())
+    handler.set_rooms_by_game(create_rooms_by_game())
     QueryMasterServer.set_handler(handler)
 
     logger.info("Master server using gamekeys for %d games", len(handler.gamekeys))

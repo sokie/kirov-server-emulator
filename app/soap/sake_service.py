@@ -4,11 +4,11 @@ Sake Storage Server - SOAP service for game statistics and configuration.
 Endpoint: /SakeStorageServer/StorageServer.asmx
 
 This service handles:
-- GetMyRecords: Returns player's career stats (190 RecordValue elements for RA3)
+- GetMyRecords: Returns player's career stats (game-specific positional layout)
 - GetSpecificRecords: Returns table data (ScoringMultipliers, TickerMgmt)
-- SearchForRecords: Search tables (Levels, NewsTicker, PlayerStats_v5, custom_maps)
+- SearchForRecords: Search tables (Levels, NewsTicker, PlayerStats, RatingPlayer, custom_maps)
 
-The game relies on this service for displaying stats, ranks, and leaderboards.
+Supports RA3 (game ID 2128), Kane's Wrath (1814), and Tiberium Wars (1422).
 """
 
 import base64
@@ -19,7 +19,7 @@ from sqlmodel import select
 
 from app.db.crud import get_player_level, get_player_stats
 from app.db.database import create_session
-from app.models.models import Persona
+from app.models.models import Persona, PlayerStats
 from app.soap.envelope import (
     create_soap_fault,
     extract_soap_body,
@@ -42,6 +42,11 @@ sake_router = APIRouter()
 
 # Namespace definitions
 SAKE_NS = "http://gamespy.net/sake"
+
+# Game ID constants
+GAME_ID_KW = 1814
+GAME_ID_TW = 1422
+GAME_ID_RA = 2128
 
 # XP thresholds for 87 ranks (Levels table)
 LEVEL_THRESHOLDS = [
@@ -137,6 +142,14 @@ LEVEL_THRESHOLDS = [
 # Scoring multipliers (fixed values)
 SCORING_MULTIPLIERS = [1, 2, 2, 5]
 
+# News ticker messages shown in-game
+NEWS_TICKER_MESSAGES = [
+    "Welcome to the server! Enjoy your games.",
+]
+
+# Custom maps static data
+CUSTOM_MAPS_DATA = [8389, -972957748, 66624219, 0, 0, 0, 66624239, 0, 66624260]
+
 
 def parse_login_ticket(login_ticket: str) -> tuple[int, int]:
     """
@@ -172,21 +185,274 @@ def get_requested_fields(operation: ET.Element) -> list[str]:
     return fields
 
 
-def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: list[str]) -> GetMyRecordsResponse:
+# =============================================================================
+# Game-specific career stats builders
+# =============================================================================
+
+
+def _get_mode_values(stats: PlayerStats | None, attr_prefix: str) -> list:
+    """Get values for all 5 game modes from a PlayerStats object."""
+    if stats is None:
+        return [0, 0, 0, 0, 0]
+    return [
+        getattr(stats, f"{attr_prefix}_unranked", 0),
+        getattr(stats, f"{attr_prefix}_ranked_1v1", 0),
+        getattr(stats, f"{attr_prefix}_ranked_2v2", 0),
+        getattr(stats, f"{attr_prefix}_clan_1v1", 0),
+        getattr(stats, f"{attr_prefix}_clan_2v2", 0),
+    ]
+
+
+def _build_kw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
+    """
+    Build 420-element KW career stats array.
+
+    Layout matches reference getmyrecordskw.php with 6-element groups
+    (5 modes + total) for each stat category.
+    """
+    wins = _get_mode_values(stats, "wins")
+    losses = _get_mode_values(stats, "losses")
+    disconnects = _get_mode_values(stats, "disconnects")
+    desyncs = _get_mode_values(stats, "desyncs")
+    avg_gl = _get_mode_values(stats, "avg_game_length")
+    win_ratio = _get_mode_values(stats, "win_ratio")
+
+    total_matches = [w + l + d + ds for w, l, d, ds in zip(wins, losses, disconnects, desyncs)]
+    total_all_online = sum(total_matches)
+
+    records: list[RecordValue] = []
+
+    # [0-23] 24 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 24)
+
+    # [24-29] TotalMatches per mode + total
+    for tm in total_matches:
+        records.append(RecordValue.from_int(tm))
+    records.append(RecordValue.from_int(total_all_online))
+
+    # [30-101] 72 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 72)
+
+    # [102-107] Career Losses per mode + total
+    for val in losses:
+        records.append(RecordValue.from_int(val))
+    records.append(RecordValue.from_int(sum(losses)))
+
+    # [108-179] 72 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 72)
+
+    # [180-185] Career Wins per mode + total
+    for val in wins:
+        records.append(RecordValue.from_int(val))
+    records.append(RecordValue.from_int(sum(wins)))
+
+    # [186-257] 72 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 72)
+
+    # [258-263] Win/Loss Ratio per mode + total (float)
+    for val in win_ratio:
+        records.append(RecordValue.from_float(float(val)))
+    records.append(RecordValue.from_float(float(sum(win_ratio))))
+
+    # [264-335] 72 float(0) padding
+    records.extend([RecordValue.from_float(0.0)] * 72)
+
+    # [336-341] Average Game Length per mode + average
+    for val in avg_gl:
+        records.append(RecordValue.from_int(val))
+    # Average of non-zero avg game lengths (or first value like reference)
+    non_zero = [a for a in avg_gl if a > 0]
+    avg_of_avg = sum(non_zero) // len(non_zero) if non_zero else 0
+    records.append(RecordValue.from_int(avg_of_avg))
+
+    # [342-347] 6 int(0) - Total time played (not tracked)
+    records.extend([RecordValue.from_int(0)] * 6)
+
+    # [348-389] 42 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 42)
+
+    # [390-395] 6 float(0) - Unit KDR (not tracked)
+    records.extend([RecordValue.from_float(0.0)] * 6)
+
+    # [396-401] 6 int(0) - CareerInputCommands (not tracked)
+    records.extend([RecordValue.from_int(0)] * 6)
+
+    # [402-407] 6 int(0) - Avg CareerInputCommands (not tracked)
+    records.extend([RecordValue.from_int(0)] * 6)
+
+    # [408-413] Disconnects per mode + total
+    for val in disconnects:
+        records.append(RecordValue.from_int(val))
+    records.append(RecordValue.from_int(sum(disconnects)))
+
+    # [414-419] Desyncs per mode + total
+    for val in desyncs:
+        records.append(RecordValue.from_int(val))
+    records.append(RecordValue.from_int(sum(desyncs)))
+
+    return records
+
+
+def _build_tw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
+    """
+    Build 160-element TW career stats array.
+
+    Layout matches reference getmyrecordstw.php with 5-element groups
+    (5 modes, no totals) for each stat category.
+    """
+    wins = _get_mode_values(stats, "wins")
+    losses = _get_mode_values(stats, "losses")
+    disconnects = _get_mode_values(stats, "disconnects")
+    desyncs = _get_mode_values(stats, "desyncs")
+    avg_gl = _get_mode_values(stats, "avg_game_length")
+    win_ratio = _get_mode_values(stats, "win_ratio")
+
+    total_matches = [w + l + d + ds for w, l, d, ds in zip(wins, losses, disconnects, desyncs)]
+
+    records: list[RecordValue] = []
+
+    # [0-19] 20 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 20)
+
+    # [20-24] TotalMatches per mode
+    for tm in total_matches:
+        records.append(RecordValue.from_int(tm))
+
+    # [25-39] 15 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 15)
+
+    # [40-44] Career Losses per mode
+    for val in losses:
+        records.append(RecordValue.from_int(val))
+
+    # [45-59] 15 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 15)
+
+    # [60-64] Career Wins per mode
+    for val in wins:
+        records.append(RecordValue.from_int(val))
+
+    # [65-79] 15 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 15)
+
+    # [80-84] Win/Loss Ratio per mode (float)
+    for val in win_ratio:
+        records.append(RecordValue.from_float(float(val)))
+
+    # [85-99] 15 float(0) padding
+    records.extend([RecordValue.from_float(0.0)] * 15)
+
+    # [100-104] Average Game Length per mode
+    for val in avg_gl:
+        records.append(RecordValue.from_int(val))
+
+    # [105-144] 40 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 40)
+
+    # [145-149] 5 float(0) padding
+    records.extend([RecordValue.from_float(0.0)] * 5)
+
+    # [150-154] Disconnects per mode
+    for val in disconnects:
+        records.append(RecordValue.from_int(val))
+
+    # [155-159] Desyncs per mode
+    for val in desyncs:
+        records.append(RecordValue.from_int(val))
+
+    return records
+
+
+def _build_ra_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
+    """
+    Build 190-element RA3 career stats array.
+
+    Same as TW through position 149, then 30 RA-specific int(0) padding,
+    then disconnects and desyncs.
+    """
+    wins = _get_mode_values(stats, "wins")
+    losses = _get_mode_values(stats, "losses")
+    disconnects = _get_mode_values(stats, "disconnects")
+    desyncs = _get_mode_values(stats, "desyncs")
+    avg_gl = _get_mode_values(stats, "avg_game_length")
+    win_ratio = _get_mode_values(stats, "win_ratio")
+
+    total_matches = [w + l + d + ds for w, l, d, ds in zip(wins, losses, disconnects, desyncs)]
+
+    records: list[RecordValue] = []
+
+    # [0-19] 20 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 20)
+
+    # [20-24] TotalMatches per mode
+    for tm in total_matches:
+        records.append(RecordValue.from_int(tm))
+
+    # [25-39] 15 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 15)
+
+    # [40-44] Career Losses per mode
+    for val in losses:
+        records.append(RecordValue.from_int(val))
+
+    # [45-59] 15 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 15)
+
+    # [60-64] Career Wins per mode
+    for val in wins:
+        records.append(RecordValue.from_int(val))
+
+    # [65-79] 15 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 15)
+
+    # [80-84] Win/Loss Ratio per mode (float)
+    for val in win_ratio:
+        records.append(RecordValue.from_float(float(val)))
+
+    # [85-99] 15 float(0) padding
+    records.extend([RecordValue.from_float(0.0)] * 15)
+
+    # [100-104] Average Game Length per mode
+    for val in avg_gl:
+        records.append(RecordValue.from_int(val))
+
+    # [105-144] 40 int(0) padding
+    records.extend([RecordValue.from_int(0)] * 40)
+
+    # [145-149] 5 float(0) padding
+    records.extend([RecordValue.from_float(0.0)] * 5)
+
+    # [150-179] 30 int(0) - RA-specific extra padding
+    records.extend([RecordValue.from_int(0)] * 30)
+
+    # [180-184] Disconnects per mode
+    for val in disconnects:
+        records.append(RecordValue.from_int(val))
+
+    # [185-189] Desyncs per mode
+    for val in desyncs:
+        records.append(RecordValue.from_int(val))
+
+    return records
+
+
+# =============================================================================
+# SOAP operation handlers
+# =============================================================================
+
+
+def handle_get_my_records(
+    login_ticket: str,
+    profile_id: int,
+    requested_fields: list[str],
+    game_id: int = GAME_ID_RA,
+) -> GetMyRecordsResponse:
     """
     Handle GetMyRecords SOAP operation.
 
-    Returns values for the requested fields.
-
-    Args:
-        login_ticket: The login ticket containing user/persona IDs.
-        profile_id: The profile ID (fallback if ticket parsing fails).
-        requested_fields: List of field names to return values for.
-
-    Returns:
-        GetMyRecordsResponse with record values.
+    For small requests (<=10 fields): returns field-based values (score, rank).
+    For large requests (>10 fields): returns game-specific positional career stats.
     """
-    # Validate and extract profile ID from login ticket
     user_id, ticket_profile_id = parse_login_ticket(login_ticket)
     if user_id == 0 or ticket_profile_id == 0:
         logger.warning("Sake GetMyRecords: Invalid login ticket")
@@ -195,22 +461,33 @@ def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: 
     profile_id = ticket_profile_id
 
     logger.debug(
-        "Sake GetMyRecords: profileId=%s, num_fields=%d, fields=%s",
+        "Sake GetMyRecords: profileId=%s, game_id=%s, num_fields=%d",
         profile_id,
+        game_id,
         len(requested_fields),
-        requested_fields[:5] if requested_fields else [],
     )
 
-    # If no fields requested, return empty values
     if not requested_fields:
         return GetMyRecordsResponse.success_empty()
 
     session = create_session()
     try:
-        _stats = get_player_stats(session, profile_id)  # Reserved for future stat fields
+        # Large request = full positional career stats
+        if len(requested_fields) > 10:
+            stats = get_player_stats(session, profile_id)
+
+            if game_id == GAME_ID_KW:
+                records = _build_kw_career_stats(stats)
+            elif game_id == GAME_ID_TW:
+                records = _build_tw_career_stats(stats)
+            else:
+                records = _build_ra_career_stats(stats)
+
+            return GetMyRecordsResponse.success(records)
+
+        # Small request = field-name based (score/rank)
         level = get_player_level(session, profile_id)
 
-        # Build record values for each requested field (always return values, using defaults if needed)
         records = []
         for field in requested_fields:
             value = 0
@@ -220,7 +497,6 @@ def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: 
                 value = level.score if level else 0
             elif field_lower == "rank":
                 value = level.rank if level else 1
-            # All other fields default to 0
 
             records.append(RecordValue.from_int(value))
 
@@ -229,40 +505,45 @@ def handle_get_my_records(login_ticket: str, profile_id: int, requested_fields: 
         session.close()
 
 
-def handle_get_specific_records(table_id: str, login_ticket: str) -> GetSpecificRecordsResponse:
+def handle_get_specific_records(
+    table_id: str,
+    login_ticket: str,
+    game_id: int = GAME_ID_RA,
+) -> GetSpecificRecordsResponse:
     """
     Handle GetSpecificRecords SOAP operation.
 
-    Returns table data like ScoringMultipliers.
-
-    Args:
-        table_id: The table identifier.
-        login_ticket: The login ticket for authentication validation.
-
-    Returns:
-        GetSpecificRecordsResponse with record values.
+    Returns table data like ScoringMultipliers and TickerMgmt.
     """
-    # Validate login ticket
     user_id, profile_id = parse_login_ticket(login_ticket)
     if user_id == 0 or profile_id == 0:
         logger.warning("Sake GetSpecificRecords: Invalid login ticket")
         return GetSpecificRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
 
-    logger.debug("Sake GetSpecificRecords: tableid=%s", table_id)
+    logger.debug("Sake GetSpecificRecords: tableid=%s, game_id=%s", table_id, game_id)
 
     records = []
 
     if "ScoringMultipliers" in str(table_id) or table_id == "1":
-        # Return scoring multipliers as short values
         for mult in SCORING_MULTIPLIERS:
             records.append(RecordValue.from_short(mult))
+
     elif "UnrankedLosses" in str(table_id):
-        # Return [unrankedLosses, unrankedWins, rankedLosses, rankedWins] as shorts
         records = [
-            RecordValue.from_short(0),  # UnrankedLosses
-            RecordValue.from_short(0),  # UnrankedWins
-            RecordValue.from_short(0),  # RankedLosses
-            RecordValue.from_short(0),  # RankedWins
+            RecordValue.from_short(0),
+            RecordValue.from_short(0),
+            RecordValue.from_short(0),
+            RecordValue.from_short(0),
+        ]
+
+    elif "TickerMgmt" in str(table_id):
+        # Ticker management config: float(30), short(10), float(50), float(25), float(25)
+        records = [
+            RecordValue.from_float(30.0),
+            RecordValue.from_short(10),
+            RecordValue.from_float(50.0),
+            RecordValue.from_float(25.0),
+            RecordValue.from_float(25.0),
         ]
 
     if records:
@@ -271,44 +552,34 @@ def handle_get_specific_records(table_id: str, login_ticket: str) -> GetSpecific
         return GetSpecificRecordsResponse.success_empty()
 
 
-def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str) -> SearchForRecordsResponse:
+def handle_search_for_records(
+    table_id: str,
+    filter_str: str,
+    login_ticket: str,
+    game_id: int = GAME_ID_RA,
+) -> SearchForRecordsResponse:
     """
     Handle SearchForRecords SOAP operation.
 
-    Handles searches for:
-    - Levels: XP thresholds for 87 ranks
-    - NewsTicker: News/announcements
-    - PlayerStats_v5: Leaderboard data
-    - custom_maps: Custom map list
-
-    Args:
-        table_id: The table identifier.
-        filter_str: The filter string for the search.
-        login_ticket: The login ticket for authentication validation.
-
-    Returns:
-        SearchForRecordsResponse with search results.
+    Handles searches for Levels, NewsTicker, PlayerStats, RatingPlayer, and custom_maps.
     """
-    # Validate login ticket
     user_id, profile_id = parse_login_ticket(login_ticket)
     if user_id == 0 or profile_id == 0:
         logger.warning("Sake SearchForRecords: Invalid login ticket")
         return SearchForRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
 
-    logger.debug("Sake SearchForRecords: tableid=%s, filter=%s", table_id, filter_str)
+    logger.debug("Sake SearchForRecords: tableid=%s, filter=%s, game_id=%s", table_id, filter_str, game_id)
 
     record_lists: list[list[RecordValue]] = []
 
     # Handle Levels table - return XP thresholds
     if "Levels" in str(table_id) or "levels" in str(filter_str).lower():
         for threshold in LEVEL_THRESHOLDS:
-            # Each level is a single-element ArrayOfRecordValue
             record_lists.append([RecordValue.from_int(threshold)])
 
-    # Handle PlayerStats_v5 - leaderboard or ownerid lookup
+    # Handle PlayerStats - leaderboard or ownerid lookup
     elif "PlayerStats" in str(table_id) or "playerstats" in str(filter_str).lower():
         if "ownerid=" in filter_str.lower():
-            # Extract owner ID from filter
             filter_lower = filter_str.lower()
             owner_id_start = filter_lower.find("ownerid=") + len("ownerid=")
             owner_id_str = ""
@@ -319,7 +590,6 @@ def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str)
                     break
             owner_id = int(owner_id_str) if owner_id_str else 0
 
-            # Return single ArrayOfRecordValue with [rank, ownerId]
             record_lists.append(
                 [
                     RecordValue.from_int(57),
@@ -327,7 +597,6 @@ def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str)
                 ]
             )
         else:
-            # General leaderboard query
             session = create_session()
             try:
                 stmt = select(Persona).limit(100)
@@ -338,7 +607,6 @@ def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str)
                     rank = level.rank if level else 1
                     score = level.score if level else 0
 
-                    # Each player is an ArrayOfRecordValue with [profileId, rank, score]
                     record_lists.append(
                         [
                             RecordValue.from_int(persona.id),
@@ -349,15 +617,27 @@ def handle_search_for_records(table_id: str, filter_str: str, login_ticket: str)
             finally:
                 session.close()
 
-    # Handle NewsTicker
+    # Handle NewsTicker - return news messages
     elif "NewsTicker" in str(table_id) or "ticker" in str(filter_str).lower():
-        # Return empty news ticker (can be expanded)
-        pass
+        for msg in NEWS_TICKER_MESSAGES:
+            record_lists.append([
+                RecordValue.from_unicode_string(msg),
+                RecordValue.from_int(0),
+                RecordValue.from_short(1),
+            ])
 
-    # Handle custom_maps
+    # Handle RatingPlayer - return player rating data
+    elif "RatingPlayer" in str(table_id):
+        record_lists.append([
+            RecordValue.from_ascii_string(""),
+            RecordValue.from_int(profile_id),
+            RecordValue.from_int(0),
+            RecordValue.from_int(0),
+        ])
+
+    # Handle custom_maps - return static map data
     elif "custom_maps" in str(table_id) or "maps" in str(filter_str).lower():
-        # Return empty custom maps list (can be expanded)
-        pass
+        record_lists.append([RecordValue.from_int(v) for v in CUSTOM_MAPS_DATA])
 
     if record_lists:
         return SearchForRecordsResponse.success(record_lists)
@@ -384,30 +664,33 @@ async def sake_storage_handler(request: Request) -> Response:
         operation_name = get_operation_name(operation)
         logger.debug("Sake: Operation=%s", operation_name)
 
+        # Extract game ID from request
+        game_id_str = get_element_text(operation, "gameid")
+        game_id = int(game_id_str) if game_id_str else GAME_ID_RA
+
         if "GetMyRecords" in soap_action or operation_name == "GetMyRecords":
             login_ticket = get_element_text(operation, "loginTicket")
             profile_id_str = get_element_text(operation, "profileId")
             profile_id = int(profile_id_str) if profile_id_str else 0
             requested_fields = get_requested_fields(operation)
 
-            response_model = handle_get_my_records(login_ticket, profile_id, requested_fields)
+            response_model = handle_get_my_records(login_ticket, profile_id, requested_fields, game_id)
             response_xml = wrap_soap_envelope(response_model)
 
         elif "GetSpecificRecords" in soap_action or operation_name == "GetSpecificRecords":
             table_id = get_element_text(operation, "tableid")
             login_ticket = get_element_text(operation, "loginTicket")
-            response_model = handle_get_specific_records(table_id, login_ticket)
+            response_model = handle_get_specific_records(table_id, login_ticket, game_id)
             response_xml = wrap_soap_envelope(response_model)
 
         elif "SearchForRecords" in soap_action or operation_name == "SearchForRecords":
             table_id = get_element_text(operation, "tableid")
             filter_str = get_element_text(operation, "filter")
             login_ticket = get_element_text(operation, "loginTicket")
-            response_model = handle_search_for_records(table_id, filter_str, login_ticket)
+            response_model = handle_search_for_records(table_id, filter_str, login_ticket, game_id)
             response_xml = wrap_soap_envelope(response_model)
 
         else:
-            # Return generic success for unknown operations
             response_model = GetMyRecordsResponse(result="Success")
             response_xml = wrap_soap_envelope(response_model)
 

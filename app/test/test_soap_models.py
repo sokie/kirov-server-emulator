@@ -26,6 +26,9 @@ from app.soap.models.sake import (
     SAKEResultCode,
 )
 from app.soap.sake_service import (
+    GAME_ID_KW,
+    GAME_ID_RA,
+    GAME_ID_TW,
     LEVEL_THRESHOLDS,
     SCORING_MULTIPLIERS,
     get_requested_fields,
@@ -111,13 +114,52 @@ class TestSakeService:
         # Should have 87 ArrayOfRecordValue elements (one per level)
         assert xml.count("<ArrayOfRecordValue>") == len(LEVEL_THRESHOLDS)
 
-    def test_search_for_records_news_ticker_returns_empty(self):
-        """Test SearchForRecords returns empty for NewsTicker table."""
+    def test_search_for_records_news_ticker_returns_messages(self):
+        """Test SearchForRecords returns news messages for NewsTicker table."""
         response = handle_search_for_records("NewsTicker", "", VALID_LOGIN_TICKET)
         xml = wrap_soap_envelope(response)
 
         assert "SearchForRecordsResponse" in xml
         assert "<SearchForRecordsResult>Success</SearchForRecordsResult>" in xml
+        # Should have at least one ArrayOfRecordValue with unicode string, int, short
+        assert xml.count("<ArrayOfRecordValue>") >= 1
+        assert "<unicodeStringValue>" in xml
+        assert "<shortValue><value>1</value></shortValue>" in xml
+
+    def test_search_for_records_rating_player(self):
+        """Test SearchForRecords returns player rating data for RatingPlayer table."""
+        response = handle_search_for_records("RatingPlayer", "", VALID_LOGIN_TICKET)
+        xml = wrap_soap_envelope(response)
+
+        assert "SearchForRecordsResponse" in xml
+        assert "<SearchForRecordsResult>Success</SearchForRecordsResult>" in xml
+        assert xml.count("<ArrayOfRecordValue>") == 1
+        assert "<asciiStringValue>" in xml
+        # Profile ID from test ticket is 67890
+        assert "<intValue><value>67890</value></intValue>" in xml
+
+    def test_search_for_records_custom_maps(self):
+        """Test SearchForRecords returns map data for custom_maps table."""
+        response = handle_search_for_records("custom_maps", "", VALID_LOGIN_TICKET)
+        xml = wrap_soap_envelope(response)
+
+        assert "SearchForRecordsResponse" in xml
+        assert "<SearchForRecordsResult>Success</SearchForRecordsResult>" in xml
+        assert xml.count("<ArrayOfRecordValue>") == 1
+        # 9 int values
+        assert xml.count("<RecordValue>") == 9
+        assert "<intValue><value>8389</value></intValue>" in xml
+
+    def test_get_specific_records_ticker_mgmt(self):
+        """Test GetSpecificRecords returns TickerMgmt config values."""
+        response = handle_get_specific_records("TickerMgmt", VALID_LOGIN_TICKET)
+        xml = wrap_soap_envelope(response)
+
+        assert "GetSpecificRecordsResponse" in xml
+        assert "<GetSpecificRecordsResult>Success</GetSpecificRecordsResult>" in xml
+        assert "<floatValue><value>30" in xml
+        assert "<shortValue><value>10</value></shortValue>" in xml
+        assert "<floatValue><value>50" in xml
 
     def test_search_for_records_invalid_login_ticket(self):
         """Test SearchForRecords returns LoginTicketInvalid for invalid ticket."""
@@ -299,6 +341,22 @@ class TestRecordValueSerialization:
         assert "<RecordValue>" in xml
         assert "<shortValue><value>100</value></shortValue>" in xml
 
+    def test_record_value_from_unicode_string(self):
+        """Test RecordValue.from_unicode_string serializes correctly."""
+        record = RecordValue.from_unicode_string("Hello World")
+        xml = record.to_xml(encoding="unicode")
+
+        assert "<RecordValue>" in xml
+        assert "<unicodeStringValue><value>Hello World</value></unicodeStringValue>" in xml
+
+    def test_record_value_from_ascii_string(self):
+        """Test RecordValue.from_ascii_string serializes correctly."""
+        record = RecordValue.from_ascii_string("test")
+        xml = record.to_xml(encoding="unicode")
+
+        assert "<RecordValue>" in xml
+        assert "<asciiStringValue><value>test</value></asciiStringValue>" in xml
+
 
 class TestSakeServiceIntegration:
     """Integration tests using real game request formats."""
@@ -371,81 +429,68 @@ class TestSakeServiceIntegration:
         # Owner ID echoed back
         assert "<intValue><value>12345</value></intValue>" in xml
 
-    def test_get_my_records_player_stats_with_many_fields(self):
+    def test_get_my_records_player_stats_ra_positional(self):
         """
-        Test GetMyRecords for PlayerStats_v5 with many stat fields.
-
-        Based on real game request format - tests field extraction and response
-        returns correct number of values for each requested field.
+        Test GetMyRecords returns 190-element RA3 positional career stats
+        when more than 10 fields are requested.
         """
-        # Test login ticket: base64("12345|67890|testtoken")
         login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
 
-        # Real game request format with test data (190 stat fields)
-        request_body = f"""<?xml version="1.0" encoding="UTF-8"?>
-<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"
-                   xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/"
-                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-                   xmlns:ns1="http://gamespy.net/sake">
-    <SOAP-ENV:Body>
-        <ns1:GetMyRecords>
-            <ns1:gameid>2128</ns1:gameid>
-            <ns1:secretKey>testkey</ns1:secretKey>
-            <ns1:loginTicket>{login_ticket}</ns1:loginTicket>
-            <ns1:tableid>PlayerStats_v5</ns1:tableid>
-            <ns1:fields>
-                <ns1:string>CurrentWinStreak_UNRANKED</ns1:string>
-                <ns1:string>CurrentWinStreak_RANKED1V1</ns1:string>
-                <ns1:string>CurrentWinStreak_RANKED2V2</ns1:string>
-                <ns1:string>CurrentWinStreak_CLAN1V1</ns1:string>
-                <ns1:string>CurrentWinStreak_CLAN2V2</ns1:string>
-                <ns1:string>CurrentLossStreak_UNRANKED</ns1:string>
-                <ns1:string>CurrentLossStreak_RANKED1V1</ns1:string>
-                <ns1:string>CurrentLossStreak_RANKED2V2</ns1:string>
-                <ns1:string>CurrentLossStreak_CLAN1V1</ns1:string>
-                <ns1:string>CurrentLossStreak_CLAN2V2</ns1:string>
-                <ns1:string>LongestWinStreak_UNRANKED</ns1:string>
-                <ns1:string>LongestWinStreak_RANKED1V1</ns1:string>
-                <ns1:string>LongestWinStreak_RANKED2V2</ns1:string>
-                <ns1:string>LongestWinStreak_CLAN1V1</ns1:string>
-                <ns1:string>LongestWinStreak_CLAN2V2</ns1:string>
-                <ns1:string>CareerWins_UNRANKED</ns1:string>
-                <ns1:string>CareerWins_RANKED1V1</ns1:string>
-                <ns1:string>CareerLosses_UNRANKED</ns1:string>
-                <ns1:string>CareerLosses_RANKED1V1</ns1:string>
-                <ns1:string>TotalMatches_UNRANKED</ns1:string>
-            </ns1:fields>
-        </ns1:GetMyRecords>
-    </SOAP-ENV:Body>
-</SOAP-ENV:Envelope>"""
+        # 20 fields (>10) triggers positional stats mode
+        requested_fields = [f"field_{i}" for i in range(20)]
 
-        # Parse the SOAP request like the handler does
-        operation = extract_soap_body(request_body)
-        table_id = get_element_text(operation, "tableid")
-        login_ticket_parsed = get_element_text(operation, "loginTicket")
-        requested_fields = get_requested_fields(operation)
-
-        assert table_id == "PlayerStats_v5"
-        assert login_ticket_parsed == login_ticket
-        assert len(requested_fields) == 20
-        assert "CurrentWinStreak_UNRANKED" in requested_fields
-        assert "CareerWins_RANKED1V1" in requested_fields
-        assert "TotalMatches_UNRANKED" in requested_fields
-
-        # Call the handler with parsed values
-        response = handle_get_my_records(login_ticket_parsed, profile_id=67890, requested_fields=requested_fields)
+        response = handle_get_my_records(login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_RA)
         xml = wrap_soap_envelope(response)
 
-        # Verify response structure
         assert "GetMyRecordsResponse" in xml
         assert "<GetMyRecordsResult>Success</GetMyRecordsResult>" in xml
-        assert "soap:Envelope" in xml
-        assert "soap:Body" in xml
-        # Should have values container with RecordValue elements
-        assert "<values>" in xml or "<values/>" in xml
-        # Should return one RecordValue per requested field (20 fields = 20 values)
-        assert xml.count("<RecordValue>") == 20
+        # RA3 returns 190 positional elements
+        assert xml.count("<RecordValue>") == 190
+
+    def test_get_my_records_player_stats_kw_positional(self):
+        """
+        Test GetMyRecords returns 420-element KW positional career stats.
+        """
+        login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
+        requested_fields = [f"field_{i}" for i in range(20)]
+
+        response = handle_get_my_records(login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_KW)
+        xml = wrap_soap_envelope(response)
+
+        assert "GetMyRecordsResponse" in xml
+        assert "<GetMyRecordsResult>Success</GetMyRecordsResult>" in xml
+        # KW returns 420 positional elements
+        assert xml.count("<RecordValue>") == 420
+
+    def test_get_my_records_player_stats_tw_positional(self):
+        """
+        Test GetMyRecords returns 160-element TW positional career stats.
+        """
+        login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
+        requested_fields = [f"field_{i}" for i in range(20)]
+
+        response = handle_get_my_records(login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_TW)
+        xml = wrap_soap_envelope(response)
+
+        assert "GetMyRecordsResponse" in xml
+        assert "<GetMyRecordsResult>Success</GetMyRecordsResult>" in xml
+        # TW returns 160 positional elements
+        assert xml.count("<RecordValue>") == 160
+
+    def test_get_my_records_small_request_uses_field_names(self):
+        """
+        Test GetMyRecords with few fields (<= 10) uses field-name approach.
+        """
+        login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
+        requested_fields = ["score", "rank"]
+
+        response = handle_get_my_records(login_ticket, profile_id=67890, requested_fields=requested_fields)
+        xml = wrap_soap_envelope(response)
+
+        assert "GetMyRecordsResponse" in xml
+        assert "<GetMyRecordsResult>Success</GetMyRecordsResult>" in xml
+        # Small request returns one RecordValue per field
+        assert xml.count("<RecordValue>") == 2
 
     def test_search_for_records_levels_table_with_filter(self):
         """

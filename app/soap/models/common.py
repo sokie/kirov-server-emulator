@@ -25,16 +25,30 @@ class ShortValueWrapper(BaseXmlModel, tag="shortValue"):
     value: int = element(tag="value")
 
 
+class UnicodeStringValueWrapper(BaseXmlModel, tag="unicodeStringValue"):
+    """Wrapper for unicode string values with nested <value> tag."""
+
+    value: str = element(tag="value")
+
+
+class AsciiStringValueWrapper(BaseXmlModel, tag="asciiStringValue"):
+    """Wrapper for ASCII string values with nested <value> tag."""
+
+    value: str = element(tag="value")
+
+
 class RecordValue(BaseXmlModel, tag="RecordValue"):
     """
-    A single record value that can be int, float, or short.
+    A single record value that can be int, float, short, or string.
 
-    Only one of int_value, float_value, or short_value should be set.
+    Only one value field should be set.
     """
 
     int_value: IntValueWrapper | None = element(tag="intValue", default=None)
     float_value: FloatValueWrapper | None = element(tag="floatValue", default=None)
     short_value: ShortValueWrapper | None = element(tag="shortValue", default=None)
+    unicode_string_value: UnicodeStringValueWrapper | None = element(tag="unicodeStringValue", default=None)
+    ascii_string_value: AsciiStringValueWrapper | None = element(tag="asciiStringValue", default=None)
 
     @classmethod
     def from_int(cls, value: int) -> "RecordValue":
@@ -50,6 +64,16 @@ class RecordValue(BaseXmlModel, tag="RecordValue"):
     def from_short(cls, value: int) -> "RecordValue":
         """Create a RecordValue containing a short integer."""
         return cls(short_value=ShortValueWrapper(value=value))
+
+    @classmethod
+    def from_unicode_string(cls, value: str) -> "RecordValue":
+        """Create a RecordValue containing a unicode string."""
+        return cls(unicode_string_value=UnicodeStringValueWrapper(value=value))
+
+    @classmethod
+    def from_ascii_string(cls, value: str) -> "RecordValue":
+        """Create a RecordValue containing an ASCII string."""
+        return cls(ascii_string_value=AsciiStringValueWrapper(value=value))
 
 
 class ArrayOfRecordValue(BaseXmlModel, tag="ArrayOfRecordValue"):

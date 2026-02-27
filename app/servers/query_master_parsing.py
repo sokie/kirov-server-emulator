@@ -506,6 +506,7 @@ def build_game_list_response(
     fields: list,
     client_ip: str = DEFAULT_MASTER_IP,
     validate_token: bytes = b"",
+    field_types: dict | None = None,
 ) -> bytes:
     """
     Build a classic-format game list response.
@@ -534,6 +535,7 @@ def build_game_list_response(
         fields: List of field names to include
         client_ip: Client's IP address (echoed back in response)
         validate_token: 8-byte validate token from request (used to derive query key)
+        field_types: Optional dict mapping field name to type (0=string, 1=binary)
 
     Returns:
         Complete response bytes
@@ -546,8 +548,8 @@ def build_game_list_response(
     # Query key derived from validate token (2 bytes)
     response += _compute_query_key(validate_token)
 
-    # Field list
-    response += make_field_list(fields)
+    # Field list with per-game types
+    response += make_field_list(fields, field_types)
 
     # Separator
     response += b"\x00"
@@ -675,60 +677,200 @@ def build_game_result_message(
     return struct.pack("!H", length) + payload
 
 
-def create_default_rooms() -> list:
-    """Create default room list for Red Alert 3."""
-    rooms = [
-        # Chat rooms
-        RoomEntry(room_id=0x0881, hostname="ChatRoom1", room_type=1),
-        RoomEntry(room_id=0x0896, hostname="ChatRoom1", room_type=2),
-        # Lobby rooms
-        RoomEntry(room_id=0x0876, hostname="LobbyRoom:1", room_type=1),
-        RoomEntry(room_id=0x0877, hostname="LobbyRoom:2", room_type=1),
-        RoomEntry(room_id=0x0878, hostname="LobbyRoom:3", room_type=1),
-        RoomEntry(room_id=0x0879, hostname="LobbyRoom:4", room_type=1),
-        RoomEntry(room_id=0x087A, hostname="LobbyRoom:5", room_type=1),
-        RoomEntry(room_id=0x0880, hostname="LobbyRoom:6", room_type=1),
-        RoomEntry(room_id=0x0884, hostname="LobbyRoom:7", room_type=1),
-        RoomEntry(room_id=0x0882, hostname="LobbyRoom:8", room_type=1),
-        RoomEntry(room_id=0x0885, hostname="LobbyRoom:9", room_type=1),
-        RoomEntry(room_id=0x0887, hostname="LobbyRoom:10", room_type=1),
-        RoomEntry(room_id=0x0883, hostname="LobbyRoom:11", room_type=1),
-        RoomEntry(room_id=0x0886, hostname="LobbyRoom:12", room_type=1),
-        RoomEntry(room_id=0x0889, hostname="LobbyRoom:13", room_type=1),
-        RoomEntry(room_id=0x088B, hostname="LobbyRoom:14", room_type=1),
-        RoomEntry(room_id=0x088D, hostname="LobbyRoom:15", room_type=1),
-        RoomEntry(room_id=0x088C, hostname="LobbyRoom:16", room_type=1),
-        RoomEntry(room_id=0x0923, hostname="LobbyRoom:17", room_type=1),
-        RoomEntry(room_id=0x0924, hostname="LobbyRoom:18", room_type=1),
-        RoomEntry(room_id=0x0925, hostname="LobbyRoom:19", room_type=1),
-        RoomEntry(room_id=0x0926, hostname="LobbyRoom:20", room_type=1),
-        RoomEntry(room_id=0x0927, hostname="LobbyRoom:21", room_type=1),
-        # Coop rooms
-        RoomEntry(room_id=0x0928, hostname="LobbyCoop:1", room_type=1),
-        RoomEntry(room_id=0x0929, hostname="LobbyCoop:2", room_type=1),
-        RoomEntry(room_id=0x092A, hostname="LobbyCoop:3", room_type=1),
-        RoomEntry(room_id=0x092B, hostname="LobbyCoop:4", room_type=1),
-        RoomEntry(room_id=0x092C, hostname="LobbyCoop:5", room_type=1),
-        # Clan rooms
-        RoomEntry(room_id=0x0888, hostname="LobbyClan:1", room_type=1),
-        RoomEntry(room_id=0x088A, hostname="LobbyClan:2", room_type=1),
-        # Tournament rooms
-        RoomEntry(room_id=0x088F, hostname="LobbyTournaments:1", room_type=1),
-        RoomEntry(room_id=0x0894, hostname="LobbyTournaments:2", room_type=1),
-        # Special rooms
-        RoomEntry(room_id=0x0890, hostname="LobbyCompStomp:1", room_type=1),
-        RoomEntry(room_id=0x0892, hostname="LobbyCustomMap:1", room_type=1),
-        RoomEntry(room_id=0x0893, hostname="LobbyCustomMap:2", room_type=1),
-        RoomEntry(room_id=0x088E, hostname="LobbyBeginners:1", room_type=1),
-        RoomEntry(room_id=0x0891, hostname="LobbyHardcore:1", room_type=1),
-        RoomEntry(room_id=0x087F, hostname="LobbyBattlecast:1", room_type=1),
-        # Language rooms
-        RoomEntry(room_id=0x087E, hostname="LobbyGerman:1", room_type=1),
-        RoomEntry(room_id=0x087D, hostname="LobbyGerman:2", room_type=1),
-        RoomEntry(room_id=0x087C, hostname="LobbyFrench:1", room_type=1),
-        RoomEntry(room_id=0x087B, hostname="LobbyKorean:1", room_type=1),
-        RoomEntry(room_id=0x092D, hostname="LobbyRussian:1", room_type=1),
-        RoomEntry(room_id=0x092E, hostname="LobbyTaiwan:1", room_type=1),
-        RoomEntry(room_id=0x0935, hostname="LobbySpanish:1", room_type=1),
+# =============================================================================
+# Per-game field types for game list responses
+# Maps GameSpy game name -> field_name -> type (0=string, 1=binary)
+# =============================================================================
+
+GAME_FIELD_TYPES: dict[str, dict[str, int]] = {
+    "cc3tibwars": {
+        "cCRC": 0, "gamemode": 0, "hostname": 0, "iCRC": 0, "mID": 0,
+        "mapname": 0, "maxRPlyr": 1, "maxplayers": 1, "mod": 0, "modv": 0,
+        "name": 0, "numObs": 1, "numRPlyr": 1, "numplayers": 1, "obs": 1,
+        "pings": 0, "pw": 1, "rules": 0, "vCRC": 0,
+    },
+    "cc3xp1": {
+        "cCRC": 0, "gamemode": 0, "hostname": 0, "iCRC": 0, "mID": 0,
+        "mapname": 0, "maxRPlyr": 1, "maxplayers": 1, "mod": 0, "modv": 0,
+        "name": 0, "numObs": 1, "numRPlyr": 1, "numplayers": 1, "obs": 1,
+        "pings": 0, "pw": 1, "rules": 0, "vCRC": 0,
+    },
+    "redalert3pc": {
+        "cCRC": 0, "gamemode": 0, "hostname": 0, "iCRC": 0, "mID": 0,
+        "joinable": 1, "mapname": 0, "maxRPlyr": 1, "maxplayers": 1,
+        "mod": 0, "modv": 0, "name": 0, "numObs": 1, "numRPlyr": 1,
+        "numplayers": 1, "obs": 1, "pings": 0, "pw": 1, "rules": 0,
+        "teamAuto": 1, "vCRC": 0,
+    },
+    "ccgenerals": {
+        "country": 0, "gamemode": 0, "gametype": 0, "hostname": 0,
+        "mapname": 0, "maxplayers": 1, "maxRealPlayers": 1,
+        "numObservers": 1, "numplayers": 1, "numRealPlayers": 1,
+    },
+    "ccgenzh": {
+        "country": 0, "gamemode": 0, "gametype": 0, "hostname": 0,
+        "mapname": 0, "maxplayers": 1, "numplayers": 1, "password": 1,
+    },
+}
+
+def get_field_types_for_game(game_name: str) -> dict[str, int]:
+    """Get the field type mapping for a given GameSpy game name."""
+    return GAME_FIELD_TYPES.get(game_name, {})
+
+
+# =============================================================================
+# Per-game room definitions
+# =============================================================================
+def _create_generals_rooms() -> list:
+    return [
+        RoomEntry(room_id=392, hostname="QuickMatch", room_type=0),
+        RoomEntry(room_id=389, hostname="GroupRoom1", room_type=0),
+        RoomEntry(room_id=390, hostname="GroupRoom2", room_type=0),
+        RoomEntry(room_id=391, hostname="GroupRoom3", room_type=0),
+        RoomEntry(room_id=496, hostname="GroupRoom4", room_type=0),
+        RoomEntry(room_id=497, hostname="GroupRoom5", room_type=0),
+        RoomEntry(room_id=498, hostname="GroupRoom6", room_type=0),
+        RoomEntry(room_id=499, hostname="GroupRoom7", room_type=0),
+        RoomEntry(room_id=500, hostname="GroupRoom8", room_type=0),
+        RoomEntry(room_id=501, hostname="GroupRoom9", room_type=0),
+        RoomEntry(room_id=502, hostname="GroupRoom10", room_type=0),
+        RoomEntry(room_id=503, hostname="GroupRoom11", room_type=0),
+        RoomEntry(room_id=504, hostname="GroupRoom12", room_type=0),
     ]
-    return rooms
+
+
+def _create_zerohour_rooms() -> list:
+    return [
+        RoomEntry(room_id=597, hostname="QuickMatch", room_type=0),
+        RoomEntry(room_id=571, hostname="GroupRoom1", room_type=0),
+        RoomEntry(room_id=586, hostname="GroupRoom2", room_type=0),
+        RoomEntry(room_id=587, hostname="GroupRoom3", room_type=0),
+        RoomEntry(room_id=588, hostname="GroupRoom4", room_type=0),
+        RoomEntry(room_id=589, hostname="GroupRoom5", room_type=0),
+        RoomEntry(room_id=590, hostname="GroupRoom6", room_type=0),
+        RoomEntry(room_id=591, hostname="GroupRoom7", room_type=0),
+        RoomEntry(room_id=592, hostname="GroupRoom8", room_type=0),
+        RoomEntry(room_id=593, hostname="GroupRoom9", room_type=0),
+        RoomEntry(room_id=594, hostname="GroupRoom10", room_type=0),
+        RoomEntry(room_id=595, hostname="GroupRoom11", room_type=0),
+        RoomEntry(room_id=596, hostname="GroupRoom12", room_type=0),
+        RoomEntry(room_id=598, hostname="GroupRoom13", room_type=0),
+        RoomEntry(room_id=602, hostname="GroupRoom14", room_type=0),
+    ]
+
+
+def _create_cnc3_rooms() -> list:
+    return [
+        RoomEntry(room_id=1901, hostname="QuickMatch", room_type=0),
+        RoomEntry(room_id=1902, hostname="ChatRoom1", room_type=2),
+        RoomEntry(room_id=2059, hostname="LobbyRoom:1", room_type=1),
+        RoomEntry(room_id=2060, hostname="LobbyRoom:2", room_type=1),
+        RoomEntry(room_id=2061, hostname="LobbyRoom:3", room_type=1),
+        RoomEntry(room_id=2062, hostname="LobbyRoom:4", room_type=1),
+        RoomEntry(room_id=2063, hostname="LobbyRoom:5", room_type=1),
+        RoomEntry(room_id=2064, hostname="LobbyRoom:6", room_type=1),
+        RoomEntry(room_id=2065, hostname="LobbyRoom:7", room_type=1),
+        RoomEntry(room_id=2066, hostname="LobbyRoom:8", room_type=1),
+        RoomEntry(room_id=2067, hostname="LobbyRoom:9", room_type=1),
+        RoomEntry(room_id=2068, hostname="LobbyRoom:10", room_type=1),
+        RoomEntry(room_id=2069, hostname="LobbyRoom:11", room_type=1),
+        RoomEntry(room_id=2070, hostname="LobbyRoom:12", room_type=1),
+        RoomEntry(room_id=2071, hostname="LobbyRoom:13", room_type=1),
+        RoomEntry(room_id=2072, hostname="LobbyRoom:14", room_type=1),
+        RoomEntry(room_id=2073, hostname="LobbyRoom:15", room_type=1),
+        RoomEntry(room_id=2074, hostname="LobbyRoom:16", room_type=1),
+        RoomEntry(room_id=2081, hostname="LobbyBattlecast:1", room_type=1),
+        RoomEntry(room_id=2075, hostname="LobbyBeginners:1", room_type=1),
+        RoomEntry(room_id=2077, hostname="LobbyClan:1", room_type=1),
+        RoomEntry(room_id=2078, hostname="LobbyClan:2", room_type=1),
+        RoomEntry(room_id=2084, hostname="LobbyCompStomp:1", room_type=1),
+        RoomEntry(room_id=2082, hostname="LobbyCustomMap:1", room_type=1),
+        RoomEntry(room_id=2083, hostname="LobbyCustomMap:2", room_type=1),
+        RoomEntry(room_id=2076, hostname="LobbyHardcore:1", room_type=1),
+        RoomEntry(room_id=2079, hostname="LobbyTournaments:1", room_type=1),
+        RoomEntry(room_id=2080, hostname="LobbyTournaments:2", room_type=1),
+        RoomEntry(room_id=2088, hostname="LobbyFrench:1", room_type=1),
+        RoomEntry(room_id=2085, hostname="LobbyGerman:1", room_type=1),
+        RoomEntry(room_id=2086, hostname="LobbyGerman:2", room_type=1),
+        RoomEntry(room_id=2087, hostname="LobbyKorean:1", room_type=1),
+    ]
+
+
+def _create_kw_rooms() -> list:
+    return [
+        RoomEntry(room_id=2156, hostname="QuickMatch", room_type=0),
+        RoomEntry(room_id=2157, hostname="LobbyRoom:1", room_type=1),
+        RoomEntry(room_id=2158, hostname="ChatRoom1", room_type=2),
+        RoomEntry(room_id=2265, hostname="Russia:1", room_type=1),
+    ]
+
+
+def _create_ra3_rooms() -> list:
+    return [
+        RoomEntry(room_id=2177, hostname="ChatRoom1", room_type=1),
+        RoomEntry(room_id=2198, hostname="ChatRoom1", room_type=2),
+        RoomEntry(room_id=2166, hostname="LobbyRoom:1", room_type=1),
+        RoomEntry(room_id=2167, hostname="LobbyRoom:2", room_type=1),
+        RoomEntry(room_id=2168, hostname="LobbyRoom:3", room_type=1),
+        RoomEntry(room_id=2169, hostname="LobbyRoom:4", room_type=1),
+        RoomEntry(room_id=2170, hostname="LobbyRoom:5", room_type=1),
+        RoomEntry(room_id=2176, hostname="LobbyRoom:6", room_type=1),
+        RoomEntry(room_id=2180, hostname="LobbyRoom:7", room_type=1),
+        RoomEntry(room_id=2178, hostname="LobbyRoom:8", room_type=1),
+        RoomEntry(room_id=2181, hostname="LobbyRoom:9", room_type=1),
+        RoomEntry(room_id=2183, hostname="LobbyRoom:10", room_type=1),
+        RoomEntry(room_id=2179, hostname="LobbyRoom:11", room_type=1),
+        RoomEntry(room_id=2182, hostname="LobbyRoom:12", room_type=1),
+        RoomEntry(room_id=2185, hostname="LobbyRoom:13", room_type=1),
+        RoomEntry(room_id=2187, hostname="LobbyRoom:14", room_type=1),
+        RoomEntry(room_id=2189, hostname="LobbyRoom:15", room_type=1),
+        RoomEntry(room_id=2188, hostname="LobbyRoom:16", room_type=1),
+        RoomEntry(room_id=2339, hostname="LobbyRoom:17", room_type=1),
+        RoomEntry(room_id=2340, hostname="LobbyRoom:18", room_type=1),
+        RoomEntry(room_id=2341, hostname="LobbyRoom:19", room_type=1),
+        RoomEntry(room_id=2342, hostname="LobbyRoom:20", room_type=1),
+        RoomEntry(room_id=2343, hostname="LobbyRoom:21", room_type=1),
+        RoomEntry(room_id=2344, hostname="LobbyCoop:1", room_type=1),
+        RoomEntry(room_id=2345, hostname="LobbyCoop:2", room_type=1),
+        RoomEntry(room_id=2346, hostname="LobbyCoop:3", room_type=1),
+        RoomEntry(room_id=2347, hostname="LobbyCoop:4", room_type=1),
+        RoomEntry(room_id=2348, hostname="LobbyCoop:5", room_type=1),
+        RoomEntry(room_id=2184, hostname="LobbyClan:1", room_type=1),
+        RoomEntry(room_id=2186, hostname="LobbyClan:2", room_type=1),
+        RoomEntry(room_id=2191, hostname="LobbyTournaments:1", room_type=1),
+        RoomEntry(room_id=2196, hostname="LobbyTournaments:2", room_type=1),
+        RoomEntry(room_id=2192, hostname="LobbyCompStomp:1", room_type=1),
+        RoomEntry(room_id=2194, hostname="LobbyCustomMap:1", room_type=1),
+        RoomEntry(room_id=2195, hostname="LobbyCustomMap:2", room_type=1),
+        RoomEntry(room_id=2190, hostname="LobbyBeginners:1", room_type=1),
+        RoomEntry(room_id=2193, hostname="LobbyHardcore:1", room_type=1),
+        RoomEntry(room_id=2175, hostname="LobbyBattlecast:1", room_type=1),
+        RoomEntry(room_id=2174, hostname="LobbyGerman:1", room_type=1),
+        RoomEntry(room_id=2173, hostname="LobbyGerman:2", room_type=1),
+        RoomEntry(room_id=2172, hostname="LobbyFrench:1", room_type=1),
+        RoomEntry(room_id=2171, hostname="LobbyKorean:1", room_type=1),
+        RoomEntry(room_id=2349, hostname="LobbyRussian:1", room_type=1),
+        RoomEntry(room_id=2350, hostname="LobbyTaiwan:1", room_type=1),
+        RoomEntry(room_id=2357, hostname="LobbySpanish:1", room_type=1),
+    ]
+
+
+def create_rooms_by_game() -> dict[str, list]:
+    """
+    Create room lists for all games, keyed by GameSpy game name.
+
+    Returns:
+        Dict mapping GameSpy game name to list of RoomEntry objects.
+    """
+    return {
+        "ccgenerals": _create_generals_rooms(),
+        "ccgenzh": _create_zerohour_rooms(),
+        "cc3tibwars": _create_cnc3_rooms(),
+        "cc3xp1": _create_kw_rooms(),
+        "redalert3pc": _create_ra3_rooms(),
+    }
+
+
+def create_default_rooms() -> list:
+    """Create default room list for Red Alert 3 (backward compatibility)."""
+    return _create_ra3_rooms()
