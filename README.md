@@ -54,13 +54,11 @@ This project aims to:
 
 To redirect a game client to your emulator, you need to install a game proxy that intercepts DNS/network calls and routes them to your server.
 
-For Red Alert 3, you can use the [RA3 Game Proxy](https://github.com/sokie/ra3_game_proxy/):
+For Red Alert 3, CNC3 and Kane's Wrath you can use the [CnC Game Proxy](https://github.com/sokie/cnc_game_proxy/):
 
-1. Download or build the proxy from https://github.com/sokie/ra3_game_proxy/
-2. Install it to your game's `Data/` folder (e.g., `C:\Program Files\EA Games\Red Alert 3\Data\`)
+1. Download or build the proxy from [CnC Game Proxy](https://github.com/sokie/cnc_game_proxy)
+2. Install it to your game's `Data/` folder (e.g., `C:\Program Files\EA Games\Red Alert 3\Data\`) or other appropriate folder
 3. Configure the proxy to point to your emulator server
-
-CNC3 and Kane's Wrath use the same approach with their respective game directories and [RA3 Game Proxy](https://github.com/sokie/ra3_game_proxy/) can be used with the respective config.
 
 ### Installation
 
@@ -193,6 +191,7 @@ This project is provided for educational and preservation purposes.
 ## Disclaimer
 
 This project is not affiliated with or endorsed by Electronic Arts, Westwood Studios, or any related entities. Command & Conquer, Red Alert 3, Tiberium Wars, and Kane's Wrath are trademarks of Electronic Arts Inc.
+
 
 
 
