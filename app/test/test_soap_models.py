@@ -31,7 +31,6 @@ from app.soap.sake_service import (
     GAME_ID_TW,
     LEVEL_THRESHOLDS,
     SCORING_MULTIPLIERS,
-    get_requested_fields,
     handle_get_my_records,
     handle_get_specific_records,
     handle_search_for_records,

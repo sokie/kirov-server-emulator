@@ -217,7 +217,7 @@ def _build_kw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     avg_gl = _get_mode_values(stats, "avg_game_length")
     win_ratio = _get_mode_values(stats, "win_ratio")
 
-    total_matches = [w + l + d + ds for w, l, d, ds in zip(wins, losses, disconnects, desyncs)]
+    total_matches = [w + loss + d + ds for w, loss, d, ds in zip(wins, losses, disconnects, desyncs)]
     total_all_online = sum(total_matches)
 
     records: list[RecordValue] = []
@@ -307,7 +307,7 @@ def _build_tw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     avg_gl = _get_mode_values(stats, "avg_game_length")
     win_ratio = _get_mode_values(stats, "win_ratio")
 
-    total_matches = [w + l + d + ds for w, l, d, ds in zip(wins, losses, disconnects, desyncs)]
+    total_matches = [w + loss + d + ds for w, loss, d, ds in zip(wins, losses, disconnects, desyncs)]
 
     records: list[RecordValue] = []
 
@@ -377,7 +377,7 @@ def _build_ra_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     avg_gl = _get_mode_values(stats, "avg_game_length")
     win_ratio = _get_mode_values(stats, "win_ratio")
 
-    total_matches = [w + l + d + ds for w, l, d, ds in zip(wins, losses, disconnects, desyncs)]
+    total_matches = [w + loss + d + ds for w, loss, d, ds in zip(wins, losses, disconnects, desyncs)]
 
     records: list[RecordValue] = []
 
