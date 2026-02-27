@@ -50,6 +50,8 @@ GAMESPY_GAME_KEY_MAP = {
     "cnc3pc": "cnc3pc",
     "cc3xp1": "cnc3ep1pc",
     "cnc3ep1pc": "cnc3ep1pc",
+    "ccgenerals": "ccgenerals",
+    "ccgenzh": "ccgenzh",
 }
 
 

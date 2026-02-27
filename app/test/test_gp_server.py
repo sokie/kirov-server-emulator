@@ -7,11 +7,12 @@ These tests cover:
 3. Response formatting
 4. Command handling (login, getprofile, status, logout)
 5. Protocol flow validation based on real example data
+6. Traditional GameSpy login (Generals/ZH)
 """
 
 import base64
 import hashlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from app.servers.gp_server import (
     TEST_SECRET as GP_TEST_SECRET,
@@ -864,3 +865,275 @@ class TestBuddyMessageFormat:
         assert data.get("s") == "3"  # Staging status code
         assert data.get("ss") == "Staging"
         assert data.get("ls") == "testplayer"  # Location is host name
+
+
+class TestGpServerTraditionalLogin:
+    """Test traditional GameSpy login flow (Generals/Zero Hour)."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_session_manager = MockSessionManager()
+        self.gp_server = GpServer(self.mock_session_manager)
+        self.gp_server.transport = MockTransport()
+        self.gp_server.peername = ("127.0.0.1", 12345)
+        self.gp_server.server_challenge = "ABCDEFGHIJ"
+
+        # Test user data
+        self.test_email = "player@test.com"
+        self.test_nickname = "GeneralsPlayer"
+        self.test_password = "secret123"
+        self.test_md5 = hashlib.md5(self.test_password.encode()).hexdigest()
+        self.test_user_string = f"{self.test_nickname}@{self.test_email}"
+        self.client_challenge = "clientchal1234567890AB"
+
+    def _compute_client_response(self, md5_password, user_string, client_challenge, server_challenge):
+        """Compute the expected client response for traditional login."""
+        spaces = " " * 48
+        response_string = md5_password + spaces + user_string + client_challenge + server_challenge + md5_password
+        return hashlib.md5(response_string.encode()).hexdigest()
+
+    def _make_mock_user(self, user_id=100001, md5_password=None):
+        """Create a mock user object."""
+        mock_user = MagicMock()
+        mock_user.id = user_id
+        mock_user.email = self.test_email
+        mock_user.gamespy_password_md5 = md5_password or self.test_md5
+        return mock_user
+
+    def _make_mock_persona(self, persona_id=200001, name=None):
+        """Create a mock persona object."""
+        mock_persona = MagicMock()
+        mock_persona.id = persona_id
+        mock_persona.name = name or self.test_nickname
+        return mock_persona
+
+    def _make_mock_session(self, sesskey="987654321"):
+        """Create a mock GameSpy session."""
+        mock_session = MagicMock()
+        mock_session.sesskey = sesskey
+        return mock_session
+
+    def test_traditional_login_success(self):
+        """Test successful traditional login with user field."""
+        client_response = self._compute_client_response(
+            self.test_md5, self.test_user_string, self.client_challenge, "ABCDEFGHIJ"
+        )
+
+        request_data = {
+            "user": self.test_user_string,
+            "challenge": self.client_challenge,
+            "response": client_response,
+            "port": "0",
+            "productid": "6150",
+            "gamename": "cczh",
+            "namespaceid": "1",
+            "id": "1",
+        }
+
+        mock_user = self._make_mock_user()
+        mock_persona = self._make_mock_persona()
+        mock_gp_session = self._make_mock_session()
+
+        with (
+            patch("app.servers.gp_server.get_user_by_email", return_value=mock_user),
+            patch("app.servers.gp_server.get_persona_by_name", return_value=mock_persona),
+            patch("app.servers.gp_server.create_gamespy_session", return_value=mock_gp_session),
+        ):
+            response = self.gp_server.handle_login(request_data)
+
+        assert "\\lc\\2" in response
+        assert "\\sesskey\\" in response
+        assert "\\proof\\" in response
+        assert f"\\userid\\{mock_user.id}" in response
+        assert f"\\profileid\\{mock_persona.id}" in response
+        assert f"\\uniquenick\\{self.test_nickname}" in response
+        assert "\\lt\\" in response
+        assert "\\final\\" in response
+
+    def test_traditional_login_invalid_password(self):
+        """Test traditional login with wrong password."""
+        # Use a wrong MD5 to compute the response
+        wrong_md5 = hashlib.md5(b"wrongpassword").hexdigest()
+        client_response = self._compute_client_response(
+            wrong_md5, self.test_user_string, self.client_challenge, "ABCDEFGHIJ"
+        )
+
+        request_data = {
+            "user": self.test_user_string,
+            "challenge": self.client_challenge,
+            "response": client_response,
+            "id": "1",
+        }
+
+        mock_user = self._make_mock_user()
+
+        with patch("app.servers.gp_server.get_user_by_email", return_value=mock_user):
+            response = self.gp_server.handle_login(request_data)
+
+        assert "\\error\\" in response
+        assert "Invalid password" in response
+
+    def test_traditional_login_unknown_email(self):
+        """Test traditional login with email that doesn't exist."""
+        client_response = self._compute_client_response(
+            self.test_md5, self.test_user_string, self.client_challenge, "ABCDEFGHIJ"
+        )
+
+        request_data = {
+            "user": self.test_user_string,
+            "challenge": self.client_challenge,
+            "response": client_response,
+            "id": "1",
+        }
+
+        with patch("app.servers.gp_server.get_user_by_email", return_value=None):
+            response = self.gp_server.handle_login(request_data)
+
+        assert "\\error\\" in response
+        assert "User not found" in response
+
+    def test_traditional_login_auto_creates_persona(self):
+        """Test that traditional login auto-creates persona if not found."""
+        client_response = self._compute_client_response(
+            self.test_md5, self.test_user_string, self.client_challenge, "ABCDEFGHIJ"
+        )
+
+        request_data = {
+            "user": self.test_user_string,
+            "challenge": self.client_challenge,
+            "response": client_response,
+            "port": "0",
+            "productid": "6150",
+            "gamename": "cczh",
+            "id": "1",
+        }
+
+        mock_user = self._make_mock_user()
+        mock_persona = self._make_mock_persona()
+        mock_gp_session = self._make_mock_session()
+
+        with (
+            patch("app.servers.gp_server.get_user_by_email", return_value=mock_user),
+            patch("app.servers.gp_server.get_persona_by_name", return_value=None),
+            patch("app.servers.gp_server.create_persona_for_user", return_value=mock_persona) as mock_create,
+            patch("app.servers.gp_server.create_gamespy_session", return_value=mock_gp_session),
+        ):
+            response = self.gp_server.handle_login(request_data)
+
+        mock_create.assert_called_once_with(self.gp_server.db_session, mock_user, self.test_nickname)
+        assert "\\lc\\2" in response
+
+    def test_traditional_login_no_gamespy_md5(self):
+        """Test traditional login when user has no gamespy_password_md5 set."""
+        client_response = self._compute_client_response(
+            self.test_md5, self.test_user_string, self.client_challenge, "ABCDEFGHIJ"
+        )
+
+        request_data = {
+            "user": self.test_user_string,
+            "challenge": self.client_challenge,
+            "response": client_response,
+            "id": "1",
+        }
+
+        mock_user = self._make_mock_user(md5_password=None)
+        mock_user.gamespy_password_md5 = None
+
+        with patch("app.servers.gp_server.get_user_by_email", return_value=mock_user):
+            response = self.gp_server.handle_login(request_data)
+
+        assert "\\error\\" in response
+        assert "GameSpy password not set" in response
+
+    def test_traditional_login_invalid_user_format(self):
+        """Test traditional login with user string missing @ separator."""
+        request_data = {
+            "user": "no_at_sign_here",
+            "challenge": self.client_challenge,
+            "response": "someresponse",
+            "id": "1",
+        }
+
+        response = self.gp_server.handle_login(request_data)
+
+        assert "\\error\\" in response
+        assert "Invalid user format" in response
+
+    def test_fesl_login_still_works(self):
+        """Test that FESL login (with authtoken) still works unchanged."""
+        authtoken = base64.b64encode(b"100001|200001|TestToken").decode()
+
+        request_data = {
+            "authtoken": authtoken,
+            "challenge": "clientchallenge123",
+            "response": "",
+            "id": "1",
+        }
+
+        mock_preauth = MagicMock()
+        mock_preauth.id = 1
+        mock_preauth.challenge = "feslchallenge"
+        mock_preauth.secret_token = "secret123"
+
+        mock_persona = MagicMock()
+        mock_persona.id = 200001
+        mock_persona.name = "testplayer"
+
+        mock_gp_session = MagicMock()
+        mock_gp_session.sesskey = "123456789"
+
+        with (
+            patch(
+                "app.servers.gp_server.validate_and_consume_preauth_ticket",
+                return_value=(100001, 200001, mock_preauth),
+            ),
+            patch("app.servers.gp_server.get_persona_by_id", return_value=mock_persona),
+            patch("app.servers.gp_server.create_gamespy_session", return_value=mock_gp_session),
+        ):
+            response = self.gp_server.handle_login(request_data)
+
+        assert "\\lc\\2" in response
+        assert "\\userid\\100001" in response
+        assert "\\profileid\\200001" in response
+
+    def test_login_no_authtoken_no_user_returns_error(self):
+        """Test that login with neither authtoken nor user returns error."""
+        request_data = {
+            "challenge": "clientchallenge123",
+            "response": "someresponse",
+            "id": "1",
+        }
+
+        response = self.gp_server.handle_login(request_data)
+
+        assert "\\error\\" in response
+        assert "Missing authtoken" in response
+
+    def test_traditional_proof_calculation(self):
+        """Test that the server proof is correctly calculated (challenges swapped vs response)."""
+        md5_password = self.test_md5
+        user_string = self.test_user_string
+        client_challenge = "clientchal"
+        server_challenge = "serverchal"
+
+        response = self.gp_server._calculate_traditional_response(
+            md5_password, user_string, client_challenge, server_challenge
+        )
+        proof = self.gp_server._calculate_traditional_proof(
+            md5_password, user_string, client_challenge, server_challenge
+        )
+
+        # Response and proof should differ (challenges are in opposite order)
+        assert response != proof
+
+        # Verify they follow the expected formulas
+        spaces = " " * 48
+        expected_response = hashlib.md5(
+            (md5_password + spaces + user_string + client_challenge + server_challenge + md5_password).encode()
+        ).hexdigest()
+        expected_proof = hashlib.md5(
+            (md5_password + spaces + user_string + server_challenge + client_challenge + md5_password).encode()
+        ).hexdigest()
+
+        assert response == expected_response
+        assert proof == expected_proof

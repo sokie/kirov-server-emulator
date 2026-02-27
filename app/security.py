@@ -1,4 +1,11 @@
+import hashlib
+
 import bcrypt
+
+
+def md5_hash(password: str) -> str:
+    """Returns the MD5 hex digest of the password. Used for GameSpy challenge-response auth."""
+    return hashlib.md5(password.encode()).hexdigest()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -42,6 +42,7 @@ class User(SQLModel, table=True):
     username: str = Field(unique=True, index=True)  # Display name
     email: str = Field(unique=True, index=True)  # nuid for login
     hashed_password: str = Field()
+    gamespy_password_md5: str | None = Field(default=None)  # MD5(plaintext) for GameSpy challenge-response
     mac_addr: str | None = Field(default=None)  # Last known MAC address
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

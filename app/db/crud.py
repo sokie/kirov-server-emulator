@@ -27,7 +27,7 @@ from app.models.models import (
     UserCreate,
     WebSession,
 )
-from app.security import hash_password, verify_password
+from app.security import hash_password, md5_hash, verify_password
 
 # =============================================================================
 # User CRUD Operations
@@ -39,7 +39,13 @@ def create_new_user(session: Session, user_create: UserCreate) -> User:
     Create a new user in the database with a default persona and entitlement.
     """
     hashed_pass = hash_password(user_create.password)
-    user_db = User(username=user_create.username, hashed_password=hashed_pass, email=user_create.email)
+    gamespy_md5 = md5_hash(user_create.password)
+    user_db = User(
+        username=user_create.username,
+        hashed_password=hashed_pass,
+        email=user_create.email,
+        gamespy_password_md5=gamespy_md5,
+    )
 
     session.add(user_db)
     session.commit()

@@ -34,10 +34,13 @@ from app.db.crud import (
     create_buddy_request,
     create_game_invite,
     create_gamespy_session,
+    create_persona_for_user,
     delete_buddy_one_way,
     get_gamespy_session_by_sesskey,
     get_persona_by_id,
+    get_persona_by_name,
     get_persona_friends,
+    get_user_by_email,
     get_user_by_id,
     invalidate_gamespy_session,
     update_gamespy_session_status,
@@ -237,7 +240,11 @@ class GpServer(asyncio.Protocol):
         client_response = request_data.get("response", "")
         request_id = request_data.get("id", "1")
 
+        # Dispatch: traditional GameSpy login (Generals/ZH) vs FESL pre-auth flow (RA3)
         if not authtoken:
+            user_string = request_data.get("user", "")
+            if user_string:
+                return self.handle_login_traditional(request_data)
             return self.format_error("Missing authtoken", request_id)
 
         # Validate and consume the pre-auth ticket
@@ -327,6 +334,135 @@ class GpServer(asyncio.Protocol):
         result = self.format_response(response_data)
         logger.debug("Formatted response: %s", result)
         return result
+
+    def handle_login_traditional(self, request_data: dict[str, str]) -> str:
+        r"""
+        Handle traditional GameSpy login (Generals/Zero Hour).
+
+        The client sends `user` (nickname@email) + `response` (MD5 challenge-response)
+        directly, without going through FESL pre-auth.
+
+        Request fields:
+        - user: "nickname@email" format
+        - challenge: Client-generated challenge string
+        - response: MD5 hash for verification
+        - port, productid, gamename, namespaceid, etc.
+        - id: Request ID
+        """
+        user_string = request_data.get("user", "")
+        client_challenge = request_data.get("challenge", "")
+        client_response = request_data.get("response", "")
+        request_id = request_data.get("id", "1")
+
+        # Parse user field: "nickname@email"
+        if "@" not in user_string:
+            return self.format_error("Invalid user format", request_id)
+
+        nickname, email = user_string.split("@", 1)
+
+        # Look up user by email
+        user = get_user_by_email(self.db_session, email)
+        if not user:
+            return self.format_error("User not found", request_id)
+
+        # Get stored MD5 password hash
+        md5_password = user.gamespy_password_md5
+        if not md5_password:
+            return self.format_error("GameSpy password not set", request_id)
+
+        # Verify client response
+        # Formula: MD5(md5_password + 48_spaces + user_string + client_challenge + server_challenge + md5_password)
+        expected_response = self._calculate_traditional_response(
+            md5_password=md5_password,
+            user_string=user_string,
+            client_challenge=client_challenge,
+            server_challenge=self.server_challenge,
+        )
+        if client_response != expected_response:
+            logger.debug("Traditional login response validation failed")
+            logger.debug("Expected: %s, Got: %s", expected_response, client_response)
+            return self.format_error("Invalid password", request_id)
+
+        # Look up persona by nickname, auto-create if not found
+        persona = get_persona_by_name(self.db_session, nickname)
+        if not persona:
+            logger.debug("Auto-creating persona '%s' for user %s", nickname, user.id)
+            persona = create_persona_for_user(self.db_session, user, nickname)
+
+        # Create GameSpy session (no pre-auth ticket)
+        gp_session = create_gamespy_session(
+            session=self.db_session,
+            user_id=user.id,
+            persona_id=persona.id,
+            preauth_ticket_id=None,
+            client_ip=self.peername[0] if self.peername else None,
+            port=int(request_data.get("port", 0)) or None,
+            product_id=int(request_data.get("productid", 0)) or None,
+            gamename=request_data.get("gamename"),
+        )
+
+        # Store session info
+        self.user_id = user.id
+        self.persona_id = persona.id
+        self.sesskey = gp_session.sesskey
+        self.uniquenick = persona.name
+
+        # Register with session manager
+        self.session_manager.register_user(gp_session.sesskey, self)
+
+        # Calculate proof (server proves it knows the password too)
+        # Formula: MD5(md5_password + 48_spaces + user_string + server_challenge + client_challenge + md5_password)
+        proof = self._calculate_traditional_proof(
+            md5_password=md5_password,
+            user_string=user_string,
+            client_challenge=client_challenge,
+            server_challenge=self.server_challenge,
+        )
+
+        # Generate lt (login ticket)
+        lt_secret = secrets.token_urlsafe(16)
+        lt_payload = f"{user.id}|{persona.id}|{lt_secret}"
+        lt = base64.b64encode(lt_payload.encode()).decode()
+
+        response_data = {
+            "lc": "2",
+            "sesskey": gp_session.sesskey,
+            "proof": proof,
+            "userid": str(user.id),
+            "profileid": str(persona.id),
+            "uniquenick": persona.name,
+            "lt": lt,
+            "id": request_id,
+        }
+
+        logger.debug(
+            "Traditional login successful: user=%s, persona=%s, uniquenick=%s", user.id, persona.id, persona.name
+        )
+        return self.format_response(response_data)
+
+    def _calculate_traditional_response(
+        self, md5_password: str, user_string: str, client_challenge: str, server_challenge: str
+    ) -> str:
+        """
+        Calculate expected client response for traditional GameSpy login.
+
+        Formula: MD5(md5_password + 48_spaces + user_string + client_challenge + server_challenge + md5_password)
+        """
+        spaces = " " * 48
+        response_string = md5_password + spaces + user_string + client_challenge + server_challenge + md5_password
+        return hashlib.md5(response_string.encode()).hexdigest()
+
+    def _calculate_traditional_proof(
+        self, md5_password: str, user_string: str, client_challenge: str, server_challenge: str
+    ) -> str:
+        """
+        Calculate server proof for traditional GameSpy login.
+
+        Formula: MD5(md5_password + 48_spaces + user_string + server_challenge + client_challenge + md5_password)
+        """
+        spaces = " " * 48
+        proof_string = md5_password + spaces + user_string + server_challenge + client_challenge + md5_password
+        return hashlib.md5(proof_string.encode()).hexdigest()
 
     def calculate_proof(self, password: str, authtoken: str, client_challenge: str, server_challenge: str) -> str:
         """
