@@ -5,6 +5,53 @@ from enum import Enum, IntEnum
 from typing import Any
 
 
+class GameType:
+    CNC3 = "cnc3"
+    KANESWRATH = "cnc3ep1"
+    RA3 = "cncra3"
+
+
+# clientString -> GameType
+CLIENT_STRING_MAP = {
+    "cnc3-pc": GameType.CNC3,
+    "cnc3-ep1-pc": GameType.KANESWRATH,
+    "cncra3-pc": GameType.RA3,
+}
+
+# GameType -> subDomain for Hello response
+SUBDOMAIN_MAP = {
+    GameType.CNC3: "cnc3",
+    GameType.KANESWRATH: "cnc3ep1",
+    GameType.RA3: "CNCRA3",
+}
+
+# GameType -> default gameFeatureId for entitlements
+GAME_FEATURE_ID_MAP = {
+    GameType.CNC3: 2588,
+    GameType.KANESWRATH: None,  # TODO: find KW gameFeatureId
+    GameType.RA3: 6014,
+}
+
+# GameType -> gamekeys config dict key
+GAMEKEY_MAP = {
+    GameType.CNC3: "cnc3pc",
+    GameType.KANESWRATH: "cnc3ep1pc",
+    GameType.RA3: "cncra3pc",
+}
+
+# GameSpy game name -> gamekeys config dict key
+# These names are used by peerchat (CRYPT), GP server (gamename), gamestats, and master server
+GAMESPY_GAME_KEY_MAP = {
+    "redalert3pc": "cncra3pc",
+    "redalert3ps3": "cncra3pc",
+    "cncra3pc": "cncra3pc",
+    "cc3": "cnc3pc",
+    "cnc3pc": "cnc3pc",
+    "cc3xp1": "cnc3ep1pc",
+    "cnc3ep1pc": "cnc3ep1pc",
+}
+
+
 class FeslError(IntEnum):
     """
     FESL error codes based on OpenSpy implementation.
@@ -205,6 +252,34 @@ class NuLoginClient(FeslBaseModel):
 
 
 @dataclass
+class LoginClient(FeslBaseModel):
+    """Login model for CNC3/KW - uses 'name' instead of 'nuid'."""
+
+    name: str = None
+    password: str = None
+    macAddr: str = None
+    returnEncryptedInfo: int = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LoginClient":
+        return cls(
+            txn=data.get("TXN"),
+            name=data.get("name"),
+            password=data.get("password"),
+            macAddr=data.get("macAddr"),
+        )
+
+    def to_key_value_string(self) -> str:
+        output_lines = [f"TXN={self.txn}"]
+
+        output_lines.append(f"name={self.name}")
+        output_lines.append(f"password={self.password}")
+        output_lines.append(f"macAddr={self.macAddr}")
+
+        return "\n".join(output_lines)
+
+
+@dataclass
 class EntitledGameFeatureWrapper:
     """
     Represents a single entitled game feature.
@@ -308,6 +383,69 @@ class NuGetPersonasServer(FeslBaseModel):
             # Append each field to the output lines
             output_lines.append(f"personas.{i}={persona or ''}")
 
+        return "\n".join(output_lines)
+
+
+@dataclass
+class GetSubAccountsClient(FeslBaseModel):
+    """CNC3/KW equivalent of NuGetPersonas - no extra fields."""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "GetSubAccountsClient":
+        return cls(txn=data.get("TXN"))
+
+    def to_key_value_string(self) -> str:
+        return f"TXN={self.txn}"
+
+
+@dataclass
+class GetSubAccountsServer(FeslBaseModel):
+    """CNC3/KW equivalent of NuGetPersonasServer - uses 'subAccounts' instead of 'personas'."""
+
+    subAccounts: list[str] = field(default_factory=list)
+
+    def to_key_value_string(self) -> str:
+        count = len(self.subAccounts)
+
+        output_lines = [f"TXN={self.txn}"]
+
+        output_lines.append(f"subAccounts.[]={count}")
+
+        for i, name in enumerate(self.subAccounts):
+            output_lines.append(f"subAccounts.{i}={name or ''}")
+
+        return "\n".join(output_lines)
+
+
+@dataclass
+class AddSubAccountClient(FeslBaseModel):
+    """CNC3/KW equivalent of NuAddPersona."""
+
+    name: str = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AddSubAccountClient":
+        return cls(txn=data.get("TXN"), name=data.get("name"))
+
+    def to_key_value_string(self) -> str:
+        output_lines = [f"TXN={self.txn}"]
+        output_lines.append(f"name={self.name}")
+        return "\n".join(output_lines)
+
+
+@dataclass
+class LoginSubAccountClient(FeslBaseModel):
+    """CNC3/KW equivalent of NuLoginPersona."""
+
+    name: str = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LoginSubAccountClient":
+        return cls(txn=data.get("TXN"), name=data.get("name"))
+
+    def to_key_value_string(self) -> str:
+        output_lines = [f"TXN={self.txn}"]
+        output_lines.append(f"name={self.name}")
         return "\n".join(output_lines)
 
 

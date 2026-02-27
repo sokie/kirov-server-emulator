@@ -15,7 +15,7 @@ class IRCSettings(BaseModel):
 class GameSettings(BaseModel):
     """Game-specific settings."""
 
-    gamekey: str = Field()
+    gamekeys: dict[str, str] = Field()
 
 
 class LoggingSettings(BaseModel):

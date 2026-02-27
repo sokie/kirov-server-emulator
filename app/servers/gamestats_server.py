@@ -26,12 +26,14 @@ import secrets
 import string
 from typing import TYPE_CHECKING
 
+from app.config.app_settings import app_config
 from app.db.crud import (
     create_or_update_player_stats,
     get_player_stats,
     validate_and_consume_preauth_ticket,
 )
 from app.db.database import create_session
+from app.models.fesl_types import GAMESPY_GAME_KEY_MAP
 from app.util.cipher import gs_chresp_num, gs_xor
 from app.util.logging_helper import format_hex, get_logger
 
@@ -39,12 +41,6 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     pass
-
-# Game keys for authentication
-GAME_KEYS = {
-    "redalert3pc": "NANOud",  # Red Alert 3 PC
-    "redalert3ps3": "t9kE8q",  # Red Alert 3 PS3
-}
 
 
 class GameStatsServer(asyncio.Protocol):
@@ -255,10 +251,11 @@ class GameStatsServer(asyncio.Protocol):
         if not gamename:
             return self._format_error("Missing gamename", request_id)
 
-        # Get the game key
-        gamekey = GAME_KEYS.get(gamename.lower())
+        # Get the game key from config
+        config_key = GAMESPY_GAME_KEY_MAP.get(gamename.lower())
+        gamekey = app_config.game.gamekeys.get(config_key, "") if config_key else ""
         if not gamekey:
-            logger.debug("GameStats: Unknown game: %s", gamename)
+            logger.debug("GameStats: No gamekey configured for game: %s", gamename)
             return self._format_error("Unknown game", request_id)
 
         # Calculate expected response: MD5(gs_chresp_num(challenge) + gamekey)

@@ -1,12 +1,18 @@
-# Red Alert 3 Server Emulator
+# C&C Server Emulator
 
-An open-source server emulator for Command & Conquer: Red Alert 3, implementing the GameSpy and EA backend protocols required for online multiplayer.
+An open-source server emulator for the Command & Conquer series, implementing the GameSpy and EA backend protocols required for online multiplayer.
+
+### Supported Games
+
+- **Command & Conquer 3: Tiberium Wars** (CNC3)
+- **Command & Conquer 3: Kane's Wrath** (KW)
+- **Command & Conquer: Red Alert 3** (RA3)
 
 ## Project Goals
 
 This project aims to:
 
-- **Preserve multiplayer functionality** for Red Alert 3 after official server shutdowns
+- **Preserve multiplayer functionality** for C&C games after official server shutdowns
 - **Document decades-old protocols** that were previously undocumented or poorly understood
 - **Empower players** with ownership and control over their gaming infrastructure, working both offline and in LAN
 - **Provide a reference implementation** for researchers and developers interested in the game server architecture
@@ -21,6 +27,8 @@ This project aims to:
 - [x] **NAT Negotiation Server** - UDP hole punching for peer-to-peer connections
 - [x] **Master Server** - Game server listing and room discovery (TCP)
 - [x] **Heartbeat Server** - Game session registration and keepalive (UDP)
+- [x] **GameStats Server** - Game statistics reporting and retrieval
+- [x] **Multi-game support** - CNC3, Kane's Wrath, and Red Alert 3 with per-game gamekeys, entitlements, and protocol handling
 
 > **Current Status:** The server is fully functional and supports all core gameplay features including user authentication (login), friends system, lobby browsing and creation, in-game chat, cooperative campaigns, and online multiplayer matches.
 
@@ -31,8 +39,8 @@ This project aims to:
 - [x] (done)**Competition server** - Post-match stats
 - [x] (done)**Web Portal** - Account registration, leaderboards, and live match viewer
 - [x] (done)**Clan System** - Create, join, and manage clans with in-game integration
+- [x] (done)**CNC3 & Kane's Wrath** - Multi-game support for CNC3 and Kane's Wrath
 - [ ] **Auto matchmaking** - Add support for automatic ELO based matchmaking bot
-- [ ] **CNC3 & Kane's Wrath** - Add support for CNC3 titles
 - [ ] **Generals** - (low prio) Support generals games
 
 ## Quick Start
@@ -44,11 +52,15 @@ This project aims to:
 
 ### Game Client Setup
 
-To redirect the game client to your emulator, you need to install the [RA3 Game Proxy](https://github.com/sokie/ra3_game_proxy/):
+To redirect a game client to your emulator, you need to install a game proxy that intercepts DNS/network calls and routes them to your server.
+
+For Red Alert 3, you can use the [RA3 Game Proxy](https://github.com/sokie/ra3_game_proxy/):
 
 1. Download or build the proxy from https://github.com/sokie/ra3_game_proxy/
 2. Install it to your game's `Data/` folder (e.g., `C:\Program Files\EA Games\Red Alert 3\Data\`)
 3. Configure the proxy to point to your emulator server
+
+CNC3 and Kane's Wrath use the same approach with their respective game directories and [RA3 Game Proxy](https://github.com/sokie/ra3_game_proxy/) can be used with the respective config.
 
 ### Installation
 
@@ -74,7 +86,21 @@ pip install -r requirements.txt
 cp config.example.json config.json
 ```
 
-Then edit `config.json` and set your game key. See `config.example.json` for all available options.
+Then edit `config.json` and set your per-game keys. Each supported game requires its own gamekey:
+
+```json
+{
+  "game": {
+    "gamekeys": {
+      "cnc3pc": "YOUR_CNC3_GAME_KEY",
+      "cnc3ep1pc": "YOUR_KW_GAME_KEY",
+      "cncra3pc": "YOUR_RA3_GAME_KEY"
+    }
+  }
+}
+```
+
+See `config.example.json` for all available options.
 
 ### Running the Server
 
@@ -96,6 +122,7 @@ This starts:
 | NAT Relay | 50000-59999 | UDP | Relay fallback when direct P2P fails (`relay.host` must be your public IP) |
 | Master Server | 28910 | TCP | Room/game list queries |
 | Heartbeat Server | 27900 | UDP | Game session registration |
+| GameStats | 29920 | TCP | Game statistics reporting |
 
 ### Web Portal
 
@@ -125,33 +152,35 @@ Detailed protocol documentation is available in the `docs/` directory:
 ## Architecture Overview
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────┐
-│                               Game Client                                      │
-└───────────────────────────────────────────────────────────────────────────────┘
-         │              │              │              │              │
-         ▼              ▼              ▼              ▼              ▼
-    ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌─────────┐   ┌───────────────┐
-    │  FESL   │   │ Peerchat │   │    GP    │   │ NATNEG  │   │ Master Server │
-    │ :18800  │   │  :6667   │   │  :29900  │   │ :27901  │   │ TCP :28910    │
-    │  (TCP)  │   │  (TCP)   │   │  (TCP)   │   │  (UDP)  │   │ UDP :27900    │
-    └────┬────┘   └────┬─────┘   └────┬─────┘   └────┬────┘   └───────┬───────┘
-         │              │              │              │                │
-         └──────────────┴──────────────┴──────────────┴────────────────┘
-                                       │
-                                ┌──────┴──────┐
-                                │   Database  │
-                                │  (SQLite)   │
-                                └─────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                          Game Client (CNC3 / Kane's Wrath / RA3)                       │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+       │            │            │            │            │            │
+       ▼            ▼            ▼            ▼            ▼            ▼
+  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ ┌───────────────┐ ┌───────────┐
+  │  FESL   │ │ Peerchat │ │    GP    │ │ NATNEG  │ │ Master Server │ │ GameStats │
+  │ :18800  │ │  :6667   │ │  :29900  │ │ :27901  │ │ TCP :28910    │ │  :29920   │
+  │  (TCP)  │ │  (TCP)   │ │  (TCP)   │ │  (UDP)  │ │ UDP :27900    │ │  (TCP)    │
+  └────┬────┘ └────┬─────┘ └────┬─────┘ └────┬────┘ └───────┬───────┘ └─────┬─────┘
+       │            │            │            │              │               │
+       └────────────┴────────────┴────────────┴──────────────┴───────────────┘
+                                              │
+                                       ┌──────┴──────┐
+                                       │   Database  │
+                                       │  (SQLite)   │
+                                       └─────────────┘
 ```
 
 **Flow:**
-1. Client authenticates via FESL (login, persona selection)
-2. FESL issues ticket for GP Server authentication
-3. Client connects to Peerchat for lobby/chat
-4. Client connects to GP Server for buddy system
-5. Client queries Master Server (TCP :28910) for room/game lists
-6. Game hosts register via Heartbeat Server (UDP :27900)
-7. During game start, clients use NAT Negotiation for P2P setup
+1. Client connects to FESL - the `clientString` in the Hello packet identifies the game (CNC3, KW, or RA3)
+2. FESL authenticates the user (NuLogin for RA3, Login for CNC3/KW) and issues a session
+3. FESL issues a ticket for GP Server authentication
+4. Client connects to Peerchat for lobby/chat (per-game gamekey used for encryption)
+5. Client connects to GP Server for buddy system
+6. Client queries Master Server (TCP :28910) for room/game lists
+7. Game hosts register via Heartbeat Server (UDP :27900)
+8. During game start, clients use NAT Negotiation for P2P setup
+9. GameStats server handles post-match statistics reporting
 
 ## Contributing
 
@@ -163,7 +192,7 @@ This project is provided for educational and preservation purposes.
 
 ## Disclaimer
 
-This project is not affiliated with or endorsed by Electronic Arts, Westwood Studios, or any related entities. Red Alert 3 and Command & Conquer are trademarks of Electronic Arts Inc.
+This project is not affiliated with or endorsed by Electronic Arts, Westwood Studios, or any related entities. Command & Conquer, Red Alert 3, Tiberium Wars, and Kane's Wrath are trademarks of Electronic Arts Inc.
 
 
 

@@ -63,10 +63,12 @@ class TestAuthenticationFlow:
             assert len(personas) == 1
             assert personas[0].name == "testuser"
 
-            # Check entitlement was created
+            # Check entitlements were created (one per supported game)
             entitlements = get_user_entitlements(session, user.id)
-            assert len(entitlements) == 1
-            assert entitlements[0].game_feature_id == 6014
+            assert len(entitlements) == 2
+            feature_ids = {e.game_feature_id for e in entitlements}
+            assert 2588 in feature_ids  # CNC3
+            assert 6014 in feature_ids  # RA3
 
     def test_user_authentication(self):
         """Test user authentication by email and password."""
@@ -353,7 +355,8 @@ class TestFeslHandlersIntegration:
         assert response.lkey is not None
         assert len(response.lkey) > 0
         assert len(response.entitledGameFeatureWrappers) >= 1
-        assert response.entitledGameFeatureWrappers[0].gameFeatureId == 6014
+        feature_ids = {w.gameFeatureId for w in response.entitledGameFeatureWrappers}
+        assert 6014 in feature_ids  # RA3 entitlement present
 
     def test_nulogin_wrong_password(self):
         """Test that NuLogin handler rejects wrong password with AUTH_FAILURE error."""

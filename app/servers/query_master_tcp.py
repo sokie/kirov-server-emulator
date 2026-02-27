@@ -8,6 +8,7 @@ import asyncio
 import struct
 
 from app.config.app_settings import app_config
+from app.models.fesl_types import GAMESPY_GAME_KEY_MAP
 from app.servers.query_master_parsing import (
     DEFAULT_MASTER_IP,
     DEFAULT_MASTER_PORT,
@@ -44,11 +45,11 @@ class QueryMasterHandler:
         self,
         master_ip: str = DEFAULT_MASTER_IP,
         master_port: int = DEFAULT_MASTER_PORT,
-        gamekey: str | None = None,
+        gamekeys: dict[str, str] | None = None,
     ):
         self.master_ip = master_ip
         self.master_port = master_port
-        self.gamekey = gamekey or app_config.game.gamekey
+        self.gamekeys = gamekeys or app_config.game.gamekeys
         self.rooms: list = []  # List of RoomEntry
         self.games: list = []  # List of GameEntry
 
@@ -86,23 +87,32 @@ class QueryMasterHandler:
 
         # Encrypt the response if requested
         if encrypt and response and request.validate_token:
-            response = self._encrypt_response(response, request.validate_token)
+            response = self._encrypt_response(response, request.validate_token, request.game_name)
 
         return response
 
-    def _encrypt_response(self, response: bytes, validate_token: bytes) -> bytes:
+    def _encrypt_response(self, response: bytes, validate_token: bytes, game_name: str = "") -> bytes:
         """
         Encrypt response data using EncTypeX cipher.
 
         Args:
             response: Plaintext response data
             validate_token: The validate token from the client request
+            game_name: Game name from the request, used to look up the correct key
 
         Returns:
             Encrypted response with header
         """
         try:
-            cipher = EncTypeX(key=self.gamekey, validate=validate_token)
+            # Look up per-game key
+            config_key = GAMESPY_GAME_KEY_MAP.get(game_name.lower(), "")
+            gamekey = self.gamekeys.get(config_key, "")
+            if not gamekey:
+                logger.warning("No gamekey found for master server game: %s, trying first available", game_name)
+                # Fall back to first available key
+                gamekey = next(iter(self.gamekeys.values()), "")
+
+            cipher = EncTypeX(key=gamekey, validate=validate_token)
             encrypted = cipher.encode(response)
             logger.debug(
                 "Encrypted response: plaintext=%d bytes, encrypted=%d bytes",
@@ -343,7 +353,7 @@ async def start_master_server(
     host: str = "0.0.0.0",
     port: int = 28910,
     master_ip: str | None = None,
-    gamekey: str | None = None,
+    gamekeys: dict[str, str] | None = None,
 ) -> asyncio.AbstractServer:
     """
     Start the GameSpy Master Server.
@@ -352,7 +362,7 @@ async def start_master_server(
         host: Host address to bind to
         port: Port to listen on
         master_ip: IP address to report in responses (uses host if not specified)
-        gamekey: Game-specific encryption key (defaults to app_config.game.gamekey)
+        gamekeys: Per-game encryption keys dict (defaults to app_config.game.gamekeys)
 
     Returns:
         The asyncio server instance
@@ -361,12 +371,12 @@ async def start_master_server(
     handler = QueryMasterHandler(
         master_ip=master_ip or host if host != "0.0.0.0" else "127.0.0.1",
         master_port=port,
-        gamekey=gamekey,
+        gamekeys=gamekeys,
     )
     handler.set_rooms(create_default_rooms())
     QueryMasterServer.set_handler(handler)
 
-    logger.info("Master server using gamekey: %s", handler.gamekey)
+    logger.info("Master server using gamekeys for %d games", len(handler.gamekeys))
 
     loop = asyncio.get_running_loop()
     server = await loop.create_server(QueryMasterServer, host, port)

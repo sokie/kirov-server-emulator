@@ -23,6 +23,9 @@ from app.db.crud import (
 )
 from app.db.database import get_session
 from app.models.fesl_types import (
+    GAME_FEATURE_ID_MAP,
+    SUBDOMAIN_MAP,
+    AddSubAccountClient,
     DomainPartition,
     EntitledGameFeatureWrapper,
     FeslBaseModel,
@@ -31,8 +34,13 @@ from app.models.fesl_types import (
     FeslHeader,
     GameSpyPreAuthClient,
     GameSpyPreAuthServer,
+    GameType,
+    GetSubAccountsClient,
+    GetSubAccountsServer,
     HelloClient,
     HelloServer,
+    LoginClient,
+    LoginSubAccountClient,
     MemcheckServer,
     NuAddPersonaClient,
     NuAddPersonaServer,
@@ -75,7 +83,12 @@ class FeslHandlers:
         # MemCheck must be sent with Hello
         memcheck_response = MemcheckServer(txn="MemCheck", type=0, salt=random.getrandbits(32))
 
-        domain_partition = DomainPartition(domain="eagames", subDomain="CNCRA3")
+        # Use game-specific subDomain based on clientString
+        client_data = client_data_var.get()
+        active_game = client_data.get("active_game")
+        sub_domain = SUBDOMAIN_MAP.get(active_game, "CNCRA3")
+
+        domain_partition = DomainPartition(domain="eagames", subDomain=sub_domain)
         time_buff = time.strftime('"%b-%d-%Y %H:%M:%S UTC"', time.gmtime())
         hello_response = HelloServer(
             txn="Hello",
@@ -161,13 +174,19 @@ class FeslHandlers:
                 )
             )
 
-        # If no entitlements, add default RA3 entitlement
+        # If no entitlements, add default entitlement for the active game
         if not feature_wrappers:
-            feature_wrappers.append(
-                EntitledGameFeatureWrapper(
-                    gameFeatureId=6014, entitlementExpirationDays=-1, entitlementExpirationDate="", message=""
+            active_game = client_data.get("active_game", GameType.RA3)
+            default_feature_id = GAME_FEATURE_ID_MAP.get(active_game, 6014)
+            if default_feature_id is not None:
+                feature_wrappers.append(
+                    EntitledGameFeatureWrapper(
+                        gameFeatureId=default_feature_id,
+                        entitlementExpirationDays=-1,
+                        entitlementExpirationDate="",
+                        message="",
+                    )
                 )
-            )
 
         response = NuLoginServer(
             txn="NuLogin",
@@ -180,6 +199,81 @@ class FeslHandlers:
         )
 
         logger.debug("NuLogin successful for user: %s (id=%s)", user.username, user.id)
+        return response
+
+    @staticmethod
+    def handle_login_legacy(model_data: LoginClient) -> NuLoginServer | FeslErrorResponse:
+        """
+        Handle Login TXN - Used by CNC3/KW instead of NuLogin.
+        Same flow as NuLogin but uses 'name' field instead of 'nuid'.
+        """
+        logger.debug("Login (legacy) for name: %s", model_data.name)
+
+        db_session = next(get_session())
+
+        # Authenticate user by name and password
+        user = get_user_by_username_and_password(
+            session=db_session, username=model_data.name, password=model_data.password
+        )
+
+        if not user:
+            logger.debug("Authentication failed for name: %s", model_data.name)
+            return FeslErrorResponse(txn="Login", errorCode=FeslError.AUTH_FAILURE)
+
+        # Update MAC address if provided
+        if model_data.macAddr:
+            update_user_mac_addr(db_session, user.id, model_data.macAddr)
+
+        # Create FESL session
+        fesl_session = create_fesl_session(session=db_session, user_id=user.id, mac_addr=model_data.macAddr)
+
+        # Store in context for subsequent requests in this connection
+        client_data = client_data_var.get()
+        client_data["user"] = user
+        client_data["fesl_session"] = fesl_session
+        client_data["lkey"] = fesl_session.lkey
+
+        # Get user entitlements
+        entitlements = get_user_entitlements(db_session, user.id)
+
+        # Convert to FESL format
+        feature_wrappers = []
+        for ent in entitlements:
+            feature_wrappers.append(
+                EntitledGameFeatureWrapper(
+                    gameFeatureId=ent.game_feature_id,
+                    entitlementExpirationDays=ent.expiration_days,
+                    entitlementExpirationDate=ent.expiration_date or "",
+                    message=ent.message or "",
+                    status=ent.status,
+                )
+            )
+
+        # If no entitlements, add default entitlement for the active game
+        if not feature_wrappers:
+            active_game = client_data.get("active_game", GameType.RA3)
+            default_feature_id = GAME_FEATURE_ID_MAP.get(active_game, 6014)
+            if default_feature_id is not None:
+                feature_wrappers.append(
+                    EntitledGameFeatureWrapper(
+                        gameFeatureId=default_feature_id,
+                        entitlementExpirationDays=-1,
+                        entitlementExpirationDate="",
+                        message="",
+                    )
+                )
+
+        response = NuLoginServer(
+            txn="Login",
+            nuid=user.id,
+            profileId=user.id,
+            userId=user.id,
+            displayName=user.username,
+            lkey=fesl_session.lkey,
+            entitledGameFeatureWrappers=feature_wrappers,
+        )
+
+        logger.debug("Login (legacy) successful for user: %s (id=%s)", user.username, user.id)
         return response
 
     @staticmethod
@@ -248,6 +342,111 @@ class FeslHandlers:
         logger.debug(
             "NuAddPersona successful: created persona %s (id=%s) for user %s", persona.name, persona.id, user.id
         )
+        return response
+
+    # ==========================================================================
+    # CNC3/KW acct handlers (SubAccount variants)
+    # ==========================================================================
+
+    @staticmethod
+    def handle_get_sub_accounts(model_data: GetSubAccountsClient) -> GetSubAccountsServer | FeslErrorResponse:
+        """
+        Handle GetSubAccounts - CNC3/KW equivalent of NuGetPersonas.
+        Returns subAccounts instead of personas in the response.
+        """
+        logger.debug("GetSubAccounts")
+
+        client_data = client_data_var.get()
+        user = client_data.get("user")
+
+        if not user:
+            logger.debug("GetSubAccounts: No user in context")
+            return FeslErrorResponse(txn="GetSubAccounts", errorCode=FeslError.NOT_AUTHENTICATED)
+
+        db_session = next(get_session())
+        personas = get_personas_for_user(db_session, user.id)
+
+        persona_names = [p.name for p in personas]
+
+        response = GetSubAccountsServer(txn="GetSubAccounts", subAccounts=persona_names)
+
+        logger.debug("GetSubAccounts returning %d sub-accounts", len(persona_names))
+        return response
+
+    @staticmethod
+    def handle_add_sub_account(model_data: AddSubAccountClient) -> NuAddPersonaServer | FeslErrorResponse:
+        """
+        Handle AddSubAccount - CNC3/KW equivalent of NuAddPersona.
+        """
+        logger.debug("AddSubAccount: %s", model_data.name)
+
+        client_data = client_data_var.get()
+        user = client_data.get("user")
+
+        if not user:
+            logger.debug("AddSubAccount: No user in context")
+            return FeslErrorResponse(txn="AddSubAccount", errorCode=FeslError.NOT_AUTHENTICATED)
+
+        db_session = next(get_session())
+
+        # Check if persona name already exists
+        existing_persona = get_persona_by_name(db_session, model_data.name)
+        if existing_persona:
+            logger.debug("AddSubAccount: Persona name already taken: %s", model_data.name)
+            return FeslErrorResponse(txn="AddSubAccount", errorCode=FeslError.ACCOUNT_EXISTS)
+
+        # Create the new persona
+        persona = create_persona_for_user(db_session, user, model_data.name)
+
+        response = NuAddPersonaServer(txn="AddSubAccount")
+
+        logger.debug(
+            "AddSubAccount successful: created persona %s (id=%s) for user %s", persona.name, persona.id, user.id
+        )
+        return response
+
+    @staticmethod
+    def handle_login_sub_account(model_data: LoginSubAccountClient) -> NuLoginPersonaServer | FeslErrorResponse:
+        """
+        Handle LoginSubAccount - CNC3/KW equivalent of NuLoginPersona.
+        """
+        logger.debug("LoginSubAccount for: %s", model_data.name)
+
+        client_data = client_data_var.get()
+        user = client_data.get("user")
+        current_lkey = client_data.get("lkey")
+
+        if not user:
+            logger.debug("LoginSubAccount: No user in context")
+            return FeslErrorResponse(txn="LoginSubAccount", errorCode=FeslError.NOT_AUTHENTICATED)
+
+        db_session = next(get_session())
+
+        persona = get_persona_by_name(db_session, model_data.name)
+
+        if not persona:
+            logger.debug("LoginSubAccount: Persona not found: %s", model_data.name)
+            return FeslErrorResponse(txn="LoginSubAccount", errorCode=FeslError.ACCOUNT_NOT_FOUND)
+
+        if persona.user_id != user.id:
+            logger.debug("LoginSubAccount: Persona %s does not belong to user %s", model_data.name, user.id)
+            return FeslErrorResponse(txn="LoginSubAccount", errorCode=FeslError.AUTH_FAILURE)
+
+        fesl_session = update_fesl_session_persona(db_session, current_lkey, persona.id)
+
+        if not fesl_session:
+            logger.debug("LoginSubAccount: Failed to update FESL session")
+            return FeslErrorResponse(txn="LoginSubAccount", errorCode=FeslError.SYSTEM_ERROR)
+
+        client_data["persona"] = persona
+        client_data["lkey"] = fesl_session.lkey
+        client_data["fesl_session"] = fesl_session
+
+        response = NuLoginPersonaServer(
+            txn="LoginSubAccount", userId=user.id, profileId=persona.id, lkey=fesl_session.lkey
+        )
+
+        logger.debug("LoginSubAccount successful: persona=%s (id=%s)", persona.name, persona.id)
         return response
 
     @staticmethod
@@ -397,6 +596,7 @@ class FeslHandlers:
     def _parse_acct(header: FeslHeader, model_data: FeslBaseModel) -> FeslBaseModel | None:
         """Route acct commands."""
         match model_data.txn:
+            # RA3 account commands
             case "NuLogin":
                 return FeslHandlers.handle_login(model_data)
             case "NuGetPersonas":
@@ -405,6 +605,16 @@ class FeslHandlers:
                 return FeslHandlers.handle_add_persona(model_data)
             case "NuLoginPersona":
                 return FeslHandlers.handle_login_persona(model_data)
+            # CNC3/KW account commands
+            case "Login":
+                return FeslHandlers.handle_login_legacy(model_data)
+            case "GetSubAccounts":
+                return FeslHandlers.handle_get_sub_accounts(model_data)
+            case "AddSubAccount":
+                return FeslHandlers.handle_add_sub_account(model_data)
+            case "LoginSubAccount":
+                return FeslHandlers.handle_login_sub_account(model_data)
+            # Shared commands
             case "GameSpyPreAuth":
                 return FeslHandlers.handle_gamespy_pre_auth(model_data)
             case "GetTelemetryToken":

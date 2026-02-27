@@ -51,14 +51,15 @@ def create_new_user(session: Session, user_create: UserCreate) -> User:
     session.commit()
     session.refresh(persona)
 
-    # Create default game entitlement for RA3
-    entitlement = GameEntitlement(
-        user_id=user_db.id,
-        game_feature_id=6014,  # RA3 game feature ID
-        expiration_days=-1,  # Never expires
-        status=0,
-    )
-    session.add(entitlement)
+    # Create default game entitlements for all supported games
+    for game_feature_id in [2588, 6014]:  # CNC3, RA3 (KW TBD)
+        entitlement = GameEntitlement(
+            user_id=user_db.id,
+            game_feature_id=game_feature_id,
+            expiration_days=-1,  # Never expires
+            status=0,
+        )
+        session.add(entitlement)
     session.commit()
 
     return user_db

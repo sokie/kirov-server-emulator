@@ -32,8 +32,17 @@
     "pair_ttl": 60,
     "enabled": false
   },
+  "gamestats": {
+    "host": "0.0.0.0",
+    "port": 29920,
+    "enabled": true
+  },
   "game": {
-    "gamekey": "YOUR_GAME_KEY"
+    "gamekeys": {
+      "cnc3pc": "YOUR_CNC3_GAME_KEY",
+      "cnc3ep1pc": "YOUR_KW_GAME_KEY",
+      "cncra3pc": "YOUR_RA3_GAME_KEY"
+    }
   },
   "logging": {
     "level": "INFO"

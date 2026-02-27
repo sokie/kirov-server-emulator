@@ -12,13 +12,18 @@ import threading
 import time
 
 from app.models.fesl_types import (
+    CLIENT_STRING_MAP,
+    AddSubAccountClient,
     FeslBaseModel,
     FeslErrorResponse,
     FeslHeader,
     FeslType,
     GameSpyPreAuthClient,
+    GetSubAccountsClient,
     HelloClient,
     HelloServer,
+    LoginClient,
+    LoginSubAccountClient,
     MemcheckClient,
     MemcheckServer,
     NuAddPersonaClient,
@@ -26,6 +31,7 @@ from app.models.fesl_types import (
     NuLoginClient,
     NuLoginPersonaClient,
     NuLoginServer,
+    client_data_var,
 )
 from app.servers.fesl_handlers import FeslHandlers
 from app.util.logging_helper import format_hex, get_logger
@@ -86,12 +92,20 @@ def get_model_for_txn(data_dict: dict, header: FeslHeader):
                 return HelloClient.from_dict(data_dict)
             case "NuLogin":
                 return NuLoginClient.from_dict(data_dict)
+            case "Login":
+                return LoginClient.from_dict(data_dict)
             case "NuGetPersonas":
                 return NuGetPersonasClient.from_dict(data_dict)
+            case "GetSubAccounts":
+                return GetSubAccountsClient.from_dict(data_dict)
             case "NuLoginPersona":
                 return NuLoginPersonaClient.from_dict(data_dict)
+            case "LoginSubAccount":
+                return LoginSubAccountClient.from_dict(data_dict)
             case "NuAddPersona":
                 return NuAddPersonaClient.from_dict(data_dict)
+            case "AddSubAccount":
+                return AddSubAccountClient.from_dict(data_dict)
             case "GameSpyPreAuth":
                 return GameSpyPreAuthClient.from_dict(data_dict)
 
@@ -229,6 +243,7 @@ class FeslServer(asyncio.Protocol):
         self.transport = None
         self.peername = None
         self.client_data = {}
+        self.active_game = None
         self.last_memcheck_time = time.time()
 
     def connection_made(self, transport):
@@ -252,6 +267,15 @@ class FeslServer(asyncio.Protocol):
             logger.debug("Data Payload: %s", parsed_model)
 
             if parsed_header and isinstance(parsed_model, FeslBaseModel):
+                # Detect game type from Hello packet's clientString
+                if isinstance(parsed_model, HelloClient) and parsed_model.clientString:
+                    self.active_game = CLIENT_STRING_MAP.get(parsed_model.clientString)
+                    self.client_data["active_game"] = self.active_game
+                    logger.debug("Detected game type: %s (clientString=%s)", self.active_game, parsed_model.clientString)
+
+                # Set client_data context for handlers
+                client_data_var.set(self.client_data)
+
                 response = FeslHandlers.parse(parsed_header, parsed_model)
 
                 if response:

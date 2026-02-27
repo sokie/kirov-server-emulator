@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING
 
 from app.config.app_settings import app_config
+from app.models.fesl_types import GAMESPY_GAME_KEY_MAP
 from app.models.irc_types import GameSpyCommand, IRCCommand, IRCMessage, IRCNumeric
 from app.models.peerchat_state import irc_channels, irc_clients, irc_clients_lock, join_channel, part_channel
 from app.util.logging_helper import get_logger
@@ -231,10 +232,13 @@ class IRCFactory:
 
         message.params[0]
         message.params[1]
-        message.params[2]
+        peerchat_game_name = message.params[2]
 
-        # Get game key from config
-        game_key = app_config.game.gamekey
+        # Look up the gamekey from config using the peerchat game name
+        config_key = GAMESPY_GAME_KEY_MAP.get(peerchat_game_name)
+        game_key = app_config.game.gamekeys.get(config_key, "") if config_key else ""
+        if not game_key:
+            logger.warning("No gamekey found for peerchat game: %s", peerchat_game_name)
 
         # Initialize cipher factory
         client.cipher_factory = PeerchatCipherFactory(game_key)
