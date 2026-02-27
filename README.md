@@ -7,6 +7,8 @@ An open-source server emulator for the Command & Conquer series, implementing th
 - **Command & Conquer 3: Tiberium Wars** (CNC3)
 - **Command & Conquer 3: Kane's Wrath** (KW)
 - **Command & Conquer: Red Alert 3** (RA3)
+- **Command & Conquer: Generals**
+- **Command & Conquer: Generals Zero Hour**
 
 ## Project Goals
 
@@ -41,7 +43,7 @@ This project aims to:
 - [x] (done)**Clan System** - Create, join, and manage clans with in-game integration
 - [x] (done)**CNC3 & Kane's Wrath** - Multi-game support for CNC3 and Kane's Wrath
 - [ ] **Auto matchmaking** - Add support for automatic ELO based matchmaking bot
-- [ ] **Generals** - (low prio) Support generals games
+- [x] (initial support)**Generals** - (low prio) Support generals games
 
 ## Quick Start
 
@@ -191,6 +193,7 @@ This project is provided for educational and preservation purposes.
 ## Disclaimer
 
 This project is not affiliated with or endorsed by Electronic Arts, Westwood Studios, or any related entities. Command & Conquer, Red Alert 3, Tiberium Wars, and Kane's Wrath are trademarks of Electronic Arts Inc.
+
 
 
 
