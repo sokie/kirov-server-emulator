@@ -12,7 +12,7 @@ These tests cover:
 
 import base64
 import hashlib
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.servers.gp_server import (
     TEST_SECRET as GP_TEST_SECRET,
