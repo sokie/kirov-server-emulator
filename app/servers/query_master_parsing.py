@@ -579,6 +579,7 @@ def build_game_list_response(
         response += b"\x00"
 
     # End marker
+    response += b"\x00"
     response += END_MARKER
 
     logger.debug("Built game list response: %d bytes, %d games", len(response), len(games))
