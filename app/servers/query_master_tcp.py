@@ -18,7 +18,7 @@ from app.servers.query_master_parsing import (
     build_room_list_response,
     create_default_rooms,
     create_rooms_by_game,
-    get_field_types_for_game,
+    get_field_types,
     is_room_list_request,
     parse_filter_string,
     parse_tcp_query,
@@ -180,7 +180,7 @@ class QueryMasterHandler:
 
         # Use requested fields and per-game field types
         fields = request.fields if request.fields else []
-        field_types = get_field_types_for_game(request.game_name.lower())
+        field_types = get_field_types(fields)
 
         return build_game_list_response(
             games=filtered_games,

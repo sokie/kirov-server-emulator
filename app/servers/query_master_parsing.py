@@ -679,104 +679,36 @@ def build_game_result_message(
 
 
 # =============================================================================
-# Per-game field types for game list responses
-# Maps GameSpy game name -> field_name -> type (0=string, 1=binary)
+# Field type resolution for game list responses
+# Fields in BYTE_FIELDS use type 1 (u8 byte), all others use type 0 (string).
+# These types are game-agnostic — the same field always has the same type.
 # =============================================================================
 
-GAME_FIELD_TYPES: dict[str, dict[str, int]] = {
-    "cc3tibwars": {
-        "cCRC": 0,
-        "gamemode": 0,
-        "hostname": 0,
-        "iCRC": 0,
-        "mID": 0,
-        "mapname": 0,
-        "maxRPlyr": 1,
-        "maxplayers": 1,
-        "mod": 0,
-        "modv": 0,
-        "name": 0,
-        "numObs": 1,
-        "numRPlyr": 1,
-        "numplayers": 1,
-        "obs": 1,
-        "pings": 0,
-        "pw": 1,
-        "rules": 0,
-        "vCRC": 0,
-    },
-    "cc3xp1": {
-        "cCRC": 0,
-        "gamemode": 0,
-        "hostname": 0,
-        "iCRC": 0,
-        "mID": 0,
-        "mapname": 0,
-        "maxRPlyr": 1,
-        "maxplayers": 1,
-        "mod": 0,
-        "modv": 0,
-        "name": 0,
-        "numObs": 1,
-        "numRPlyr": 1,
-        "numplayers": 1,
-        "obs": 1,
-        "pings": 0,
-        "pw": 1,
-        "rules": 0,
-        "vCRC": 0,
-    },
-    "redalert3pc": {
-        "cCRC": 0,
-        "gamemode": 0,
-        "hostname": 0,
-        "iCRC": 0,
-        "mID": 0,
-        "joinable": 1,
-        "mapname": 0,
-        "maxRPlyr": 1,
-        "maxplayers": 1,
-        "mod": 0,
-        "modv": 0,
-        "name": 0,
-        "numObs": 1,
-        "numRPlyr": 1,
-        "numplayers": 1,
-        "obs": 1,
-        "pings": 0,
-        "pw": 1,
-        "rules": 0,
-        "teamAuto": 1,
-        "vCRC": 0,
-    },
-    "ccgenerals": {
-        "country": 0,
-        "gamemode": 0,
-        "gametype": 0,
-        "hostname": 0,
-        "mapname": 0,
-        "maxplayers": 1,
-        "maxRealPlayers": 1,
-        "numObservers": 1,
-        "numplayers": 1,
-        "numRealPlayers": 1,
-    },
-    "ccgenzh": {
-        "country": 0,
-        "gamemode": 0,
-        "gametype": 0,
-        "hostname": 0,
-        "mapname": 0,
-        "maxplayers": 1,
-        "numplayers": 1,
-        "password": 1,
-    },
-}
+BYTE_FIELDS: frozenset[str] = frozenset({
+    "host",
+    "joinable",
+    "maxplayers",
+    "maxRPlyr",
+    "maxRealPlayers",
+    "numObs",
+    "numObservers",
+    "numRPlyr",
+    "numRealPlayers",
+    "numplayers",
+    "obs",
+    "password",
+    "pw",
+    "teamAuto",
+})
 
 
-def get_field_types_for_game(game_name: str) -> dict[str, int]:
-    """Get the field type mapping for a given GameSpy game name."""
-    return GAME_FIELD_TYPES.get(game_name, {})
+def get_field_types(fields: list[str]) -> dict[str, int]:
+    """Resolve field types from the requested field names.
+
+    Any field in BYTE_FIELDS gets type 1 (u8 byte encoding),
+    everything else gets type 0 (string encoding).
+    """
+    return {field: (1 if field in BYTE_FIELDS else 0) for field in fields}
 
 
 # =============================================================================

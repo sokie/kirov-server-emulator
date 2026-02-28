@@ -10,6 +10,7 @@ import contextlib
 import socket
 import struct
 
+from app.servers.query_master_parsing import BYTE_FIELDS
 from app.servers.sessions import GameSessionRegistry
 from app.util.logging_helper import format_hex, get_logger
 
@@ -168,6 +169,16 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         # Register game in shared registry (for TCP query responses)
         registry = GameSessionRegistry.get_instance()
         registry.register_game(client_id, host, port, info)
+
+        # Debug: warn if any heartbeat value contradicts BYTE_FIELDS classification
+        if logger.isEnabledFor(10):  # logging.DEBUG == 10
+            for key, value in info.items():
+                if key in BYTE_FIELDS and not value.isdigit():
+                    logger.debug(
+                        "BYTE_FIELDS mismatch: field '%s' classified as byte but has non-numeric value '%s' "
+                        "(client_id=%d)",
+                        key, value, client_id,
+                    )
 
         # If publicip is "0", send challenge with actual IP/port
         public_ip = info.get("publicip", "")
