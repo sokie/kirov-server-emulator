@@ -177,7 +177,9 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
                     logger.debug(
                         "BYTE_FIELDS mismatch: field '%s' classified as byte but has non-numeric value '%s' "
                         "(client_id=%d)",
-                        key, value, client_id,
+                        key,
+                        value,
+                        client_id,
                     )
 
         # If publicip is "0", send challenge with actual IP/port

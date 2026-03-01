@@ -684,22 +684,24 @@ def build_game_result_message(
 # These types are game-agnostic — the same field always has the same type.
 # =============================================================================
 
-BYTE_FIELDS: frozenset[str] = frozenset({
-    "host",
-    "joinable",
-    "maxplayers",
-    "maxRPlyr",
-    "maxRealPlayers",
-    "numObs",
-    "numObservers",
-    "numRPlyr",
-    "numRealPlayers",
-    "numplayers",
-    "obs",
-    "password",
-    "pw",
-    "teamAuto",
-})
+BYTE_FIELDS: frozenset[str] = frozenset(
+    {
+        "host",
+        "joinable",
+        "maxplayers",
+        "maxRPlyr",
+        "maxRealPlayers",
+        "numObs",
+        "numObservers",
+        "numRPlyr",
+        "numRealPlayers",
+        "numplayers",
+        "obs",
+        "password",
+        "pw",
+        "teamAuto",
+    }
+)
 
 
 def get_field_types(fields: list[str]) -> dict[str, int]:
