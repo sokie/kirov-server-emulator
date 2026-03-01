@@ -11,10 +11,12 @@ block_cipher = None
 # Paths
 ROOT = Path(SPECPATH)
 STATIC_PATH = ROOT / "static"
+TEMPLATES_PATH = ROOT / "templates"
 
 # Data files to include in the bundle
 datas = [
     (str(STATIC_PATH), "static"),
+    (str(TEMPLATES_PATH), "templates"),
 ]
 
 # Hidden imports for dynamic modules
