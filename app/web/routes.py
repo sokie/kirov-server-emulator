@@ -73,35 +73,24 @@ def parse_game_mode(fields: dict) -> dict:
         status = gamemode.title()
         status_color = "secondary"
 
-    # Determine game type from rules or map path
-    # rules format: "type 100 10000 0 1 10 0 1 0 -1 0 -1 -1 1 "
-    # First number seems to be: 0=unranked/custom, 1=ranked 1v1, 2=ranked 2v2, 3=coop
+    # Determine game type from the first number in the rules field.
+    # Each game family has its own numbering scheme.
+    gamename = fields.get("gamename", "")
     game_type = "Custom"
     game_type_icon = "controller"
 
     if "camp_" in map_path.lower():
         game_type = "Co-op Campaign"
         game_type_icon = "people"
-    elif rules:
+    elif rules and gamename in GAME_RULES_MAP:
         rules_parts = rules.strip().split()
         if rules_parts:
             try:
                 type_num = int(rules_parts[0])
-                if type_num == 0:
-                    game_type = "Unranked"
-                    game_type_icon = "controller"
-                elif type_num == 1:
-                    game_type = "Ranked 1v1"
-                    game_type_icon = "trophy"
-                elif type_num == 2:
-                    game_type = "Ranked 2v2"
-                    game_type_icon = "trophy"
-                elif type_num == 3:
-                    game_type = "Clan 1v1"
-                    game_type_icon = "shield"
-                elif type_num == 4:
-                    game_type = "Clan 2v2"
-                    game_type_icon = "shield"
+                match_type = GAME_RULES_MAP[gamename].get(type_num)
+                if match_type:
+                    game_type = match_type[0]
+                    game_type_icon = match_type[1]
             except (ValueError, IndexError):
                 pass
 
@@ -111,6 +100,41 @@ def parse_game_mode(fields: dict) -> dict:
         "game_type": game_type,
         "game_type_icon": game_type_icon,
     }
+
+
+GAME_FRIENDLY_NAMES: dict[str, str] = {
+    "redalert3pc": "Red Alert 3",
+    "redalert3ps3": "Red Alert 3",
+    "cncra3pc": "Red Alert 3",
+    "cc3": "Tiberium Wars",
+    "cc3tibwars": "Tiberium Wars",
+    "cnc3pc": "Tiberium Wars",
+    "cc3xp1": "Kane's Wrath",
+    "cnc3ep1pc": "Kane's Wrath",
+    "ccgenerals": "Generals",
+    "ccgenzh": "Generals Zero Hour",
+}
+
+# Match type rules per game family: rule_number -> (display_name, icon)
+# RA3, TW, and KW all share the same numbering scheme
+_SAGE_RULES: dict[int, tuple[str, str]] = {
+    3: ("Custom", "controller"),
+    4: ("Ranked 1v1", "trophy"),
+    5: ("Ranked 2v2", "trophy"),
+    6: ("Clan 1v1", "shield"),
+    7: ("Clan 2v2", "shield"),
+}
+
+GAME_RULES_MAP: dict[str, dict[int, tuple[str, str]]] = {
+    "redalert3pc": _SAGE_RULES,
+    "redalert3ps3": _SAGE_RULES,
+    "cncra3pc": _SAGE_RULES,
+    "cc3tibwars": _SAGE_RULES,
+    "cnc3pc": _SAGE_RULES,
+    "cc3": _SAGE_RULES,
+    "cc3xp1": _SAGE_RULES,
+    "cnc3ep1pc": _SAGE_RULES,
+}
 
 
 def get_current_matches() -> list[dict]:
@@ -152,8 +176,7 @@ def get_current_matches() -> list[dict]:
             "has_password": fields.get("pw", "0") == "1",
             "observers_allowed": fields.get("obs", "0") == "1",
             "version": fields.get("vCRC", ""),
-            "mod": fields.get("mod", "RA3"),
-            "mod_version": fields.get("modv", ""),
+            "game": GAME_FRIENDLY_NAMES.get(fields.get("gamename", ""), fields.get("gamename", "Unknown")),
             "host_ip": game.public_ip,
             "host_port": game.public_port,
             "local_ip": fields.get("localip0", ""),

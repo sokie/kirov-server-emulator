@@ -13,7 +13,7 @@ class GameType:
 
 # clientString -> GameType
 CLIENT_STRING_MAP = {
-    "cnc3-pc": GameType.CNC3,
+    "cnc3": GameType.CNC3,
     "cnc3-ep1-pc": GameType.KANESWRATH,
     "cncra3-pc": GameType.RA3,
 }
