@@ -1422,13 +1422,14 @@ def finalize_match(session: Session, csid: str) -> bool:
                     disconnected=is_disconnect,
                 )
 
-    # Mark session as finalized
-    comp_session.finalized = True
-    comp_session.status = "completed"
-    session.add(comp_session)
-    session.commit()
+        # Mark session as finalized only after stats were updated
+        comp_session.finalized = True
+        comp_session.status = "completed"
+        session.add(comp_session)
+        session.commit()
+        return True
 
-    return True
+    return False
 
 
 # =============================================================================

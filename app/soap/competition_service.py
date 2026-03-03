@@ -20,7 +20,6 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Response
 
 from app.db.crud import (
-    complete_competition_session,
     create_competition_session,
     extract_persona_from_ccid,
     finalize_match,
@@ -448,10 +447,10 @@ def handle_submit_report(
         # Increment received reports counter
         comp_session = increment_received_reports(session, csid)
 
-        # Check if this is the final report (all players have reported)
-        if is_final_report and comp_session:
+        # Finalize only when all expected players have reported
+        if comp_session and comp_session.received_reports >= comp_session.expected_players:
             logger.info(
-                "[%s] Final report received, finalizing match (received=%d, expected=%d)",
+                "[%s] All reports received (%d/%d), finalizing match ...",
                 request_id,
                 comp_session.received_reports,
                 comp_session.expected_players,
@@ -461,8 +460,12 @@ def handle_submit_report(
             else:
                 logger.warning("[%s] Match finalization returned False", request_id)
         else:
-            # Just mark as completed if not final
-            complete_competition_session(session, csid)
+            logger.info(
+                "[%s] Waiting for more reports (received=%d, expected=%d)",
+                request_id,
+                comp_session.received_reports if comp_session else 0,
+                comp_session.expected_players if comp_session else 0,
+            )
 
         logger.info("[%s] === SUBMIT REPORT END === Success", request_id)
         return SubmitReportResponse.success()
