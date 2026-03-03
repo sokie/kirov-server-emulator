@@ -5,9 +5,34 @@
 {% block content %}
 <div class="page-header">
     <h1><i class="bi bi-trophy-fill text-warning me-2"></i>Leaderboard</h1>
-    <p>Top players ranked by ELO rating</p>
+    <p>Top players ranked by game</p>
 </div>
 
+{# Game selector #}
+<div class="card mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="text-secondary small">Game:</span>
+            <div class="btn-group" role="group">
+                <a href="/leaderboard?game=ra3"
+                   class="btn btn-sm btn-game-type {% if game == 'ra3' %}active{% endif %}">
+                    <i class="bi bi-controller me-1"></i>Red Alert 3
+                </a>
+                <a href="/leaderboard?game=generals"
+                   class="btn btn-sm btn-game-type {% if game == 'generals' %}active{% endif %}">
+                    <i class="bi bi-star me-1"></i>Generals / Zero Hour
+                </a>
+                <a href="/leaderboard?game=kanes_wrath"
+                   class="btn btn-sm btn-game-type {% if game == 'kanes_wrath' %}active{% endif %}">
+                    <i class="bi bi-lightning me-1"></i>Kane's Wrath
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if game == 'ra3' %}
+{# RA3 game-type sub-filter #}
 <div class="card mb-4">
     <div class="card-body py-3">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
@@ -15,16 +40,15 @@
                 <span class="text-secondary small">Game Mode:</span>
                 <div class="btn-group" role="group">
                     {% for gt in game_types %}
-                    <a href="/leaderboard?game_type={{ gt }}"
+                    <a href="/leaderboard?game=ra3&game_type={{ gt }}"
                        class="btn btn-sm btn-game-type {% if gt == game_type %}active{% endif %}">
-                        {{ gt.replace('_', ' ').replace('1v1', '1v1').replace('2v2', '2v2').title() }}
+                        {{ gt.replace('_', ' ').title() }}
                     </a>
                     {% endfor %}
                 </div>
             </div>
             <span class="text-secondary small">
-                <i class="bi bi-info-circle me-1"></i>
-                Showing top 50 players
+                <i class="bi bi-info-circle me-1"></i>Showing top 50 players
             </span>
         </div>
     </div>
@@ -102,7 +126,96 @@
     </div>
 </div>
 
-{% if players %}
+{% elif game == 'generals' %}
+<div class="d-flex justify-content-end mb-2">
+    <span class="text-secondary small">
+        <i class="bi bi-info-circle me-1"></i>Showing top 50 players
+    </span>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+            <thead>
+                <tr>
+                    <th scope="col" style="width: 60px;">#</th>
+                    <th scope="col">Player</th>
+                    <th scope="col" class="text-center" style="width: 160px;">Rank</th>
+                    <th scope="col" class="text-center" style="width: 80px;">Wins</th>
+                    <th scope="col" class="text-center" style="width: 80px;">Losses</th>
+                    <th scope="col" class="text-center" style="width: 100px;">Win Rate</th>
+                    <th scope="col" class="text-center d-none d-md-table-cell" style="width: 100px;">Play Time</th>
+                    <th scope="col" class="text-center d-none d-sm-table-cell" style="width: 80px;">Honors</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for player in generals_players %}
+                <tr class="{% if player.position == 1 %}rank-gold{% elif player.position == 2 %}rank-silver{% elif player.position == 3 %}rank-bronze{% endif %}">
+                    <th scope="row">
+                        {% if player.position == 1 %}
+                            <i class="bi bi-trophy-fill text-warning"></i>
+                        {% elif player.position == 2 %}
+                            <i class="bi bi-trophy-fill" style="color: #c0c0c0;"></i>
+                        {% elif player.position == 3 %}
+                            <i class="bi bi-trophy-fill" style="color: #cd7f32;"></i>
+                        {% else %}
+                            {{ player.position }}
+                        {% endif %}
+                    </th>
+                    <td>
+                        <a href="/players/{{ player.persona_id }}" class="text-link fw-bold">{{ player.name }}</a>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge rank-badge-{{ player.rank_level }}">{{ player.rank_name }}</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="stat-badge wins">{{ player.total_wins }}</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="stat-badge losses">{{ player.total_losses }}</span>
+                    </td>
+                    <td class="text-center">
+                        {% if player.win_ratio >= 60 %}
+                            <span class="text-success">{{ player.win_ratio }}%</span>
+                        {% elif player.win_ratio >= 40 %}
+                            <span class="text-warning">{{ player.win_ratio }}%</span>
+                        {% else %}
+                            <span class="text-danger">{{ player.win_ratio }}%</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center d-none d-md-table-cell text-secondary">
+                        {{ player.hours }}h
+                    </td>
+                    <td class="text-center d-none d-sm-table-cell text-secondary">
+                        {{ player.honors_count }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center py-5">
+                        <i class="bi bi-inbox fs-1 text-secondary d-block mb-3"></i>
+                        <span class="text-secondary">No Generals/ZH players found.</span>
+                        <br>
+                        <small class="text-secondary">Play a match to appear here!</small>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif game == 'kanes_wrath' %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-lightning fs-1 text-secondary d-block mb-3"></i>
+        <h5 class="text-secondary">Kane's Wrath Leaderboard</h5>
+        <p class="text-muted">Coming soon — stats tracking for Kane's Wrath is not yet implemented.</p>
+    </div>
+</div>
+{% endif %}
+
+{% if (game == 'ra3' and players) or (game == 'generals' and generals_players) %}
 <div class="text-center mt-4">
     <small class="text-secondary">
         <i class="bi bi-clock-history me-1"></i>
@@ -110,4 +223,19 @@
     </small>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .rank-badge-0 { background-color: #6c757d; }
+    .rank-badge-1 { background-color: #495057; }
+    .rank-badge-2 { background-color: #5a6268; }
+    .rank-badge-3 { background-color: #17a2b8; color: #fff; }
+    .rank-badge-4 { background-color: #007bff; color: #fff; }
+    .rank-badge-5 { background-color: #6610f2; color: #fff; }
+    .rank-badge-6 { background-color: #28a745; color: #fff; }
+    .rank-badge-7 { background-color: #fd7e14; color: #fff; }
+    .rank-badge-8 { background-color: #dc3545; color: #fff; }
+    .rank-badge-9 { background: linear-gradient(135deg, #f0c14b, #dc3545); color: #fff; font-weight: 700; }
+</style>
 {% endblock %}

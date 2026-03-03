@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}{{ persona.name }} - Player Profile{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center gap-3">
+    <div>
+        <h1><i class="bi bi-person-circle text-secondary me-2"></i>{{ persona.name }}</h1>
+        <p>Player statistics</p>
+    </div>
+</div>
+
+{# Game tabs #}
+<ul class="nav nav-tabs mb-4" id="profileTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if not generals %}active{% endif %}" id="ra3-tab"
+                data-bs-toggle="tab" data-bs-target="#ra3-panel"
+                type="button" role="tab">
+            <i class="bi bi-controller me-1"></i>Red Alert 3
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if generals %}active{% endif %}" id="generals-tab"
+                data-bs-toggle="tab" data-bs-target="#generals-panel"
+                type="button" role="tab">
+            <i class="bi bi-star me-1"></i>Generals / Zero Hour
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="profileTabContent">
+
+    {# RA3 Tab — NOP #}
+    <div class="tab-pane fade {% if not generals %}show active{% endif %}"
+         id="ra3-panel" role="tabpanel">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-controller fs-1 text-secondary d-block mb-3"></i>
+                <h5 class="text-secondary">Red Alert 3 Stats</h5>
+                <p class="text-muted">Detailed per-player stats are not yet available for Red Alert 3.</p>
+            </div>
+        </div>
+    </div>
+
+    {# Generals / ZH Tab #}
+    <div class="tab-pane fade {% if generals %}show active{% endif %}"
+         id="generals-panel" role="tabpanel">
+        {% if generals %}
+
+        {# Overview row #}
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold">
+                            <span class="badge rank-badge-{{ generals.rank_level }} fs-6 px-3 py-2">
+                                {{ generals.rank_name }}
+                            </span>
+                        </div>
+                        <div class="text-secondary small mt-1">Rank</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold text-success">{{ generals.total_wins }}</div>
+                        <div class="text-secondary small">Wins</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold text-danger">{{ generals.total_losses }}</div>
+                        <div class="text-secondary small">Losses</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold
+                            {% if generals.win_ratio >= 60 %}text-success
+                            {% elif generals.win_ratio >= 40 %}text-warning
+                            {% else %}text-danger{% endif %}">
+                            {{ generals.win_ratio }}%
+                        </div>
+                        <div class="text-secondary small">Win Rate</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Secondary stats row #}
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-5 fw-bold">{{ generals.total_games }}</div>
+                        <div class="text-secondary small">Total Games</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-5 fw-bold">{{ generals.hours }}h</div>
+                        <div class="text-secondary small">Play Time</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-5 fw-bold">{{ generals.win_row_max }}</div>
+                        <div class="text-secondary small">Best Streak</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-5 fw-bold {% if generals.disconnects > 0 %}text-warning{% endif %}">
+                            {{ generals.disconnects }}
+                        </div>
+                        <div class="text-secondary small">Disconnects</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            {# Per-general breakdown #}
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">
+                            <i class="bi bi-bar-chart-fill me-2"></i>Per General Breakdown
+                        </h6>
+                        {% if generals.generals_breakdown %}
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>General</th>
+                                        <th class="text-center">Wins</th>
+                                        <th class="text-center">Losses</th>
+                                        <th class="text-center">Games</th>
+                                        <th class="text-center">Win%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for g in generals.generals_breakdown %}
+                                    <tr {% if g.games == 0 %}class="text-muted"{% endif %}>
+                                        <td>
+                                            <span class="badge bg-{{ g.color }} bg-opacity-25 border border-{{ g.color }} text-{{ g.color }}">
+                                                {{ g.name }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            {% if g.wins > 0 %}<span class="text-success">{{ g.wins }}</span>{% else %}0{% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if g.losses > 0 %}<span class="text-danger">{{ g.losses }}</span>{% else %}0{% endif %}
+                                        </td>
+                                        <td class="text-center text-secondary">{{ g.games }}</td>
+                                        <td class="text-center">
+                                            {% if g.games > 0 %}
+                                                {% if g.win_ratio >= 60 %}
+                                                    <span class="text-success">{{ g.win_ratio }}%</span>
+                                                {% elif g.win_ratio >= 40 %}
+                                                    <span class="text-warning">{{ g.win_ratio }}%</span>
+                                                {% else %}
+                                                    <span class="text-danger">{{ g.win_ratio }}%</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted text-center py-3">No games played yet.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# Battle honors #}
+            <div class="col-lg-5">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">
+                            <i class="bi bi-award-fill me-2"></i>Battle Honors
+                            <span class="badge bg-secondary ms-2">{{ generals.honors_count }} earned</span>
+                        </h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for honor in generals.honors_detail %}
+                            <span class="badge honor-badge {% if honor.earned %}honor-earned{% else %}honor-locked{% endif %}"
+                                  data-bs-toggle="tooltip" title="{{ honor.description }}">
+                                {% if honor.earned %}
+                                <i class="bi bi-check-circle-fill me-1"></i>
+                                {% else %}
+                                <i class="bi bi-lock-fill me-1"></i>
+                                {% endif %}
+                                {{ honor.name }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-star fs-1 text-secondary d-block mb-3"></i>
+                <h5 class="text-secondary">No Generals / ZH Stats</h5>
+                <p class="text-muted">This player hasn't played any Generals or Zero Hour matches yet.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<div class="mt-3">
+    <a href="/leaderboard?game=generals" class="text-secondary small">
+        <i class="bi bi-arrow-left me-1"></i>Back to leaderboard
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .nav-tabs {
+        border-bottom: 1px solid var(--border-color);
+    }
+    .nav-tabs .nav-link {
+        color: var(--text-muted);
+        border: 1px solid transparent;
+        border-radius: 6px 6px 0 0;
+        padding: 0.6rem 1.2rem;
+    }
+    .nav-tabs .nav-link:hover {
+        color: var(--text-primary);
+        border-color: var(--border-color) var(--border-color) transparent;
+    }
+    .nav-tabs .nav-link.active {
+        color: var(--text-primary);
+        background-color: var(--bg-card);
+        border-color: var(--border-color) var(--border-color) var(--bg-card);
+    }
+    .rank-badge-0 { background-color: #6c757d; }
+    .rank-badge-1 { background-color: #495057; }
+    .rank-badge-2 { background-color: #5a6268; }
+    .rank-badge-3 { background-color: #17a2b8; color: #fff; }
+    .rank-badge-4 { background-color: #007bff; color: #fff; }
+    .rank-badge-5 { background-color: #6610f2; color: #fff; }
+    .rank-badge-6 { background-color: #28a745; color: #fff; }
+    .rank-badge-7 { background-color: #fd7e14; color: #fff; }
+    .rank-badge-8 { background-color: #dc3545; color: #fff; }
+    .rank-badge-9 { background: linear-gradient(135deg, #f0c14b, #dc3545); color: #fff; font-weight: 700; }
+    .honor-badge {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.6rem;
+        cursor: default;
+    }
+    .honor-earned {
+        background-color: rgba(46, 160, 67, 0.2);
+        color: #3fb950;
+        border: 1px solid #238636;
+    }
+    .honor-locked {
+        background-color: rgba(139, 148, 158, 0.1);
+        color: #6e7681;
+        border: 1px solid #30363d;
+    }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Initialize Bootstrap tooltips
+    const tooltipEls = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltipEls.forEach(el => new bootstrap.Tooltip(el));
+</script>
+{% endblock %}

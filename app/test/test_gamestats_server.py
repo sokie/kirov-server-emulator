@@ -23,8 +23,6 @@ import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.servers.gamestats_server import GameStatsServer
 from app.util.cipher import gs_chresp_num, gs_xor
 

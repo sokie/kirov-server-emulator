@@ -19,7 +19,33 @@ def create_db_and_tables():
     """
     Initializes the database and creates all tables defined by SQLModel models.
     This function should be called once when the application starts.
+
+    Explicitly imports all models so their table definitions are registered in
+    SQLModel.metadata before create_all is called, regardless of import order
+    elsewhere in the application.
     """
+    from app.models.models import (  # noqa: F401
+        AuthCertificate,
+        BuddyRequest,
+        Clan,
+        ClanMembership,
+        CompetitionSession,
+        FeslSession,
+        Friend,
+        GameEntitlement,
+        GameInvite,
+        GameSpyPreAuthTicket,
+        GameSpySession,
+        GeneralsPlayerStats,
+        MatchReport,
+        Persona,
+        PlayerLevel,
+        PlayerReportIntent,
+        PlayerStats,
+        User,
+        WebSession,
+    )
+
     SQLModel.metadata.create_all(engine)
 
 

@@ -696,6 +696,181 @@ def get_all_generals_stats(session: Session) -> list[GeneralsPlayerStats]:
     return list(session.exec(select(GeneralsPlayerStats)).all())
 
 
+_GENERALS_RANK_NAMES = [
+    "Private",
+    "Corporal",
+    "Sergeant",
+    "Lieutenant",
+    "Captain",
+    "Major",
+    "Colonel",
+    "Brigadier General",
+    "General",
+    "Commander in Chief",
+]
+
+_GENERALS_GENERAL_DISPLAY: dict[int, tuple[str, str]] = {
+    0: ("Random", "secondary"),
+    1: ("Observer", "secondary"),
+    2: ("USA", "primary"),
+    3: ("China", "danger"),
+    4: ("GLA", "warning"),
+    5: ("USA Superweapon", "primary"),
+    6: ("USA Laser", "primary"),
+    7: ("USA Air Force", "primary"),
+    8: ("China Tank", "danger"),
+    9: ("China Infantry", "danger"),
+    10: ("China Nuke", "danger"),
+    11: ("GLA Toxin", "warning"),
+    12: ("GLA Demo", "warning"),
+    13: ("GLA Stealth", "warning"),
+}
+
+_GENERALS_HONOR_LIST = [
+    (0x000002, "Streak", "5+ win streak"),
+    (0x1000000, "Online Streak", "3+ win streak online"),
+    (0x000020, "USA Loyalty", "20+ consecutive USA games"),
+    (0x000040, "China Loyalty", "20+ consecutive China games"),
+    (0x000200, "GLA Loyalty", "20+ consecutive GLA games"),
+    (0x010000, "Fair Play", "Disconnect rate < 5%"),
+    (0x020000, "Apocalypse", "Built Nuke, SCUD, and Particle Cannon"),
+    (0x040000, "Officers Club", "Reached Colonel rank or higher"),
+    (0x080000, "Domination", ">75% win rate in 20+ games"),
+    (0x800000, "Online Domination", ">75% win rate online"),
+    (0x100000, "Challenge Mode", "Earned challenge medals"),
+    (0x400000, "Global General", "Played with all 12 generals"),
+    (0x000400, "Endurance", "100+ hours played"),
+    (0x200000, "Ultimate", "All honors earned"),
+    (0x000080, "Battle Tank", "50+ vehicles built in a game"),
+    (0x000100, "Air Wing", "20+ aircraft built in a game"),
+    (0x004000, "Blitz <5min", "Won in under 5 minutes"),
+    (0x008000, "Blitz <10min", "Won in under 10 minutes"),
+]
+
+
+def get_generals_leaderboard(session: Session, limit: int = 50) -> list[dict]:
+    """Return Generals/ZH leaderboard sorted by rank then total wins."""
+    from app.util.generals_stats import (
+        _get_total_duration_hours,
+        _get_total_losses,
+        _get_total_wins,
+        calculate_rank,
+        parse_generals_kv,
+    )
+
+    records = get_all_generals_stats(session)
+    leaderboard = []
+    for record in records:
+        persona = get_persona_by_id(session, record.persona_id)
+        if not persona:
+            continue
+        kv = parse_generals_kv(record.raw_data)
+        rank = calculate_rank(kv)
+        total_wins = _get_total_wins(kv)
+        total_losses = _get_total_losses(kv)
+        total_games = total_wins + total_losses
+        hours = round(_get_total_duration_hours(kv), 1)
+        win_ratio = round(total_wins / total_games * 100, 1) if total_games > 0 else 0.0
+        honors_count = bin(record.battle_honors).count("1")
+
+        leaderboard.append(
+            {
+                "persona_id": record.persona_id,
+                "name": persona.name,
+                "rank_level": rank,
+                "rank_name": _GENERALS_RANK_NAMES[rank],
+                "total_wins": total_wins,
+                "total_losses": total_losses,
+                "total_games": total_games,
+                "win_ratio": win_ratio,
+                "hours": hours,
+                "honors_count": honors_count,
+            }
+        )
+
+    leaderboard.sort(key=lambda x: (-x["rank_level"], -x["total_wins"]))
+    leaderboard = leaderboard[:limit]
+    for i, entry in enumerate(leaderboard, 1):
+        entry["position"] = i
+
+    return leaderboard
+
+
+def get_generals_player_profile(session: Session, persona_id: int) -> dict | None:
+    """Return detailed Generals/ZH stats for a player profile page."""
+    from app.util.generals_stats import (
+        _get_int,
+        _get_total_desyncs,
+        _get_total_disconnects,
+        _get_total_duration_hours,
+        _get_total_losses,
+        _get_total_wins,
+        calculate_rank,
+        parse_generals_kv,
+    )
+
+    record = get_generals_player_stats(session, persona_id)
+    if not record:
+        return None
+
+    kv = parse_generals_kv(record.raw_data)
+    rank = calculate_rank(kv)
+
+    total_wins = _get_total_wins(kv)
+    total_losses = _get_total_losses(kv)
+    total_games = total_wins + total_losses
+    hours = _get_total_duration_hours(kv)
+    disconnects = _get_total_disconnects(kv)
+    desyncs = _get_total_desyncs(kv)
+    win_ratio = round(total_wins / total_games * 100, 1) if total_games > 0 else 0.0
+
+    generals_breakdown = []
+    for idx in range(2, 14):
+        w = _get_int(kv, f"wins{idx}")
+        lv = _get_int(kv, f"losses{idx}")
+        g = w + lv
+        display_name, color = _GENERALS_GENERAL_DISPLAY.get(idx, (f"General {idx}", "secondary"))
+        generals_breakdown.append(
+            {
+                "name": display_name,
+                "color": color,
+                "wins": w,
+                "losses": lv,
+                "games": g,
+                "win_ratio": round(w / g * 100, 1) if g > 0 else 0.0,
+            }
+        )
+    generals_breakdown.sort(key=lambda x: -x["games"])
+
+    honors = record.battle_honors
+    honors_detail = [
+        {
+            "name": name,
+            "description": desc,
+            "earned": bool(honors & bitmask),
+        }
+        for bitmask, name, desc in _GENERALS_HONOR_LIST
+    ]
+
+    return {
+        "rank_level": rank,
+        "rank_name": _GENERALS_RANK_NAMES[rank],
+        "total_wins": total_wins,
+        "total_losses": total_losses,
+        "total_games": total_games,
+        "win_ratio": win_ratio,
+        "hours": round(hours, 1),
+        "disconnects": disconnects,
+        "desyncs": desyncs,
+        "win_row_max": _get_int(kv, "WinRowMax"),
+        "gen_in_row": _get_int(kv, "genInRow"),
+        "battle_honors": honors,
+        "honors_count": bin(honors).count("1"),
+        "generals_breakdown": generals_breakdown,
+        "honors_detail": honors_detail,
+    }
+
+
 def get_player_level(session: Session, persona_id: int) -> PlayerLevel | None:
     """Gets player level for a persona."""
     stmt = select(PlayerLevel).where(PlayerLevel.persona_id == persona_id)

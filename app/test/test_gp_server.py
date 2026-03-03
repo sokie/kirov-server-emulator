@@ -934,9 +934,15 @@ class TestGpServerTraditionalLogin:
         mock_persona = self._make_mock_persona()
         mock_gp_session = self._make_mock_session()
 
+        mock_preauth = MagicMock()
+        mock_preauth.id = 999
+        mock_preauth.challenge = "preauthchallenge"
+        mock_preauth.secret_token = "preauthsecret"
+
         with (
             patch("app.servers.gp_server.get_user_by_email", return_value=mock_user),
             patch("app.servers.gp_server.get_persona_by_name", return_value=mock_persona),
+            patch("app.servers.gp_server.create_preauth_ticket", return_value=mock_preauth),
             patch("app.servers.gp_server.create_gamespy_session", return_value=mock_gp_session),
         ):
             response = self.gp_server.handle_login(request_data)
@@ -1012,10 +1018,16 @@ class TestGpServerTraditionalLogin:
         mock_persona = self._make_mock_persona()
         mock_gp_session = self._make_mock_session()
 
+        mock_preauth = MagicMock()
+        mock_preauth.id = 999
+        mock_preauth.challenge = "preauthchallenge"
+        mock_preauth.secret_token = "preauthsecret"
+
         with (
             patch("app.servers.gp_server.get_user_by_email", return_value=mock_user),
             patch("app.servers.gp_server.get_persona_by_name", return_value=None),
             patch("app.servers.gp_server.create_persona_for_user", return_value=mock_persona) as mock_create,
+            patch("app.servers.gp_server.create_preauth_ticket", return_value=mock_preauth),
             patch("app.servers.gp_server.create_gamespy_session", return_value=mock_gp_session),
         ):
             response = self.gp_server.handle_login(request_data)

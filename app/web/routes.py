@@ -14,6 +14,8 @@ from app.db.crud import (
     get_clan_leader,
     get_clan_member_count,
     get_clan_members,
+    get_generals_leaderboard,
+    get_generals_player_profile,
     get_leaderboard,
     get_persona_by_id,
     get_persona_clan,
@@ -245,9 +247,13 @@ async def logout_page(
     return response
 
 
+LEADERBOARD_GAMES = ["ra3", "generals", "kanes_wrath"]
+
+
 @router.get("/leaderboard", response_class=HTMLResponse)
 async def leaderboard_page(
     request: Request,
+    game: str = "ra3",
     game_type: str = "ranked_1v1",
     session: Session = Depends(get_session),
     user: User | None = Depends(get_current_user_optional),
@@ -255,20 +261,56 @@ async def leaderboard_page(
     """
     Render the leaderboard page with player statistics.
     """
-    # Validate game type
-    if game_type not in GAME_TYPES:
-        game_type = "ranked_1v1"
+    if game not in LEADERBOARD_GAMES:
+        game = "ra3"
 
-    players = get_leaderboard(session, game_type)
+    players: list[dict] = []
+    generals_players: list[dict] = []
+
+    if game == "ra3":
+        if game_type not in GAME_TYPES:
+            game_type = "ranked_1v1"
+        players = get_leaderboard(session, game_type)
+    elif game == "generals":
+        generals_players = get_generals_leaderboard(session)
 
     return templates.TemplateResponse(
         "leaderboard.html",
         {
             "request": request,
             "user": user,
+            "game": game,
             "players": players,
+            "generals_players": generals_players,
             "game_type": game_type,
             "game_types": GAME_TYPES,
+        },
+    )
+
+
+@router.get("/players/{persona_id}", response_class=HTMLResponse)
+async def player_profile_page(
+    request: Request,
+    persona_id: int,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(get_current_user_optional),
+):
+    """
+    Render the player profile/statistics page.
+    """
+    persona = get_persona_by_id(session, persona_id)
+    if not persona:
+        return RedirectResponse(url="/leaderboard", status_code=302)
+
+    generals = get_generals_player_profile(session, persona_id)
+
+    return templates.TemplateResponse(
+        "player_profile.html",
+        {
+            "request": request,
+            "user": user,
+            "persona": persona,
+            "generals": generals,
         },
     )
 
@@ -492,9 +534,9 @@ async def generals_display_html(request: Request, db: Session = Depends(get_sess
         kv = parse_generals_kv(record.raw_data)
         for idx in range(14):
             w = _get_int(kv, f"wins{idx}")
-            l = _get_int(kv, f"losses{idx}")
+            lv = _get_int(kv, f"losses{idx}")
             wins_by_index[idx] += w
-            games_by_index[idx] += w + l
+            games_by_index[idx] += w + lv
 
     sides = [
         "USA",
