@@ -505,18 +505,18 @@ def build_game_list_response(
     games: list,
     fields: list,
     client_ip: str = DEFAULT_MASTER_IP,
-    validate_token: bytes = b"",
-    field_types: dict | None = None,
+    client_port: int = 0,
 ) -> bytes:
     """
-    Build a classic-format game list response.
+    Build a classic-format game list response (Type 1).
 
     Response structure:
         ip4     clientIp (echoed back to client)
-        u16be   queryKey (derived from validate token)
-        fieldList
+        u16be   clientPort (echoed back to client)
+        fieldList  (all fields declared as type 0 / string)
         u8      0x00
         [gameEntryClassic]...
+        u8      0x00
         u8x4    0xFF 0xFF 0xFF 0xFF (end marker)
 
     Game entry structure:
@@ -528,14 +528,15 @@ def build_game_list_response(
         ip4     tracedIp
         repeat for each field:
             u8 0xFF + str bytes + u8 0x00
-        u8      0x00 (end of entry)
+
+    Note: No per-entry terminator. The single 0x00 before the 0xFFFFFFFF
+    end marker terminates the entire entry list.
 
     Args:
         games: List of GameEntry objects
         fields: List of field names to include
         client_ip: Client's IP address (echoed back in response)
-        validate_token: 8-byte validate token from request (used to derive query key)
-        field_types: Optional dict mapping field name to type (0=string, 1=binary)
+        client_port: Client's source port (echoed back in response)
 
     Returns:
         Complete response bytes
@@ -545,16 +546,16 @@ def build_game_list_response(
     # Client IP echoed back (4 bytes)
     response += ip_to_bytes(client_ip)
 
-    # Query key derived from validate token (2 bytes)
-    response += _compute_query_key(validate_token)
+    # Client port echoed back (2 bytes)
+    response += struct.pack("!H", client_port)
 
-    # Field list with per-game types
-    response += make_field_list(fields, field_types)
+    # Field list — all type 0 (string) for the classic initial response
+    response += make_field_list(fields)
 
     # Separator
     response += b"\x00"
 
-    # Game entries
+    # Game entries — no per-entry terminator
     for game in games:
         # Result type '~' for full entry
         response += struct.pack("B", RESULT_TYPE_FULL)
@@ -574,9 +575,6 @@ def build_game_list_response(
         for field_name in fields:
             value = game.get_field_value(field_name)
             response += encode_field_value_classic(value)
-
-        # End of entry marker
-        response += b"\x00"
 
     # End marker
     response += b"\x00"

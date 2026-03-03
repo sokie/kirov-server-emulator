@@ -309,6 +309,28 @@ class GameInvite(SQLModel, table=True):
 # =============================================================================
 
 
+class GeneralsPlayerStats(SQLModel, table=True):
+    """
+    Generals/Zero Hour Player Stats - stored as raw key-value blob.
+
+    The game sends ~200+ stat keys (20 stat types x 9+ generals + global stats)
+    as backslash-delimited KV pairs. Storing as a raw string avoids 200+ columns
+    and matches how the original GameSpy server worked.
+
+    battle_honors is a computed 32-bit bitmask, recalculated on each setpd.
+    """
+
+    __tablename__ = "generals_player_stats"
+
+    id: int | None = Field(default=None, primary_key=True)
+    persona_id: int = Field(foreign_key="persona.id", unique=True, index=True)
+    raw_data: str = Field(default="")
+    battle_honors: int = Field(default=0)
+    challenge_medals: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class PlayerStats(SQLModel, table=True):
     """
     Player Stats - Career statistics by game type.

@@ -37,6 +37,13 @@
     "port": 29920,
     "enabled": true
   },
+  "generals_rank": {
+    "thresholds": [0, 50, 150, 350, 700, 1200, 2000, 3500, 6000, 10000],
+    "win_multiplier": 3.0,
+    "loss_multiplier": 1.0,
+    "hour_multiplier": 1.0,
+    "disconnect_multiplier": -5.0
+  },
   "game": {
     "gamekeys": {
       "cnc3pc": "YOUR_CNC3_GAME_KEY",

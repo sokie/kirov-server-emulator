@@ -28,7 +28,9 @@ from typing import TYPE_CHECKING
 
 from app.config.app_settings import app_config
 from app.db.crud import (
+    create_or_update_generals_stats,
     create_or_update_player_stats,
+    get_generals_player_stats,
     get_player_stats,
     validate_and_consume_preauth_ticket,
 )
@@ -71,6 +73,7 @@ class GameStatsServer(asyncio.Protocol):
         self.persona_id: int | None = None
         self.sesskey: str | None = None
         self.server_challenge: str = ""
+        self.gamename: str | None = None
 
     @property
     def db_session(self):
@@ -91,13 +94,11 @@ class GameStatsServer(asyncio.Protocol):
         # Create database session for this connection
         self.db_session = create_session()
 
-        # Generate and send initial challenge (NOT encrypted)
+        # Generate and send initial challenge
         self.server_challenge = self._generate_challenge()
-        challenge_response = f"\\lc\\1\\challenge\\{self.server_challenge}\\id\\1\\final\\"
-        response_bytes = challenge_response.encode("latin-1")
-        logger.debug("GameStats: Sending challenge: %s", challenge_response)
-        logger.debug("GameStats TX hex: %s", format_hex(response_bytes))
-        self.transport.write(response_bytes)
+        challenge_msg = f"\\lc\\1\\challenge\\{self.server_challenge}\\id\\1\\final\\"
+        logger.debug("GameStats: Sending challenge: %s", challenge_msg)
+        self._send_response(challenge_msg)
 
     def _generate_challenge(self) -> str:
         """Generate a random challenge string - 10 characters."""
@@ -108,29 +109,20 @@ class GameStatsServer(asyncio.Protocol):
             logger.debug("GameStats: Received %d bytes from %s", len(data), self.peername)
             logger.debug("GameStats RX hex: %s", format_hex(data))
 
-            # Add to buffer
             self.buffer += data
 
-            # Process complete messages (ending with \final\)
-            while True:
-                # Decrypt the buffer to find message boundaries
-                decrypted = gs_xor(self.buffer)
-                final_marker = b"\\final\\"
+            # \final\ is a plaintext delimiter - split on it, decrypt each segment
+            final_marker = b"\\final\\"
+            while final_marker in self.buffer:
+                final_pos = self.buffer.find(final_marker)
+                encrypted_segment = self.buffer[:final_pos]
+                self.buffer = self.buffer[final_pos + len(final_marker) :]
 
-                final_pos = decrypted.find(final_marker)
-                if final_pos == -1:
-                    # No complete message yet
-                    break
+                if not encrypted_segment:
+                    continue
 
-                # Extract the complete message (encrypted)
-                message_len = final_pos + len(final_marker)
-                encrypted_message = self.buffer[:message_len]
-                self.buffer = self.buffer[message_len:]
-
-                # Decrypt and process
-                decrypted_message = gs_xor(encrypted_message).decode("latin-1")
+                decrypted_message = gs_xor(encrypted_segment).decode("latin-1")
                 logger.debug("GameStats RX decrypted: %s", decrypted_message)
-
                 self._process_message(decrypted_message)
 
         except Exception as e:
@@ -168,6 +160,10 @@ class GameStatsServer(asyncio.Protocol):
             response = self._handle_getpd(request_data)
         elif command == "setpd":
             response = self._handle_setpd(request_data)
+        elif command == "newgame":
+            response = self._handle_newgame(request_data)
+        elif command == "updgame":
+            response = self._handle_updgame(request_data)
         elif command == "ka":
             response = "\\ka\\\\final\\"
         else:
@@ -178,8 +174,46 @@ class GameStatsServer(asyncio.Protocol):
             self._send_response(response)
 
     def _parse_request(self, data: str) -> dict[str, str]:
-        """Parses the GameStats request string into a dictionary."""
-        parts = data.strip().split("\\")
+        r"""
+        Parses the GameStats request string into a dictionary.
+
+        Handles the length-based \data\ field used by Generals/Zero Hour where the
+        data field itself contains backslashes (e.g., \length\30\data\wins0\5\losses0\3\).
+        The \length\ field specifies how many bytes the \data\ field contains.
+        This is backward-compatible with CNC3/RA3 JSON data which has no internal backslashes.
+        """
+        stripped = data.strip()
+
+        # Extract length-delimited data field before splitting
+        # Look for \length\N\data\ pattern and extract exactly N bytes
+        data_value = None
+        length_marker = "\\length\\"
+        data_marker = "\\data\\"
+        length_pos = stripped.find(length_marker)
+
+        if length_pos != -1:
+            after_length = length_pos + len(length_marker)
+            # Find the end of the length value (next backslash)
+            next_sep = stripped.find("\\", after_length)
+            if next_sep != -1:
+                try:
+                    data_length = int(stripped[after_length:next_sep])
+                except ValueError:
+                    data_length = -1
+
+                if data_length >= 0:
+                    # Find \data\ marker after length value
+                    data_pos = stripped.find(data_marker, next_sep)
+                    if data_pos != -1:
+                        data_start = data_pos + len(data_marker)
+                        data_value = stripped[data_start : data_start + data_length]
+                        # Reconstruct the string without the raw data blob
+                        # Keep everything before \length\, add length and data as simple values,
+                        # then append everything after the data blob
+                        remainder_start = data_start + data_length
+                        stripped = stripped[:length_pos] + stripped[remainder_start:]
+
+        parts = stripped.split("\\")
 
         # Remove empty strings and 'final'
         while parts and parts[0] == "":
@@ -199,6 +233,11 @@ class GameStatsServer(asyncio.Protocol):
                 result[key] = value
             i += 2
 
+        # Re-insert extracted data value and length
+        if data_value is not None:
+            result["data"] = data_value
+            result["length"] = str(len(data_value))
+
         return result
 
     def _format_response(self, data: dict[str, str]) -> str:
@@ -210,12 +249,18 @@ class GameStatsServer(asyncio.Protocol):
         return f"\\error\\\\errmsg\\{message}\\id\\{request_id}\\final\\"
 
     def _send_response(self, response: str):
-        """Sends an encrypted response to the client."""
+        r"""Sends an encrypted response to the client.
+
+        XOR encrypts the payload (everything before \final\) and appends
+        \final\ as a plaintext delimiter.
+        """
         if not self.transport:
             return
 
         logger.debug("GameStats TX (plaintext): %s", response)
-        encrypted = gs_xor(response.encode("latin-1"))
+        # Split off \final\, XOR only the payload, re-append \final\ as plaintext
+        payload = response.replace("\\final\\", "")
+        encrypted = gs_xor(payload.encode("latin-1")) + b"\\final\\"
         logger.debug("GameStats TX hex: %s", format_hex(encrypted))
         self.transport.write(encrypted)
 
@@ -270,6 +315,7 @@ class GameStatsServer(asyncio.Protocol):
             return self._format_error("Invalid response", request_id)
 
         self.authenticated_game = True
+        self.gamename = gamename
 
         # Generate a session key
         sesskey = str(secrets.randbelow(999999999) + 100000000)
@@ -292,43 +338,57 @@ class GameStatsServer(asyncio.Protocol):
         r"""
         Handle \authp\ command - Player authentication.
 
-        Validates the player using their authtoken from FESL/GP session.
+        Two variants depending on game:
 
-        Request fields:
-        - authtoken: Base64-encoded ticket from FESL GameSpyPreAuth
-        - lid: Local ID
-        - pid: Profile ID
-        - id: Request ID
+        CNC3/RA3 (EA login):
+          \authp\\authtoken\<ticket>\resp\<hash>\final\
+          Validates the player using their authtoken from FESL/GP pre-auth.
+
+        Generals/Zero Hour (classic GameSpy):
+          \authp\\pid\<n>\resp\<hash>\lid\<n>\final\
+          No authtoken — GameSpy SDK sends pid + resp (challenge-response hash).
+          The resp field is ignored (matches reference implementation); the pid
+          is accepted directly since game auth (\auth\) was already verified.
 
         Response fields:
-        - pauthr: Auth result (0 = success)
+        - pauthr: Profile ID (success) or -1 (failure)
         - lid: Local ID (echo back)
-        - id: Request ID
         """
         logger.debug("GameStats: Processing authp")
 
         authtoken = request_data.get("authtoken", "")
+        pid_str = request_data.get("pid", "")
         lid = request_data.get("lid", "1")
         request_id = request_data.get("id", "1")
 
-        if not authtoken:
-            return self._format_error("Missing authtoken", request_id)
+        if authtoken:
+            # CNC3/RA3 path: validate using FESL pre-auth ticket
+            result = validate_and_consume_preauth_ticket(self.db_session, authtoken)
 
-        # Validate the pre-auth ticket
-        result = validate_and_consume_preauth_ticket(self.db_session, authtoken)
+            if not result:
+                logger.debug("GameStats: Invalid or expired authtoken")
+                response_data = {
+                    "pauthr": "-1",
+                    "lid": lid,
+                    "errmsg": "Invalid authtoken",
+                }
+                return self._format_response(response_data)
 
-        if not result:
-            logger.debug("GameStats: Invalid or expired authtoken")
-            # Return error code instead of success
-            response_data = {
-                "pauthr": "-1",
-                "lid": lid,
-                "errmsg": "Invalid authtoken",
-                "id": request_id,
-            }
-            return self._format_response(response_data)
+            user_id, persona_id, _ticket = result
 
-        user_id, persona_id, preauth_ticket = result
+        elif pid_str:
+            # Generals/ZH path: no authtoken, game sends pid + resp
+            # resp is a challenge-response hash but is ignored (reference does the same)
+            # game auth (\auth\) already verified the client is a legitimate game
+            try:
+                persona_id = int(pid_str)
+            except ValueError:
+                return self._format_error("Invalid pid", request_id)
+            user_id = persona_id
+            logger.debug("GameStats: Generals authp for pid=%s (resp ignored)", pid_str)
+
+        else:
+            return self._format_error("Missing authtoken or pid", request_id)
 
         self.user_id = user_id
         self.persona_id = persona_id
@@ -337,50 +397,33 @@ class GameStatsServer(asyncio.Protocol):
         response_data = {
             "pauthr": str(persona_id),
             "lid": lid,
-            "id": request_id,
         }
 
         logger.debug("GameStats: Player auth successful: user=%s, persona=%s", user_id, persona_id)
         return self._format_response(response_data)
 
+    def _is_generals_game(self) -> bool:
+        """Check if the current game is Generals or Zero Hour."""
+        return self.gamename in ("ccgenerals", "ccgenzh")
+
     def _handle_getpd(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \getpd\ command - Get profile data.
 
-        Returns player stats for the specified profile.
-
-        Request fields:
-        - pid: Profile ID
-        - ptype: Profile type
-        - dindex: Data index
-        - keys: Comma-separated list of keys to retrieve
-        - lid: Local ID
-        - id: Request ID
-
-        Response fields:
-        - pid: Profile ID
-        - lid: Local ID
-        - mod: Modified timestamp
-        - length: Data length
-        - data: JSON-encoded stats data
-        - id: Request ID
+        Routes to game-specific handler based on gamename.
         """
         logger.debug("GameStats: Processing getpd")
 
         request_id = request_data.get("id", "1")
 
-        # Require both game and player authentication
+        # Require game authentication; player auth is only needed for writes (setpd).
+        # The GameSpy SDK sends getpd right after \auth\ without \authp\ first.
         if not self.authenticated_game:
             logger.debug("GameStats: getpd rejected - game not authenticated")
             return self._format_error("Game not authenticated", request_id)
 
-        if not self.authenticated_player:
-            logger.debug("GameStats: getpd rejected - player not authenticated")
-            return self._format_error("Player not authenticated", request_id)
-
         pid_str = request_data.get("pid", "")
         lid = request_data.get("lid", "1")
-        _keys_str = request_data.get("keys", "")  # Reserved for future use
 
         if not pid_str:
             return self._format_error("Missing pid", request_id)
@@ -390,10 +433,14 @@ class GameStatsServer(asyncio.Protocol):
         except ValueError:
             return self._format_error("Invalid pid", request_id)
 
-        # Get player stats from database
+        if self._is_generals_game():
+            return self._handle_getpd_generals(pid, lid, request_id, request_data)
+        return self._handle_getpd_json(pid, lid, request_id, request_data)
+
+    def _handle_getpd_json(self, pid: int, lid: str, request_id: str, request_data: dict[str, str]) -> str:
+        """Handle getpd for CNC3/RA3 (JSON format)."""
         stats = get_player_stats(self.db_session, pid)
 
-        # Build response data
         stats_data = {}
         if stats:
             stats_data = {
@@ -430,42 +477,65 @@ class GameStatsServer(asyncio.Protocol):
                 "total_matches_online": stats.total_matches_online,
             }
 
-        # Encode as JSON
         data_json = json.dumps(stats_data)
         data_len = len(data_json)
 
         response_data = {
-            "pid": str(pid),
+            "getpdr": "1",
             "lid": lid,
+            "pid": str(pid),
             "mod": "0",
             "length": str(data_len),
             "data": data_json,
-            "id": request_id,
         }
 
-        logger.debug("GameStats: Returning stats for pid=%s, length=%d", pid, data_len)
+        logger.debug("GameStats: Returning JSON stats for pid=%s, length=%d", pid, data_len)
         return self._format_response(response_data)
+
+    def _handle_getpd_generals(self, pid: int, lid: str, request_id: str, request_data: dict[str, str]) -> str:
+        r"""
+        Handle getpd for Generals/Zero Hour (raw KV format).
+
+        Returns the raw_data from GeneralsPlayerStats as the data field,
+        with correct length. The battle honors bitmask is injected into
+        the data so the game can read it.
+        """
+        from app.util.generals_stats import calculate_rank, format_generals_kv, parse_generals_kv
+
+        stats = get_generals_player_stats(self.db_session, pid)
+
+        if stats and stats.raw_data:
+            # Inject computed battle honors and rank into the response data
+            parsed = parse_generals_kv(stats.raw_data)
+            rank = calculate_rank(parsed)
+            parsed["battle"] = str(stats.battle_honors)
+            parsed["rank"] = str(rank)
+            data_str = format_generals_kv(parsed)
+        else:
+            data_str = ""
+
+        data_len = len(data_str)
+
+        # Build the response manually to handle the data field correctly
+        # The data field contains backslashes, so we can't use _format_response
+        response = (
+            f"\\getpdr\\1"
+            f"\\lid\\{lid}"
+            f"\\pid\\{pid}"
+            f"\\mod\\{int(stats.updated_at.timestamp()) if stats else 0}"
+            f"\\length\\{data_len}"
+            f"\\data\\{data_str}"
+            f"\\final\\"
+        )
+
+        logger.debug("GameStats: Returning Generals stats for pid=%s, length=%d", pid, data_len)
+        return response
 
     def _handle_setpd(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \setpd\ command - Set profile data.
 
-        Saves player stats for the specified profile.
-
-        Request fields:
-        - pid: Profile ID
-        - ptype: Profile type
-        - dindex: Data index
-        - length: Data length
-        - data: JSON-encoded stats data
-        - lid: Local ID
-        - id: Request ID
-
-        Response fields:
-        - pid: Profile ID
-        - lid: Local ID
-        - mod: Modified timestamp
-        - id: Request ID
+        Routes to game-specific handler based on gamename.
         """
         logger.debug("GameStats: Processing setpd")
 
@@ -481,7 +551,7 @@ class GameStatsServer(asyncio.Protocol):
             return self._format_error("Player not authenticated", request_id)
 
         pid_str = request_data.get("pid", "")
-        data_str = request_data.get("data", "{}")
+        data_str = request_data.get("data", "")
         lid = request_data.get("lid", "1")
 
         if not pid_str:
@@ -501,24 +571,85 @@ class GameStatsServer(asyncio.Protocol):
             )
             return self._format_error("Cannot modify other player's stats", request_id)
 
-        # Parse the stats data
+        if self._is_generals_game():
+            return self._handle_setpd_generals(pid, data_str, lid, request_id)
+        return self._handle_setpd_json(pid, data_str, lid, request_id)
+
+    def _handle_setpd_json(self, pid: int, data_str: str, lid: str, request_id: str) -> str:
+        """Handle setpd for CNC3/RA3 (JSON format)."""
+        if not data_str:
+            data_str = "{}"
+
         try:
             stats_data = json.loads(data_str)
         except json.JSONDecodeError:
             stats_data = {}
 
-        # Update player stats
         if stats_data:
             create_or_update_player_stats(self.db_session, pid, stats_data)
 
         response_data = {
-            "pid": str(pid),
+            "setpdr": "1",
             "lid": lid,
+            "pid": str(pid),
             "mod": "1",
-            "id": request_id,
         }
 
-        logger.debug("GameStats: Stats saved for pid=%s", pid)
+        logger.debug("GameStats: JSON stats saved for pid=%s", pid)
+        return self._format_response(response_data)
+
+    def _handle_setpd_generals(self, pid: int, data_str: str, lid: str, request_id: str) -> str:
+        r"""
+        Handle setpd for Generals/Zero Hour (raw KV format).
+
+        Stores raw KV data, merging with existing stats. Recalculates
+        battle honors on each update.
+        """
+        if data_str:
+            create_or_update_generals_stats(self.db_session, pid, data_str)
+
+        response_data = {
+            "setpdr": "1",
+            "lid": lid,
+            "pid": str(pid),
+            "mod": "1",
+        }
+
+        logger.debug("GameStats: Generals stats saved for pid=%s", pid)
+        return self._format_response(response_data)
+
+    def _handle_newgame(self, request_data: dict[str, str]) -> str:
+        r"""
+        Handle \newgame\ command - Game snapshot start.
+
+        Sent by the gstats SDK when a game starts (SendGameSnapShot).
+        We acknowledge it so the client doesn't error out.
+        """
+        request_id = request_data.get("id", "1")
+        logger.debug("GameStats: Received newgame snapshot")
+
+        # Acknowledge with a session ID
+        response_data = {
+            "newgame": "",
+            "id": request_id,
+        }
+        return self._format_response(response_data)
+
+    def _handle_updgame(self, request_data: dict[str, str]) -> str:
+        r"""
+        Handle \updgame\ command - Game snapshot update.
+
+        Sent by the gstats SDK to update game snapshot data (player results, etc.).
+        We acknowledge it so the client doesn't error out.
+        """
+        request_id = request_data.get("id", "1")
+        logger.debug("GameStats: Received updgame snapshot")
+
+        # Acknowledge
+        response_data = {
+            "updgame": "",
+            "id": request_id,
+        }
         return self._format_response(response_data)
 
     def connection_lost(self, exc):

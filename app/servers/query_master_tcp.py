@@ -18,7 +18,6 @@ from app.servers.query_master_parsing import (
     build_room_list_response,
     create_default_rooms,
     create_rooms_by_game,
-    get_field_types,
     is_room_list_request,
     parse_filter_string,
     parse_tcp_query,
@@ -68,13 +67,14 @@ class QueryMasterHandler:
         """Set the list of available game sessions."""
         self.games = games
 
-    def handle_query(self, data: bytes, client_ip: str = "0.0.0.0", encrypt: bool = True) -> bytes:
+    def handle_query(self, data: bytes, client_ip: str = "0.0.0.0", client_port: int = 0, encrypt: bool = True) -> bytes:
         """
         Handle an incoming TCP query and return the appropriate response.
 
         Args:
             data: Raw TCP data from client
             client_ip: Client's IP address (echoed back in response header)
+            client_port: Client's source port (echoed back in response header)
             encrypt: Whether to encrypt the response (default True)
 
         Returns:
@@ -90,7 +90,7 @@ class QueryMasterHandler:
         if is_room_list_request(request):
             response = self._handle_room_list_request(request, client_ip)
         else:
-            response = self._handle_game_list_request(request, client_ip)
+            response = self._handle_game_list_request(request, client_ip, client_port)
 
         # Encrypt the response if requested
         if encrypt and response and request.validate_token:
@@ -161,8 +161,8 @@ class QueryMasterHandler:
             client_ip=client_ip,
         )
 
-    def _handle_game_list_request(self, request: QueryRequest, client_ip: str) -> bytes:
-        """Handle a game list request with per-game field types."""
+    def _handle_game_list_request(self, request: QueryRequest, client_ip: str, client_port: int = 0) -> bytes:
+        """Handle a game list request (classic Type 1 format — all string fields)."""
         logger.info("Handling game list request for %s", request.game_name)
 
         # Parse filter conditions
@@ -178,16 +178,13 @@ class QueryMasterHandler:
 
         logger.info("Game list: %d total, %d after filter", len(all_games), len(filtered_games))
 
-        # Use requested fields and per-game field types
         fields = request.fields if request.fields else []
-        field_types = get_field_types(fields)
 
         return build_game_list_response(
             games=filtered_games,
             fields=fields,
             client_ip=client_ip,
-            validate_token=request.validate_token,
-            field_types=field_types,
+            client_port=client_port,
         )
 
     def _filter_games(self, games: list, filter_conditions: list) -> list:
@@ -334,13 +331,15 @@ class QueryMasterServer(asyncio.Protocol):
             # Get the handler and process the query
             handler = self.get_handler()
 
-            # Get client IP from connection
+            # Get client IP/port from connection
             client_ip = "0.0.0.0"
+            client_port = 0
             if self.peername:
                 client_ip = self.peername[0]
+                client_port = self.peername[1]
 
-            # Process the query with client IP
-            response = handler.handle_query(packet, client_ip=client_ip)
+            # Process the query with client IP/port
+            response = handler.handle_query(packet, client_ip=client_ip, client_port=client_port)
 
             if response:
                 logger.debug("Sending response: %d bytes", len(response))

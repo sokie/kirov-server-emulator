@@ -75,6 +75,16 @@ class GameStatsSettings(BaseModel):
     enabled: bool = Field(default=True)
 
 
+class GeneralsRankSettings(BaseModel):
+    """Rank calculation settings for Generals/Zero Hour."""
+
+    thresholds: list[int] = Field(default=[0, 50, 150, 350, 700, 1200, 2000, 3500, 6000, 10000])
+    win_multiplier: float = Field(default=3.0)
+    loss_multiplier: float = Field(default=1.0)
+    hour_multiplier: float = Field(default=1.0)
+    disconnect_multiplier: float = Field(default=-5.0)
+
+
 # Compute config path at module load time for frozen executable support
 _config_path = os.path.join(get_runtime_path(), "config.json")
 
@@ -87,6 +97,7 @@ class AppSettings(BaseSettings):
     master: MasterServerSettings = Field(default_factory=MasterServerSettings)
     relay: RelaySettings = Field(default_factory=RelaySettings)
     gamestats: GameStatsSettings = Field(default_factory=GameStatsSettings)
+    generals_rank: GeneralsRankSettings = Field(default_factory=GeneralsRankSettings)
     game: GameSettings = Field()
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
 

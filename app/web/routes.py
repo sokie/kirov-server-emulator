@@ -1,13 +1,15 @@
 import os
 import re
+from collections import defaultdict
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 
 from app.db.crud import (
     get_all_clans,
+    get_all_generals_stats,
     get_clan_by_id,
     get_clan_leader,
     get_clan_member_count,
@@ -20,7 +22,9 @@ from app.db.crud import (
 )
 from app.db.database import get_session
 from app.models.models import User
+from app.models.peerchat_state import irc_clients
 from app.servers.sessions import GameSessionRegistry
+from app.util.generals_stats import SIDE_TO_INDEX, _get_int, parse_generals_kv
 from app.util.paths import get_base_path
 from app.web.auth import (
     SESSION_COOKIE_NAME,
@@ -458,3 +462,67 @@ async def clan_detail_page(
             "personas": personas,
         },
     )
+
+
+# =============================================================================
+# Generals/Zero Hour HTTP Endpoints
+# =============================================================================
+
+
+@router.get("/ccgenzh/display.html", response_class=HTMLResponse)
+@router.get("/ccgenerals/display.html", response_class=HTMLResponse)
+async def generals_display_html(request: Request, db: Session = Depends(get_session)):
+    """
+    Overall game statistics page for Generals/Zero Hour.
+
+    Called by CheckOverallStats() in MainMenuUtils.cpp via ghttpGet().
+    The game parses the response with HandleOverallStats(buffer, len).
+
+    The parser searches for "Today", then for each playable side it does
+    strstr() to find the side name, reads total games (next line) and wins
+    (line after). These are used to compute faction win rates on the welcome screen.
+
+    Returns server-wide all-time cumulative aggregates.
+    """
+    all_stats = get_all_generals_stats(db)
+
+    wins_by_index: dict[int, int] = defaultdict(int)
+    games_by_index: dict[int, int] = defaultdict(int)
+    for record in all_stats:
+        kv = parse_generals_kv(record.raw_data)
+        for idx in range(14):
+            w = _get_int(kv, f"wins{idx}")
+            l = _get_int(kv, f"losses{idx}")
+            wins_by_index[idx] += w
+            games_by_index[idx] += w + l
+
+    sides = [
+        "USA", "China", "GLA",
+        "AmericaSuperWeaponGeneral", "AmericaLaserGeneral", "AmericaAirForceGeneral",
+        "ChinaTankGeneral", "ChinaInfantryGeneral", "ChinaNukeGeneral",
+        "GLAToxinGeneral", "GLADemolitionGeneral", "GLAStealthGeneral",
+    ]
+    lines = ["<html><body>", "Today"]
+    for side in sides:
+        idx = SIDE_TO_INDEX[side]
+        lines.append(side)
+        lines.append(str(games_by_index[idx]))
+        lines.append(str(wins_by_index[idx]))
+    lines.append("</body></html>")
+    return HTMLResponse(content="\n".join(lines))
+
+
+@router.get("/software/launch/arcadecount2.dll", response_class=PlainTextResponse)
+async def arcade_count(svcname: str = Query(default="")):
+    r"""
+    Player count endpoint for Generals/Zero Hour.
+
+    Called by CheckNumPlayersOnline() in MainMenuUtils.cpp.
+    Query param: svcname=ccgenzh
+    Response format: \<count>\ (e.g., \5\ for 5 players online)
+    The game parses with HandleNumPlayersOnline(atoi(s)).
+    """
+    # Count active IRC clients + game sessions for the requested service
+    player_count = len(irc_clients)
+
+    return PlainTextResponse(content=f"\\{player_count}\\")

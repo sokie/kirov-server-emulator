@@ -35,6 +35,7 @@ from app.db.crud import (
     create_game_invite,
     create_gamespy_session,
     create_persona_for_user,
+    create_preauth_ticket,
     delete_buddy_one_way,
     get_gamespy_session_by_sesskey,
     get_persona_by_id,
@@ -389,12 +390,15 @@ class GpServer(asyncio.Protocol):
             logger.debug("Auto-creating persona '%s' for user %s", nickname, user.id)
             persona = create_persona_for_user(self.db_session, user, nickname)
 
-        # Create GameSpy session (no pre-auth ticket)
+        # Create preauth ticket so GameStats server can validate via \authp\
+        preauth = create_preauth_ticket(self.db_session, user.id, persona.id)
+
+        # Create GameSpy session
         gp_session = create_gamespy_session(
             session=self.db_session,
             user_id=user.id,
             persona_id=persona.id,
-            preauth_ticket_id=None,
+            preauth_ticket_id=preauth.id,
             client_ip=self.peername[0] if self.peername else None,
             port=int(request_data.get("port", 0)) or None,
             product_id=int(request_data.get("productid", 0)) or None,
@@ -419,10 +423,7 @@ class GpServer(asyncio.Protocol):
             server_challenge=self.server_challenge,
         )
 
-        # Generate lt (login ticket)
-        lt_secret = secrets.token_urlsafe(16)
-        lt_payload = f"{user.id}|{persona.id}|{lt_secret}"
-        lt = base64.b64encode(lt_payload.encode()).decode()
+        lt = preauth.ticket
 
         response_data = {
             "lc": "2",

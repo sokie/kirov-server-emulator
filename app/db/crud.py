@@ -18,6 +18,7 @@ from app.models.models import (
     GameInvite,
     GameSpyPreAuthTicket,
     GameSpySession,
+    GeneralsPlayerStats,
     MatchReport,
     Persona,
     PlayerLevel,
@@ -644,6 +645,55 @@ def create_or_update_player_stats(session: Session, persona_id: int, stats_data:
     session.commit()
     session.refresh(stats)
     return stats
+
+
+# =============================================================================
+# Generals/Zero Hour Stats CRUD
+# =============================================================================
+
+
+def get_generals_player_stats(session: Session, persona_id: int) -> GeneralsPlayerStats | None:
+    """Gets Generals/Zero Hour player stats for a persona."""
+    stmt = select(GeneralsPlayerStats).where(GeneralsPlayerStats.persona_id == persona_id)
+    return session.exec(stmt).first()
+
+
+def create_or_update_generals_stats(session: Session, persona_id: int, raw_data: str) -> GeneralsPlayerStats:
+    """
+    Creates or updates Generals/Zero Hour player stats.
+
+    Merges incoming KV data into existing data, recalculates battle honors,
+    and updates timestamps.
+    """
+    from app.util.generals_stats import (
+        calculate_rank,
+        evaluate_battle_honors,
+        merge_generals_kv,
+        parse_generals_kv,
+    )
+
+    stats = get_generals_player_stats(session, persona_id)
+
+    if stats is None:
+        stats = GeneralsPlayerStats(persona_id=persona_id, raw_data=raw_data)
+        session.add(stats)
+    else:
+        stats.raw_data = merge_generals_kv(stats.raw_data, raw_data)
+
+    # Recalculate battle honors from the merged data
+    parsed = parse_generals_kv(stats.raw_data)
+    rank = calculate_rank(parsed)
+    stats.battle_honors = evaluate_battle_honors(parsed, rank)
+
+    stats.updated_at = datetime.utcnow()
+    session.commit()
+    session.refresh(stats)
+    return stats
+
+
+def get_all_generals_stats(session: Session) -> list[GeneralsPlayerStats]:
+    """Return all GeneralsPlayerStats records."""
+    return list(session.exec(select(GeneralsPlayerStats)).all())
 
 
 def get_player_level(session: Session, persona_id: int) -> PlayerLevel | None:
