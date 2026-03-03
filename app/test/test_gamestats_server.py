@@ -48,19 +48,22 @@ LIVE_GENERALS_SETPD_DATA = (
 )
 
 # Minimal RA3 stats JSON that mirrors what the game sends in setpd
-LIVE_RA3_SETPD_JSON = json.dumps({
-    "wins_ranked_1v1": 5,
-    "losses_ranked_1v1": 2,
-    "wins_ranked_2v2": 1,
-    "losses_ranked_2v2": 0,
-    "disconnects_ranked_1v1": 0,
-    "total_matches_online": 8,
-})
+LIVE_RA3_SETPD_JSON = json.dumps(
+    {
+        "wins_ranked_1v1": 5,
+        "losses_ranked_1v1": 2,
+        "wins_ranked_2v2": 1,
+        "losses_ranked_2v2": 0,
+        "disconnects_ranked_1v1": 0,
+        "total_matches_online": 8,
+    }
+)
 
 
 # =============================================================================
 # Test infrastructure
 # =============================================================================
+
 
 class MockTransport:
     """Captures bytes written by the server."""
@@ -130,6 +133,7 @@ def _authed_server(gamename: str, pid: int) -> tuple[GameStatsServer, MockTransp
 # Request parsing
 # =============================================================================
 
+
 class TestParseRequest:
     """_parse_request handles both plain KV and length-delimited data fields."""
 
@@ -180,13 +184,15 @@ class TestParseRequest:
         assert result.get("pid") == "3"
 
     def test_generals_data_field_exact_length_respected(self):
-        # Only exactly `length` bytes should be consumed as the data value
-        payload = "\\wins8\\1\\"
-        extra = "\\shouldnotappear\\"
-        msg = f"\\setpd\\\\length\\{len(payload)}\\data\\{payload}{extra}\\final\\"
+        # Keys embedded INSIDE the data blob must not become top-level keys,
+        # even though they look like valid KV pairs.
+        inner = "\\hidden\\value\\"
+        payload = "\\wins8\\1\\" + inner
+        msg = f"\\setpd\\\\length\\{len(payload)}\\data\\{payload}\\final\\"
         result = self.server._parse_request(msg)
         assert result.get("data") == payload
-        assert "shouldnotappear" not in result
+        assert "hidden" not in result
+        assert "wins8" not in result
 
     def test_generals_live_setpd_payload_parsed(self):
         """Full live setpd payload (including null byte) is parsed correctly."""
@@ -207,6 +213,7 @@ class TestParseRequest:
 # =============================================================================
 # Response formatting
 # =============================================================================
+
 
 class TestFormatResponse:
     def setup_method(self):
@@ -253,6 +260,7 @@ class TestFormatResponse:
 # Game detection
 # =============================================================================
 
+
 class TestIsGeneralsGame:
     def test_ccgenzh_is_generals(self):
         server, _ = _make_server("ccgenzh")
@@ -283,6 +291,7 @@ class TestIsGeneralsGame:
 # _handle_auth
 # =============================================================================
 
+
 class TestHandleAuth:
     """Game authentication via challenge-response."""
 
@@ -291,14 +300,9 @@ class TestHandleAuth:
         return hashlib.md5(f"{chresp}{gamekey}".encode()).hexdigest()
 
     def test_auth_success_sets_authenticated_game(self):
-        server, transport = _make_server()
+        server, _ = _make_server()
         server.server_challenge = "TESTCHALLNG"
-        gamekey = "testkey123"
-
-        with patch("app.servers.gamestats_server.app_config") as mock_cfg:
-            mock_cfg.game.gamekeys.get.return_value = gamekey
-            response = self.server._handle_auth_with(server, "ccgenzh", gamekey)
-
+        self._handle_auth_with(server, "ccgenzh", "testkey123")
         assert server.authenticated_game
         assert server.gamename == "ccgenzh"
 
@@ -352,6 +356,7 @@ class TestHandleAuth:
 # =============================================================================
 # _handle_authp
 # =============================================================================
+
 
 class TestHandleAuthp:
     """Player authentication — two paths: authtoken (RA3) and pid (Generals)."""
@@ -407,6 +412,7 @@ class TestHandleAuthp:
 # _handle_getpd — auth guards and routing
 # =============================================================================
 
+
 class TestHandleGetpd:
     def test_getpd_requires_game_auth(self):
         server, transport = _make_server()
@@ -449,6 +455,7 @@ class TestHandleGetpd:
 # =============================================================================
 # _handle_getpd_generals
 # =============================================================================
+
 
 class TestHandleGetpdGenerals:
     """Generals/ZH getpd: returns raw KV data with injected battle and rank."""
@@ -544,9 +551,7 @@ class TestHandleGetpdGenerals:
             r"\lastGeneral\6\genInRow\2\builtCannon\0\builtNuke\0\builtSCUD\0"
             r"\WinRow\0\LossRow\1\DCRow\0\DSRow\0"
         )
-        after_null = (
-            r"\wins6\1\games6\1\duration6\3\losses6\1\WinRowMax\1\LossRowMax\1"
-        )
+        after_null = r"\wins6\1\games6\1\duration6\3\losses6\1\WinRowMax\1\LossRowMax\1"
         raw = before_null + "\x00" + after_null
 
         fake_stats = self._make_fake_stats(raw, battle_honors=HONOR_FAIR_PLAY)
@@ -561,6 +566,7 @@ class TestHandleGetpdGenerals:
 # =============================================================================
 # _handle_getpd_json (RA3 / CNC3)
 # =============================================================================
+
 
 class TestHandleGetpdJson:
     """RA3/CNC3 getpd: returns JSON-encoded stats."""
@@ -626,7 +632,7 @@ class TestHandleGetpdJson:
         assert parsed["total_matches_online"] == 7
 
     def test_response_does_not_contain_generals_kv_fields(self):
-        """RA3 response must never contain Generals-style \wins8\ fields."""
+        """RA3 response must never contain Generals-style wins8/losses6 fields."""
         server, _ = _make_server("redalert3pc")
         with patch("app.servers.gamestats_server.get_player_stats", return_value=None):
             result = server._handle_getpd_json(1, "0", "1", {})
@@ -639,6 +645,7 @@ class TestHandleGetpdJson:
 # =============================================================================
 # _handle_setpd — auth guards, pid ownership, routing
 # =============================================================================
+
 
 class TestHandleSetpd:
     def test_setpd_requires_game_auth(self):
@@ -685,6 +692,7 @@ class TestHandleSetpd:
 # _handle_setpd_generals
 # =============================================================================
 
+
 class TestHandleSetpdGenerals:
     """Generals/ZH setpd: saves KV data, recalculates honors, returns ack."""
 
@@ -726,6 +734,7 @@ class TestHandleSetpdGenerals:
 # _handle_setpd_json (RA3 / CNC3)
 # =============================================================================
 
+
 class TestHandleSetpdJson:
     """RA3/CNC3 setpd: saves JSON stats, does NOT touch Generals KV store."""
 
@@ -744,20 +753,22 @@ class TestHandleSetpdJson:
 
     def test_calls_player_stats_not_generals_stats(self):
         server, _ = _authed_server("redalert3pc", pid=1)
-        with patch("app.servers.gamestats_server.create_or_update_player_stats") as mock_ps, \
-             patch("app.servers.gamestats_server.create_or_update_generals_stats") as mock_gs:
+        with (
+            patch("app.servers.gamestats_server.create_or_update_player_stats") as mock_ps,
+            patch("app.servers.gamestats_server.create_or_update_generals_stats") as mock_gs,
+        ):
             server._handle_setpd_json(1, LIVE_RA3_SETPD_JSON, "0", "1")
         mock_ps.assert_called_once()
         mock_gs.assert_not_called()
 
-    def test_empty_data_defaults_to_empty_json(self):
+    def test_empty_data_skips_save(self):
+        # _handle_setpd_json skips the CRUD call when the parsed dict is empty.
+        # This matches the production code: `if stats_data: create_or_update(...)`.
         server, _ = _authed_server("redalert3pc", pid=1)
         with patch("app.servers.gamestats_server.create_or_update_player_stats") as mock_ps:
-            server._handle_setpd_json(1, "", "0", "1")
-        # Should still call with empty dict (not crash)
-        mock_ps.assert_called_once()
-        _, call_args, _ = mock_ps.mock_calls[0]
-        assert call_args[2] == {}
+            result = server._handle_setpd_json(1, "", "0", "1")
+        mock_ps.assert_not_called()
+        assert "\\setpdr\\1" in result  # still returns a valid ack
 
     def test_invalid_json_does_not_crash(self):
         server, _ = _authed_server("redalert3pc", pid=1)
@@ -769,6 +780,7 @@ class TestHandleSetpdJson:
 # =============================================================================
 # _handle_newgame / _handle_updgame
 # =============================================================================
+
 
 class TestHandleGameSnapshots:
     def test_newgame_returns_acknowledgment(self):
@@ -797,6 +809,7 @@ class TestHandleGameSnapshots:
 # =============================================================================
 # Full Generals flow — process_message end-to-end
 # =============================================================================
+
 
 class TestGeneralsFullFlow:
     """
@@ -848,6 +861,7 @@ class TestGeneralsFullFlow:
 # RA3/CNC3 backward compatibility
 # =============================================================================
 
+
 class TestRA3BackwardCompat:
     """
     Verify that RA3/CNC3 games continue to use the JSON path and are never
@@ -856,31 +870,39 @@ class TestRA3BackwardCompat:
 
     def test_ra3_getpd_never_calls_generals_handler(self):
         server, _ = _make_server("redalert3pc")
-        with patch.object(server, "_handle_getpd_generals") as mock_gen, \
-             patch.object(server, "_handle_getpd_json", return_value="\\getpdr\\1\\final\\") as mock_json:
+        with (
+            patch.object(server, "_handle_getpd_generals") as mock_gen,
+            patch.object(server, "_handle_getpd_json", return_value="\\getpdr\\1\\final\\") as mock_json,
+        ):
             server._handle_getpd({"pid": "1", "lid": "0", "id": "1"})
         mock_gen.assert_not_called()
         mock_json.assert_called_once()
 
     def test_ra3_setpd_never_calls_generals_handler(self):
         server, _ = _authed_server("redalert3pc", pid=1)
-        with patch.object(server, "_handle_setpd_generals") as mock_gen, \
-             patch.object(server, "_handle_setpd_json", return_value="\\setpdr\\1\\final\\") as mock_json:
+        with (
+            patch.object(server, "_handle_setpd_generals") as mock_gen,
+            patch.object(server, "_handle_setpd_json", return_value="\\setpdr\\1\\final\\") as mock_json,
+        ):
             server._handle_setpd({"pid": "1", "data": "{}", "lid": "0", "id": "1"})
         mock_gen.assert_not_called()
         mock_json.assert_called_once()
 
     def test_cnc3_getpd_never_calls_generals_handler(self):
         server, _ = _make_server("cnc3pc")
-        with patch.object(server, "_handle_getpd_generals") as mock_gen, \
-             patch.object(server, "_handle_getpd_json", return_value="\\getpdr\\1\\final\\"):
+        with (
+            patch.object(server, "_handle_getpd_generals") as mock_gen,
+            patch.object(server, "_handle_getpd_json", return_value="\\getpdr\\1\\final\\"),
+        ):
             server._handle_getpd({"pid": "1", "lid": "0", "id": "1"})
         mock_gen.assert_not_called()
 
     def test_generals_getpd_never_calls_json_handler(self):
         server, _ = _make_server("ccgenzh")
-        with patch.object(server, "_handle_getpd_json") as mock_json, \
-             patch.object(server, "_handle_getpd_generals", return_value="\\getpdr\\1\\final\\"):
+        with (
+            patch.object(server, "_handle_getpd_json") as mock_json,
+            patch.object(server, "_handle_getpd_generals", return_value="\\getpdr\\1\\final\\"),
+        ):
             server._handle_getpd({"pid": "1", "lid": "0", "id": "1"})
         mock_json.assert_not_called()
 
@@ -899,8 +921,6 @@ class TestRA3BackwardCompat:
         """Both games reject modifying another player's stats."""
         for gamename in ("ccgenzh", "redalert3pc"):
             server, transport = _authed_server(gamename, pid=1)
-            server._process_message(
-                "\\setpd\\\\pid\\99\\lid\\0\\length\\2\\data\\{}\\id\\1\\final\\"
-            )
+            server._process_message("\\setpd\\\\pid\\99\\lid\\0\\length\\2\\data\\{}\\id\\1\\final\\")
             kv = transport.last_response_kv()
             assert "error" in kv, f"Expected error for {gamename} cross-pid write"

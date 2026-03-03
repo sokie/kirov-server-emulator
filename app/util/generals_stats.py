@@ -21,9 +21,9 @@ DEFAULT_DISCONNECT_MULTIPLIER = -1.0
 
 # General indices (0=Random, 1=Observer, 2-13 are the 12 playable sides)
 # Evidence: side=GLAStealthGeneral → stat key losses13
-USA_GENERAL_INDICES   = {2, 5, 6, 7}    # USA, SuperWeapon, Laser, AirForce
-CHINA_GENERAL_INDICES = {3, 8, 9, 10}   # China, Tank, Infantry, Nuke
-GLA_GENERAL_INDICES   = {4, 11, 12, 13} # GLA, Toxin, Demo, Stealth
+USA_GENERAL_INDICES = {2, 5, 6, 7}  # USA, SuperWeapon, Laser, AirForce
+CHINA_GENERAL_INDICES = {3, 8, 9, 10}  # China, Tank, Infantry, Nuke
+GLA_GENERAL_INDICES = {4, 11, 12, 13}  # GLA, Toxin, Demo, Stealth
 
 # All general indices (0-13)
 ALL_GENERAL_INDICES = set(range(14))
@@ -45,24 +45,24 @@ SIDE_TO_INDEX: dict[str, int] = {
 }
 
 # Battle honor bitmask values (from GeneralsMD/BattleHonors.h)
-HONOR_STREAK             = 0x000002
-HONOR_BATTLE_TANK        = 0x000080   # 50+ vehicles built (per-game, set by client)
-HONOR_AIR_WING           = 0x000100   # 20+ aircraft built (per-game, set by client)
-HONOR_LOYALTY_USA        = 0x000020
-HONOR_LOYALTY_CHINA      = 0x000040
-HONOR_LOYALTY_GLA        = 0x000200
-HONOR_ENDURANCE          = 0x000400
-HONOR_BLITZ5             = 0x004000   # Won in <5 min (per-game, set by client)
-HONOR_BLITZ10            = 0x008000   # Won in <10 min (per-game, set by client)
-HONOR_FAIR_PLAY          = 0x010000
-HONOR_APOCALYPSE         = 0x020000
-HONOR_OFFICERSCLUB       = 0x040000
-HONOR_DOMINATION         = 0x080000
-HONOR_CHALLENGE_MODE     = 0x100000
-HONOR_ULTIMATE           = 0x200000
-HONOR_GLOBAL_GENERAL     = 0x400000
-HONOR_DOMINATION_ONLINE  = 0x800000
-HONOR_STREAK_ONLINE      = 0x1000000
+HONOR_STREAK = 0x000002
+HONOR_BATTLE_TANK = 0x000080  # 50+ vehicles built (per-game, set by client)
+HONOR_AIR_WING = 0x000100  # 20+ aircraft built (per-game, set by client)
+HONOR_LOYALTY_USA = 0x000020
+HONOR_LOYALTY_CHINA = 0x000040
+HONOR_LOYALTY_GLA = 0x000200
+HONOR_ENDURANCE = 0x000400
+HONOR_BLITZ5 = 0x004000  # Won in <5 min (per-game, set by client)
+HONOR_BLITZ10 = 0x008000  # Won in <10 min (per-game, set by client)
+HONOR_FAIR_PLAY = 0x010000
+HONOR_APOCALYPSE = 0x020000
+HONOR_OFFICERSCLUB = 0x040000
+HONOR_DOMINATION = 0x080000
+HONOR_CHALLENGE_MODE = 0x100000
+HONOR_ULTIMATE = 0x200000
+HONOR_GLOBAL_GENERAL = 0x400000
+HONOR_DOMINATION_ONLINE = 0x800000
+HONOR_STREAK_ONLINE = 0x1000000
 
 
 def parse_generals_kv(data: str) -> dict[str, str]:
@@ -194,12 +194,7 @@ def calculate_rank(
     disconnects = _get_total_disconnects(stats)
     desyncs = _get_total_desyncs(stats)
 
-    points = (
-        total_wins * win_mul
-        + total_losses * loss_mul
-        + hours * hour_mul
-        + (disconnects + desyncs) * dc_mul
-    )
+    points = total_wins * win_mul + total_losses * loss_mul + hours * hour_mul + (disconnects + desyncs) * dc_mul
 
     # Find highest rank where points meet threshold
     rank = 0
@@ -239,7 +234,7 @@ def evaluate_battle_honors(stats: dict[str, str], rank: int | None = None) -> in
 
     # LOYALTY checks: genInRow >= 20 consecutive games with the same faction general
     gen_in_row = _get_int(stats, "genInRow")
-    last_gen   = _get_int(stats, "lastGeneral")
+    last_gen = _get_int(stats, "lastGeneral")
     if gen_in_row >= 20:
         if last_gen in USA_GENERAL_INDICES:
             honors |= HONOR_LOYALTY_USA
@@ -258,8 +253,8 @@ def evaluate_battle_honors(stats: dict[str, str], rank: int | None = None) -> in
         honors |= HONOR_FAIR_PLAY
 
     # APOCALYPSE: builtNuke > 0 AND builtSCUD > 0 AND builtCannon > 0
-    built_nuke   = _get_int(stats, "builtNuke")
-    built_scud   = _get_int(stats, "builtSCUD")
+    built_nuke = _get_int(stats, "builtNuke")
+    built_scud = _get_int(stats, "builtSCUD")
     built_cannon = _get_int(stats, "builtCannon")
     if built_nuke > 0 and built_scud > 0 and built_cannon > 0:
         honors |= HONOR_APOCALYPSE
@@ -282,10 +277,7 @@ def evaluate_battle_honors(stats: dict[str, str], rank: int | None = None) -> in
         honors |= HONOR_CHALLENGE_MODE
 
     # GLOBAL_GENERAL: played with all 12 playable generals (indices 2-13)
-    played_all = all(
-        _get_int(stats, f"wins{i}") + _get_int(stats, f"losses{i}") > 0
-        for i in range(2, 14)
-    )
+    played_all = all(_get_int(stats, f"wins{i}") + _get_int(stats, f"losses{i}") > 0 for i in range(2, 14))
     if played_all:
         honors |= HONOR_GLOBAL_GENERAL
 

@@ -497,10 +497,18 @@ async def generals_display_html(request: Request, db: Session = Depends(get_sess
             games_by_index[idx] += w + l
 
     sides = [
-        "USA", "China", "GLA",
-        "AmericaSuperWeaponGeneral", "AmericaLaserGeneral", "AmericaAirForceGeneral",
-        "ChinaTankGeneral", "ChinaInfantryGeneral", "ChinaNukeGeneral",
-        "GLAToxinGeneral", "GLADemolitionGeneral", "GLAStealthGeneral",
+        "USA",
+        "China",
+        "GLA",
+        "AmericaSuperWeaponGeneral",
+        "AmericaLaserGeneral",
+        "AmericaAirForceGeneral",
+        "ChinaTankGeneral",
+        "ChinaInfantryGeneral",
+        "ChinaNukeGeneral",
+        "GLAToxinGeneral",
+        "GLADemolitionGeneral",
+        "GLAStealthGeneral",
     ]
     lines = ["<html><body>", "Today"]
     for side in sides:

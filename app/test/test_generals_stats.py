@@ -497,7 +497,6 @@ class TestCalculateRank:
 
 
 class TestEvaluateBattleHonors:
-
     # --- FAIR_PLAY ---
 
     def test_fair_play_no_games(self):
@@ -702,7 +701,9 @@ class TestEvaluateBattleHonors:
     def test_ultimate_denied_if_any_required_honor_missing(self):
         # Same as above but WinRowMax=0 → no STREAK/STREAK_ONLINE
         stats = {
-            "builtNuke": "1", "builtSCUD": "1", "builtCannon": "1",
+            "builtNuke": "1",
+            "builtSCUD": "1",
+            "builtCannon": "1",
             "duration0": str(100 * 60),
         }
         for i in range(2, 14):
@@ -736,17 +737,13 @@ class TestLiveDBSnapshots:
         stats = parse_generals_kv(LIVE_RAW_P1)
         rank = calculate_rank(stats)
         honors = evaluate_battle_honors(stats, rank=rank)
-        assert honors == HONOR_FAIR_PLAY, (
-            f"Expected HONOR_FAIR_PLAY (0x{HONOR_FAIR_PLAY:x}), got 0x{honors:x}"
-        )
+        assert honors == HONOR_FAIR_PLAY, f"Expected HONOR_FAIR_PLAY (0x{HONOR_FAIR_PLAY:x}), got 0x{honors:x}"
 
     def test_player3_battle_honors_is_fair_play(self):
         stats = parse_generals_kv(LIVE_RAW_P3)
         rank = calculate_rank(stats)
         honors = evaluate_battle_honors(stats, rank=rank)
-        assert honors == HONOR_FAIR_PLAY, (
-            f"Expected HONOR_FAIR_PLAY (0x{HONOR_FAIR_PLAY:x}), got 0x{honors:x}"
-        )
+        assert honors == HONOR_FAIR_PLAY, f"Expected HONOR_FAIR_PLAY (0x{HONOR_FAIR_PLAY:x}), got 0x{honors:x}"
 
     def test_player1_rank_is_zero(self):
         stats = parse_generals_kv(LIVE_RAW_P1)
