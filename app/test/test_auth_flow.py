@@ -13,8 +13,10 @@ This tests the cross-service handshake:
 import base64
 
 import pytest
+from sqlalchemy import create_engine as _sa_create_engine
 from sqlmodel import Session, SQLModel
 
+import app.db.database as _db_module
 from app.db.crud import (
     create_fesl_session,
     create_gamespy_session,
@@ -27,8 +29,14 @@ from app.db.crud import (
     update_fesl_session_persona,
     validate_and_consume_preauth_ticket,
 )
-from app.db.database import engine
 from app.models.models import UserCreate
+
+
+def _make_test_engine():
+    """Create an isolated in-memory SQLite engine for a single test."""
+    engine = _sa_create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    SQLModel.metadata.create_all(engine)
+    return engine
 
 
 class TestAuthenticationFlow:
@@ -36,16 +44,17 @@ class TestAuthenticationFlow:
 
     @pytest.fixture(autouse=True)
     def setup_database(self):
-        """Set up a fresh database for each test."""
-        # Create tables
-        SQLModel.metadata.create_all(engine)
+        """Set up a fresh in-memory database for each test."""
+        self._test_engine = _make_test_engine()
+        _orig = _db_module.engine
+        _db_module.engine = self._test_engine
         yield
-        # Clean up
-        SQLModel.metadata.drop_all(engine)
+        _db_module.engine = _orig
+        self._test_engine.dispose()
 
     def get_session(self):
         """Get a database session."""
-        return Session(engine)
+        return Session(self._test_engine)
 
     def test_user_registration_creates_persona_and_entitlement(self):
         """Test that user registration creates a default persona and entitlement."""
@@ -319,14 +328,17 @@ class TestFeslHandlersIntegration:
 
     @pytest.fixture(autouse=True)
     def setup_database(self):
-        """Set up a fresh database for each test."""
-        SQLModel.metadata.create_all(engine)
+        """Set up a fresh in-memory database for each test."""
+        self._test_engine = _make_test_engine()
+        _orig = _db_module.engine
+        _db_module.engine = self._test_engine
         yield
-        SQLModel.metadata.drop_all(engine)
+        _db_module.engine = _orig
+        self._test_engine.dispose()
 
     def get_session(self):
         """Get a database session."""
-        return Session(engine)
+        return Session(self._test_engine)
 
     def test_nulogin_handler_flow(self):
         """Test that NuLogin handler authenticates and creates session correctly."""
@@ -587,14 +599,17 @@ class TestEdgeCases:
 
     @pytest.fixture(autouse=True)
     def setup_database(self):
-        """Set up a fresh database for each test."""
-        SQLModel.metadata.create_all(engine)
+        """Set up a fresh in-memory database for each test."""
+        self._test_engine = _make_test_engine()
+        _orig = _db_module.engine
+        _db_module.engine = self._test_engine
         yield
-        SQLModel.metadata.drop_all(engine)
+        _db_module.engine = _orig
+        self._test_engine.dispose()
 
     def get_session(self):
         """Get a database session."""
-        return Session(engine)
+        return Session(self._test_engine)
 
     def test_expired_ticket_rejected(self):
         """Test that expired pre-auth tickets are rejected."""

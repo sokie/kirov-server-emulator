@@ -10,9 +10,10 @@ Tests the XML serialization and response patterns for:
 import base64
 
 import pytest
+from sqlalchemy import create_engine as _sa_create_engine
 from sqlmodel import SQLModel
 
-from app.db.database import engine
+import app.db.database as _db_module
 from app.soap.envelope import extract_soap_body, get_element_text, wrap_soap_envelope
 from app.soap.models.auth import LoginRemoteAuthResponse, LoginResponseCode
 from app.soap.models.common import RecordValue
@@ -362,10 +363,14 @@ class TestSakeServiceIntegration:
 
     @pytest.fixture(autouse=True)
     def setup_database(self):
-        """Set up a fresh database for each test."""
-        SQLModel.metadata.create_all(engine)
+        """Set up a fresh in-memory database for each test."""
+        test_engine = _sa_create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+        SQLModel.metadata.create_all(test_engine)
+        _orig = _db_module.engine
+        _db_module.engine = test_engine
         yield
-        SQLModel.metadata.drop_all(engine)
+        _db_module.engine = _orig
+        test_engine.dispose()
 
     def test_search_for_records_player_stats_with_owner_filter(self):
         """
