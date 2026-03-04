@@ -206,9 +206,7 @@ def _get_faction_mode_values(stats: PlayerStats | None, faction: str, stat_key: 
     if stats is None:
         return [0, 0, 0, 0, 0]
     s = stats.stats or {}
-    return [
-        s.get(mode, {}).get("factions", {}).get(faction, {}).get(stat_key, 0) for mode in GAME_MODES
-    ]
+    return [s.get(mode, {}).get("factions", {}).get(faction, {}).get(stat_key, 0) for mode in GAME_MODES]
 
 
 def _build_kw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:

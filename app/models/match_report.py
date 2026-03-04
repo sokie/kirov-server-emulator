@@ -85,31 +85,31 @@ KW_FACTION_KEY_MAX = 59  # 12 factions * 5 game_types - 1
 
 # KW game section keys (from disassembled binary format)
 KW_GAME_KEY_NAMES: dict[int, str] = {
-    106: "map_name",        # 0x6A - string, matchData+0x38
-    107: "game_duration",   # 0x6B - int32, matchData+0x3C
-    108: "game_version",     # 0x6C - string, matchData+0x40 (e.g. "1.3")
-    109: "is_ranked",       # 0x6D - byte, matchData+0x44
-    110: "teams_enabled",   # 0x6E - byte, matchData+0x4C
-    111: "host_name",       # 0x6F - string, matchData+0x48
-    112: "clan_name",       # 0x70 - string, matchData+0x50
-    113: "clan_tag",        # 0x71 - string, matchData+0x54
-    114: "clan_value",      # 0x72 - int32, matchData+0x58
-    115: "extra_data_1",    # 0x73 - int32, matchData+0x60
-    116: "extra_data_2",    # 0x74 - int32, matchData+0x64
+    106: "map_name",  # 0x6A - string, matchData+0x38
+    107: "game_duration",  # 0x6B - int32, matchData+0x3C
+    108: "game_version",  # 0x6C - string, matchData+0x40 (e.g. "1.3")
+    109: "is_ranked",  # 0x6D - byte, matchData+0x44
+    110: "teams_enabled",  # 0x6E - byte, matchData+0x4C
+    111: "host_name",  # 0x6F - string, matchData+0x48
+    112: "clan_name",  # 0x70 - string, matchData+0x50
+    113: "clan_tag",  # 0x71 - string, matchData+0x54
+    114: "clan_value",  # 0x72 - int32, matchData+0x58
+    115: "extra_data_1",  # 0x73 - int32, matchData+0x60
+    116: "extra_data_2",  # 0x74 - int32, matchData+0x64
     # Keys 117-122 are game_type_flag keys (117 + game_type)
 }
 
 # KW per-player stat base IDs (from disassembled binary format)
 # Key = stat_base + game_type (0=unranked, 1=ranked_1v1, etc.)
 KW_PLAYER_STAT_BASE_NAMES: dict[int, str] = {
-    60: "duration_seconds",      # base+0x3C
-    65: "career_wins",           # base+0x41
-    70: "career_losses",         # base+0x46
-    75: "current_win_streak",    # base+0x4B
-    80: "current_loss_streak",   # base+0x50
-    85: "longest_win_streak",    # base+0x55
-    90: "longest_loss_streak",   # base+0x5A
-    95: "disconnects",           # base+0x5F
+    60: "duration_seconds",  # base+0x3C
+    65: "career_wins",  # base+0x41
+    70: "career_losses",  # base+0x46
+    75: "current_win_streak",  # base+0x4B
+    80: "current_loss_streak",  # base+0x50
+    85: "longest_win_streak",  # base+0x55
+    90: "longest_loss_streak",  # base+0x5A
+    95: "disconnects",  # base+0x5F
 }
 
 # Map subfactions to parent faction for stats storage

@@ -464,8 +464,12 @@ class GameStatsServer(asyncio.Protocol):
             s = stats.stats or {}
             # Flatten nested JSON → flat keys: stats["ranked_1v1"]["wins"] → "wins_ranked_1v1"
             flat_stat_keys = [
-                "wins", "losses", "disconnects", "desyncs",
-                "avg_game_length", "win_ratio",
+                "wins",
+                "losses",
+                "disconnects",
+                "desyncs",
+                "avg_game_length",
+                "win_ratio",
             ]
             for game_type in GAME_TYPES:
                 mode_stats = s.get(game_type, {})

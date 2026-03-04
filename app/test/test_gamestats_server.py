@@ -584,11 +584,46 @@ class TestHandleGetpdJson:
         server, _ = _make_server("redalert3pc")
         mock_stats = MagicMock()
         mock_stats.stats = {
-            "ranked_1v1": {"wins": 5, "losses": 2, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
-            "ranked_2v2": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
-            "unranked": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
-            "clan_1v1": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
-            "clan_2v2": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
+            "ranked_1v1": {
+                "wins": 5,
+                "losses": 2,
+                "disconnects": 0,
+                "desyncs": 0,
+                "avg_game_length": 0,
+                "win_ratio": 0.0,
+            },
+            "ranked_2v2": {
+                "wins": 0,
+                "losses": 0,
+                "disconnects": 0,
+                "desyncs": 0,
+                "avg_game_length": 0,
+                "win_ratio": 0.0,
+            },
+            "unranked": {
+                "wins": 0,
+                "losses": 0,
+                "disconnects": 0,
+                "desyncs": 0,
+                "avg_game_length": 0,
+                "win_ratio": 0.0,
+            },
+            "clan_1v1": {
+                "wins": 0,
+                "losses": 0,
+                "disconnects": 0,
+                "desyncs": 0,
+                "avg_game_length": 0,
+                "win_ratio": 0.0,
+            },
+            "clan_2v2": {
+                "wins": 0,
+                "losses": 0,
+                "disconnects": 0,
+                "desyncs": 0,
+                "avg_game_length": 0,
+                "win_ratio": 0.0,
+            },
         }
         mock_stats.total_matches_online = 7
 

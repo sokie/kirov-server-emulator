@@ -66,6 +66,7 @@ def set_faction_stat(stats_dict: dict, game_type: str, faction: str, key: str, v
     """Set faction stat in nested JSON: stats[game_type]["factions"][faction][key] = value."""
     stats_dict.setdefault(game_type, {}).setdefault("factions", {}).setdefault(faction, {})[key] = value
 
+
 # XP thresholds for 87 ranks — duplicated from sake_service to avoid circular import
 LEVEL_THRESHOLDS = [
     0,
@@ -1286,7 +1287,9 @@ def update_player_win_loss(
     elif result == 1:  # Loss
         set_stat(s, game_type, "losses", get_stat(s, game_type, "losses") + 1)
         if faction_key:
-            set_faction_stat(s, game_type, faction_key, "losses", get_faction_stat(s, game_type, faction_key, "losses") + 1)
+            set_faction_stat(
+                s, game_type, faction_key, "losses", get_faction_stat(s, game_type, faction_key, "losses") + 1
+            )
     elif result == 3:  # Disconnect
         set_stat(s, game_type, "disconnects", get_stat(s, game_type, "disconnects") + 1)
     elif result == 4:  # Dsync
