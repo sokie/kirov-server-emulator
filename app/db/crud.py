@@ -1,4 +1,5 @@
 import base64
+import copy
 import random
 import secrets
 import string
@@ -773,7 +774,7 @@ def create_or_update_player_stats(
         session.add(stats)
 
     # Copy JSON dict for mutation (SQLAlchemy JSON change tracking)
-    json_stats = dict(stats.stats) if stats.stats else {}
+    json_stats = copy.deepcopy(stats.stats) if stats.stats else {}
 
     for flat_key, value in stats_data.items():
         # Real columns stay as real columns
@@ -1275,7 +1276,7 @@ def update_player_win_loss(
     faction_key = FACTION_MAPS.get(game_id, {}).get(faction, "")
 
     # Copy JSON dict for mutation (SQLAlchemy JSON change tracking)
-    s = dict(stats.stats) if stats.stats else {}
+    s = copy.deepcopy(stats.stats) if stats.stats else {}
 
     # Update win/loss/dc/dsync counters
     if result == 0:  # Win
