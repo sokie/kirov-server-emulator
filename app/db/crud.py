@@ -104,9 +104,7 @@ def migrate_player_stats_columns(engine) -> None:
         for col_name in _PLAYER_STATS_NEW_COLUMNS:
             if col_name not in existing:
                 conn.execute(
-                    sqlalchemy.text(
-                        f"ALTER TABLE player_stats ADD COLUMN {col_name} INTEGER NOT NULL DEFAULT 0"
-                    )
+                    sqlalchemy.text(f"ALTER TABLE player_stats ADD COLUMN {col_name} INTEGER NOT NULL DEFAULT 0")
                 )
                 logger.info("Migrated player_stats: added column %s", col_name)
 
