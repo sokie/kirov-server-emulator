@@ -64,6 +64,21 @@ HONOR_GLOBAL_GENERAL = 0x400000
 HONOR_DOMINATION_ONLINE = 0x800000
 HONOR_STREAK_ONLINE = 0x1000000
 
+# Mask for per-game honors set by the game client in the `battle` KV field.
+# These are never computed server-side — the client sends them after each game.
+PER_GAME_HONOR_MASK = HONOR_BATTLE_TANK | HONOR_AIR_WING | HONOR_BLITZ5 | HONOR_BLITZ10
+
+
+def extract_client_per_game_honors(stats: dict[str, str]) -> int:
+    """
+    Extract per-game honor bits from the client's ``battle`` KV field.
+
+    Returns only the per-game honor bits (Battle Tank, Air Wing, Blitz5, Blitz10),
+    masking out any server-computed honor bits the client might inject.
+    """
+    battle_value = _get_int(stats, "battle")
+    return battle_value & PER_GAME_HONOR_MASK
+
 
 def parse_generals_kv(data: str) -> dict[str, str]:
     r"""

@@ -318,7 +318,9 @@ class GeneralsPlayerStats(SQLModel, table=True):
     as backslash-delimited KV pairs. Storing as a raw string avoids 200+ columns
     and matches how the original GameSpy server worked.
 
-    battle_honors is a computed 32-bit bitmask, recalculated on each setpd.
+    battle_honors is a cumulative 32-bit bitmask — once earned, honors are
+    permanent. On each setpd, server-computed honors are re-evaluated and
+    OR'd with existing honors + per-game honors from the client's battle field.
     """
 
     __tablename__ = "generals_player_stats"

@@ -19,7 +19,11 @@ from app.util.generals_stats import (
     DEFAULT_LOSS_MULTIPLIER,
     DEFAULT_WIN_MULTIPLIER,
     GLA_GENERAL_INDICES,
+    HONOR_AIR_WING,
     HONOR_APOCALYPSE,
+    HONOR_BATTLE_TANK,
+    HONOR_BLITZ5,
+    HONOR_BLITZ10,
     HONOR_CHALLENGE_MODE,
     HONOR_DOMINATION,
     HONOR_DOMINATION_ONLINE,
@@ -33,6 +37,7 @@ from app.util.generals_stats import (
     HONOR_STREAK,
     HONOR_STREAK_ONLINE,
     HONOR_ULTIMATE,
+    PER_GAME_HONOR_MASK,
     SIDE_TO_INDEX,
     USA_GENERAL_INDICES,
     _get_int,
@@ -44,6 +49,7 @@ from app.util.generals_stats import (
     _get_total_wins,
     calculate_rank,
     evaluate_battle_honors,
+    extract_client_per_game_honors,
     format_generals_kv,
     merge_generals_kv,
     parse_generals_kv,
@@ -821,3 +827,101 @@ class TestLiveDBSnapshots:
         assert _get_int(stats, "DSRow") == 0  # null byte silently dropped
         honors = evaluate_battle_honors(stats)
         assert isinstance(honors, int)
+
+
+# =============================================================================
+# Per-game honor mask
+# =============================================================================
+
+
+class TestPerGameHonorMask:
+    def test_mask_value(self):
+        expected = HONOR_BATTLE_TANK | HONOR_AIR_WING | HONOR_BLITZ5 | HONOR_BLITZ10
+        assert PER_GAME_HONOR_MASK == expected
+
+    def test_mask_numeric_value(self):
+        # 0x80 | 0x100 | 0x4000 | 0x8000 = 0xC180
+        assert PER_GAME_HONOR_MASK == 0xC180
+
+    def test_all_four_per_game_honors_included(self):
+        assert PER_GAME_HONOR_MASK & HONOR_BATTLE_TANK
+        assert PER_GAME_HONOR_MASK & HONOR_AIR_WING
+        assert PER_GAME_HONOR_MASK & HONOR_BLITZ5
+        assert PER_GAME_HONOR_MASK & HONOR_BLITZ10
+
+    def test_no_overlap_with_server_honors(self):
+        server_honors = (
+            HONOR_STREAK
+            | HONOR_LOYALTY_USA
+            | HONOR_LOYALTY_CHINA
+            | HONOR_LOYALTY_GLA
+            | HONOR_ENDURANCE
+            | HONOR_FAIR_PLAY
+            | HONOR_APOCALYPSE
+            | HONOR_OFFICERSCLUB
+            | HONOR_DOMINATION
+            | HONOR_CHALLENGE_MODE
+            | HONOR_ULTIMATE
+            | HONOR_GLOBAL_GENERAL
+            | HONOR_DOMINATION_ONLINE
+            | HONOR_STREAK_ONLINE
+        )
+        assert PER_GAME_HONOR_MASK & server_honors == 0
+
+
+# =============================================================================
+# extract_client_per_game_honors
+# =============================================================================
+
+
+class TestExtractClientPerGameHonors:
+    def test_extracts_blitz_from_battle_49152(self):
+        # 49152 = 0xC000 = BLITZ5 (0x4000) | BLITZ10 (0x8000)
+        stats = {"battle": "49152"}
+        result = extract_client_per_game_honors(stats)
+        assert result & HONOR_BLITZ5
+        assert result & HONOR_BLITZ10
+        assert not (result & HONOR_BATTLE_TANK)
+        assert not (result & HONOR_AIR_WING)
+
+    def test_strips_non_per_game_bits(self):
+        # Client sends battle value with server-computed honor bits injected
+        injected = HONOR_BLITZ5 | HONOR_FAIR_PLAY | HONOR_OFFICERSCLUB
+        stats = {"battle": str(injected)}
+        result = extract_client_per_game_honors(stats)
+        assert result == HONOR_BLITZ5
+        assert not (result & HONOR_FAIR_PLAY)
+        assert not (result & HONOR_OFFICERSCLUB)
+
+    def test_handles_missing_battle_field(self):
+        assert extract_client_per_game_honors({}) == 0
+
+    def test_handles_zero_battle_field(self):
+        assert extract_client_per_game_honors({"battle": "0"}) == 0
+
+    def test_extracts_battle_tank(self):
+        stats = {"battle": str(HONOR_BATTLE_TANK)}
+        assert extract_client_per_game_honors(stats) == HONOR_BATTLE_TANK
+
+    def test_extracts_air_wing(self):
+        stats = {"battle": str(HONOR_AIR_WING)}
+        assert extract_client_per_game_honors(stats) == HONOR_AIR_WING
+
+    def test_all_four_per_game_honors(self):
+        all_four = HONOR_BATTLE_TANK | HONOR_AIR_WING | HONOR_BLITZ5 | HONOR_BLITZ10
+        stats = {"battle": str(all_four)}
+        assert extract_client_per_game_honors(stats) == all_four
+
+    def test_live_data_p1_has_blitz_honors(self):
+        # Player 1 sent battle\49152 (BLITZ5|BLITZ10) — won in <5 min
+        stats = parse_generals_kv(LIVE_RAW_P1)
+        result = extract_client_per_game_honors(stats)
+        assert result & HONOR_BLITZ5
+        assert result & HONOR_BLITZ10
+
+    def test_live_data_p3_has_blitz_honors(self):
+        # Player 3 also sent battle\49152
+        stats = parse_generals_kv(LIVE_RAW_P3)
+        result = extract_client_per_game_honors(stats)
+        assert result & HONOR_BLITZ5
+        assert result & HONOR_BLITZ10

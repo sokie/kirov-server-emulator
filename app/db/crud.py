@@ -817,11 +817,19 @@ def create_or_update_generals_stats(session: Session, persona_id: int, raw_data:
     from app.util.generals_stats import (
         calculate_rank,
         evaluate_battle_honors,
+        extract_client_per_game_honors,
         merge_generals_kv,
         parse_generals_kv,
     )
 
+    # Extract per-game honors from the incoming setpd data (before merge overwrites `battle` key)
+    incoming_parsed = parse_generals_kv(raw_data)
+    client_per_game = extract_client_per_game_honors(incoming_parsed)
+
     stats = get_generals_player_stats(session, persona_id)
+
+    # Preserve all previously earned honors (honors are permanent once earned)
+    existing_honors = stats.battle_honors if stats is not None else 0
 
     if stats is None:
         stats = GeneralsPlayerStats(persona_id=persona_id, raw_data=raw_data)
@@ -829,10 +837,13 @@ def create_or_update_generals_stats(session: Session, persona_id: int, raw_data:
     else:
         stats.raw_data = merge_generals_kv(stats.raw_data, raw_data)
 
-    # Recalculate battle honors from the merged data
+    # Recompute server-side honors from the merged data
     parsed = parse_generals_kv(stats.raw_data)
     rank = calculate_rank(parsed)
-    stats.battle_honors = evaluate_battle_honors(parsed, rank)
+    server_honors = evaluate_battle_honors(parsed, rank)
+
+    # Combine: existing (permanent) | server-computed | client per-game honors
+    stats.battle_honors = existing_honors | server_honors | client_per_game
 
     stats.updated_at = datetime.utcnow()
     session.commit()
