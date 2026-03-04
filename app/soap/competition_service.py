@@ -30,7 +30,7 @@ from app.db.crud import (
     submit_match_report,
 )
 from app.db.database import create_session
-from app.models.match_report import MatchReport
+from app.models.match_report import MatchReport, get_game_key_name, get_player_key_name
 from app.soap.envelope import (
     create_soap_fault,
     extract_soap_body,
@@ -122,6 +122,31 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
                 for team in report.team_section
             ]
 
+            # Build per-player stats with friendly key names
+            players_json = []
+            for i, p in enumerate(player_list):
+                player_dict: dict = {
+                    "full_id": p.full_id,
+                    "persona_id": p.persona_id,
+                    "persona_id_valid": p.persona_id_valid,
+                    "faction": p.faction,
+                    "is_winner": p.is_winner,
+                    "team_id": p.team_id,
+                }
+                if i < len(report.player_section):
+                    stats = {}
+                    for k, v in sorted(report.player_section[i].items()):
+                        name = get_player_key_name(k)
+                        stats[name] = {"key": k, "type": v.value_type.name, "value": v.value}
+                    player_dict["stats"] = stats
+                players_json.append(player_dict)
+
+            # Build game section with friendly key names
+            game_section_json = {}
+            for k, v in sorted(report.game_section.items()):
+                name = get_game_key_name(k)
+                game_section_json[name] = {"key": k, "type": v.value_type.name, "value": v.value}
+
             report_dict = {
                 "save_time": datetime.now().isoformat(),
                 "csid": csid,
@@ -140,17 +165,8 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
                 "is_auto_match": report.is_auto_match,
                 "is_clan_game": report.is_clan_game(),
                 "is_final_report": len(player_list) > 1,
-                "players": [
-                    {
-                        "full_id": p.full_id,
-                        "persona_id": p.persona_id,
-                        "persona_id_valid": p.persona_id_valid,
-                        "faction": p.faction,
-                        "is_winner": p.is_winner,
-                        "team_id": p.team_id,
-                    }
-                    for p in player_list
-                ],
+                "game_section": game_section_json,
+                "players": players_json,
                 "team_section": team_section_json,
                 "winner_ids": report.get_winner_id_list(),
                 "loser_ids": report.get_loser_id_list(),

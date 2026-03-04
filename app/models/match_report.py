@@ -60,6 +60,41 @@ FACTION_ENUM_MAP: dict[int, str] = {
     2: Faction.EMPIRE,
 }
 
+# Game type names by offset (key = base + game_type_offset)
+GAME_TYPE_NAMES: dict[int, str] = {
+    0: "unranked",
+    1: "ranked_1v1",
+    2: "ranked_2v2",
+    3: "clan_1v1",
+    4: "clan_2v2",
+}
+
+# Player section: stat base ID → name (key = base + game_type_offset)
+# Confirmed from real match reports; keys 0-14 use the faction formula instead.
+PLAYER_STAT_BASE_NAMES: dict[int, str] = {
+    15: "duration_seconds",
+    20: "career_wins",
+    25: "career_losses",
+    30: "current_win_streak",
+    35: "current_loss_streak",
+    40: "longest_win_streak",
+    45: "longest_loss_streak",
+    50: "disconnects",
+    55: "desyncs",
+    # Bases 60-70: gap (not seen in reports yet)
+    # Bases 75+: seen as all-zero for clan_1v1, unmapped pending non-zero data
+}
+
+# Game section: key → name
+GAME_KEY_NAMES: dict[int, str] = {
+    61: "map_path",
+    62: "duration_seconds",
+    63: "version",
+    64: "unknown_64",
+    65: "unknown_65",
+    # Keys 72-77: game_type flag (key = 72 + game_type_offset, value is flag byte)
+}
+
 
 def get_faction_from_key(key: int) -> tuple[str, int]:
     """
@@ -68,7 +103,7 @@ def get_faction_from_key(key: int) -> tuple[str, int]:
     Formula: key = faction_enum * 5 + game_type
     Where:
         - faction_enum: 0=Allied, 1=Soviet, 2=Empire
-        - game_type: 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=???, 4=clan_1v1, 5=clan_2v2
+        - game_type: 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=clan_1v1, 4=clan_2v2
 
     Args:
         key: The player section key containing faction info.
@@ -80,6 +115,35 @@ def get_faction_from_key(key: int) -> tuple[str, int]:
     faction_enum = key // 5
     faction = FACTION_ENUM_MAP.get(faction_enum, Faction.UNKNOWN)
     return faction, game_type
+
+
+def get_player_key_name(key: int) -> str:
+    """
+    Get a human-readable name for a player section key.
+
+    Keys 0-14 are faction indicators (faction_enum * 5 + game_type).
+    Keys 15+ are stats using formula: key = stat_base + game_type_offset.
+    """
+    game_type = key % 5
+    gt_name = GAME_TYPE_NAMES.get(game_type, f"gt{game_type}")
+
+    if 0 <= key <= 14:
+        faction_enum = key // 5
+        faction = FACTION_ENUM_MAP.get(faction_enum, f"faction{faction_enum}")
+        return f"faction_indicator.{faction}.{gt_name}"
+
+    base = key - game_type
+    stat_name = PLAYER_STAT_BASE_NAMES.get(base, f"unknown_{base}")
+    return f"{stat_name}.{gt_name}"
+
+
+def get_game_key_name(key: int) -> str:
+    """Get a human-readable name for a game section key."""
+    if 72 <= key <= 77:
+        gt = key - 72
+        gt_name = GAME_TYPE_NAMES.get(gt, f"gt{gt}")
+        return f"game_type_flag.{gt_name}"
+    return GAME_KEY_NAMES.get(key, f"unknown_{key}")
 
 
 @dataclass
