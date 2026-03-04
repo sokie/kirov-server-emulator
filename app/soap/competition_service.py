@@ -138,8 +138,6 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
             for i, p in enumerate(player_list):
                 player_dict: dict = {
                     "full_id": p.full_id,
-                    "persona_id": p.persona_id,
-                    "persona_id_valid": p.persona_id_valid,
                     "faction": p.faction,
                     "is_winner": p.is_winner,
                     "team_id": p.team_id,
@@ -179,8 +177,6 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
                 "game_section": game_section_json,
                 "players": players_json,
                 "team_section": team_section_json,
-                "winner_ids": report.get_winner_id_list(),
-                "loser_ids": report.get_loser_id_list(),
             }
             with open(json_path, "w") as f:
                 json.dump(report_dict, f, indent=2)
@@ -332,22 +328,7 @@ def handle_submit_report(
                     player.is_winner,
                 )
 
-            # Fallback: try to match by persona_id in the binary report
-            if not player_found:
-                for player in player_list:
-                    if player.persona_id == profile_id:
-                        player_result = 0 if player.is_winner else 1
-                        player_faction = player.faction
-                        player_full_id = player.full_id
-                        player_found = True
-                        logger.info(
-                            "[%s] Matched submitter by persona_id=%d in binary report",
-                            request_id,
-                            profile_id,
-                        )
-                        break
-
-            # Last resort: single-player partial report
+            # Fallback: single-player partial report
             if not player_found and len(player_list) == 1:
                 player = player_list[0]
                 player_result = 0 if player.is_winner else 1
@@ -355,10 +336,8 @@ def handle_submit_report(
                 player_full_id = player.full_id
                 player_found = True
                 logger.info(
-                    "[%s] Used partial report player data (persona_id mismatch: profile=%d vs parsed=%d)",
+                    "[%s] Used partial report (single player)",
                     request_id,
-                    profile_id,
-                    player.persona_id,
                 )
 
             # Map game type string to int
@@ -419,19 +398,14 @@ def handle_submit_report(
             # Log each player's result
             for idx, player in enumerate(player_list):
                 logger.info(
-                    "[%s] Player %d/%d: persona_id=%d, full_id=%s, faction=%s, is_winner=%s",
+                    "[%s] Player %d/%d: full_id=%s, faction=%s, is_winner=%s",
                     request_id,
                     idx + 1,
                     len(player_list),
-                    player.persona_id,
                     player.full_id,
                     player.faction,
                     player.is_winner,
                 )
-
-            if is_final_report:
-                logger.info("[%s] Winners: %s", request_id, report.get_winner_id_list())
-                logger.info("[%s] Losers: %s", request_id, report.get_loser_id_list())
 
         except Exception as e:
             logger.exception("[%s] Error parsing report: %s", request_id, e)

@@ -102,7 +102,7 @@ KW_GAME_KEY_NAMES: dict[int, str] = {
 # KW per-player stat base IDs (from disassembled binary format)
 # Key = stat_base + game_type (0=unranked, 1=ranked_1v1, etc.)
 KW_PLAYER_STAT_BASE_NAMES: dict[int, str] = {
-    60: "duration_seconds",  # base+0x3C
+    60: "duration_seconds",  # base+0x3C — only written for the local (submitting) player
     65: "career_wins",  # base+0x41
     70: "career_losses",  # base+0x46
     75: "current_win_streak",  # base+0x4B
@@ -137,7 +137,7 @@ GAME_TYPE_NAMES: dict[int, str] = {
 # Player section: stat base ID → name (key = base + game_type_offset)
 # Confirmed from real match reports; keys 0-14 use the faction formula instead.
 PLAYER_STAT_BASE_NAMES: dict[int, str] = {
-    15: "duration_seconds",
+    15: "duration_seconds",  # only written for the local (submitting) player
     20: "career_wins",
     25: "career_losses",
     30: "current_win_streak",
@@ -265,11 +265,9 @@ class MatchPlayer:
     """Represents a player in a match."""
 
     full_id: str
-    persona_id: int
     faction: str
     is_winner: bool
     team_id: int = 0
-    persona_id_valid: bool = True  # False if persona_id looks corrupted
 
 
 @dataclass
@@ -293,11 +291,9 @@ class ParsedPlayer:
     """Parsed player information."""
 
     full_id: str
-    player_id: int
     faction: str
     result: int  # 0=win, 1=loss, 3=disconnect, 4=dsync
     team_id: int = 0
-    player_id_valid: bool = True  # False if persona_id looks corrupted
 
 
 class BinaryReader:
@@ -481,14 +477,10 @@ class MatchReport:
 
             roster_entry = self.roster_section[i]
 
-            # Player GUID contains the persona ID in the last 8 hex chars
+            # Player GUID (connectionId) structure: 000aaaaa-XXXX-XXXX-fe00-{MAC_ADDRESS}
+            # The GUID is constructed locally from the player's network adapter MAC address.
+            # It is NOT a server persona ID — do not try to extract one from it.
             full_id = str(roster_entry.player_id)
-            try:
-                player_id = int(full_id[24:32], 16)
-            except (ValueError, IndexError):
-                player_id = 0
-
-            # Get team_id from roster entry
             team_id = roster_entry.team_id
 
             faction = Faction.UNKNOWN
@@ -517,19 +509,12 @@ class MatchReport:
             if result_idx < len(self.result_section):
                 result = self.result_section[result_idx]
 
-            # Validate persona_id - valid IDs are typically < 50,000,000 and follow 0x00A8xxxx pattern
-            # Invalid IDs often come from opponent data in final reports where the game client
-            # doesn't know the actual persona_id
-            player_id_valid = 0 < player_id < 50_000_000
-
             self.parsed_players.append(
                 ParsedPlayer(
                     full_id=full_id,
-                    player_id=player_id,
                     faction=faction,
                     result=result,
                     team_id=team_id,
-                    player_id_valid=player_id_valid,
                 )
             )
 
@@ -540,11 +525,9 @@ class MatchReport:
         return [
             MatchPlayer(
                 full_id=p.full_id,
-                persona_id=p.player_id,
                 faction=p.faction,
                 is_winner=(p.result == 0),
                 team_id=p.team_id,
-                persona_id_valid=p.player_id_valid,
             )
             for p in self.parsed_players
         ]
@@ -672,18 +655,6 @@ class MatchReport:
             return game_type_map.get(winner_count, GameType.VALID_OTHER)
 
         return GameType.VALID_OTHER
-
-    def get_player_id_list(self) -> list[int]:
-        """Get list of all player IDs."""
-        return [p.player_id for p in self.parsed_players]
-
-    def get_winner_id_list(self) -> list[int]:
-        """Get list of winner player IDs."""
-        return [p.player_id for p in self.parsed_players if p.result == 0]
-
-    def get_loser_id_list(self) -> list[int]:
-        """Get list of loser player IDs."""
-        return [p.player_id for p in self.parsed_players if p.result == 1]
 
     def get_faction_list(self) -> list[str]:
         """Get list of all player factions."""
