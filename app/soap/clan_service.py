@@ -17,8 +17,8 @@ from app.db.crud import (
     get_player_stats,
     parse_ticket,
 )
-from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
 from app.db.database import create_session
+from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
 from app.models.models import PlayerStats
 from app.soap.models.clan import ClanInfoResponse, NotMemberResponse
 from app.util.logging_helper import get_logger
