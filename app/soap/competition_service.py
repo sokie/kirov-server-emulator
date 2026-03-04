@@ -26,7 +26,6 @@ from app.db.crud import (
     create_competition_session,
     extract_persona_from_ccid,
     finalize_match,
-    get_match_reports_for_session,
     increment_received_reports,
     mark_report_intent_reported,
     set_report_intention,
