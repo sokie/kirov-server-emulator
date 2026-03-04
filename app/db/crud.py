@@ -7,6 +7,14 @@ from datetime import datetime
 
 from sqlmodel import Session, select
 
+from app.models.game_config import (
+    FACTION_MAPS,
+    GAME_ID_KW,
+    GAME_ID_RA,
+    GAME_TYPES,
+    KW_FACTION_DISPLAY,
+    RA3_FACTION_DISPLAY,
+)
 from app.models.models import (
     AuthCertificate,
     BuddyRequest,
@@ -28,15 +36,6 @@ from app.models.models import (
     User,
     UserCreate,
     WebSession,
-)
-from app.models.game_config import (
-    FACTION_MAPS,
-    GAME_ID_KW,
-    GAME_ID_RA,
-    GAME_ID_TW,
-    GAME_TYPES,
-    KW_FACTION_DISPLAY,
-    RA3_FACTION_DISPLAY,
 )
 from app.security import hash_password, md5_hash, verify_password
 from app.util.logging_helper import get_logger
