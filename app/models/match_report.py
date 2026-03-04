@@ -61,18 +61,22 @@ FACTION_ENUM_MAP: dict[int, str] = {
 }
 
 # KW faction enum (developer_version=100)
-# 12 factions: 3 base + 2 special + 6 subfactions → 60 faction indicator keys
+# 12 entries: 3 groups of 3 playable factions separated by Observer/Commentator
+# Confirmed from match reports: GDI=1, ZOCOM=2, SteelTalons=3, MoK=7, Scrin=9, Reaper17=10
 KW_FACTION_ENUM_MAP: dict[int, str] = {
     0: "Random",
+    # GDI group
     1: "GDI",
-    2: "Nod",
-    3: "Scrin",
+    2: "ZOCOM",
+    3: "Steel Talons",
     4: "Observer",
-    5: "Commentator",
-    6: "Steel Talons",
-    7: "ZOCOM",
-    8: "Black Hand",
-    9: "Marked of Kane",
+    # Nod group
+    5: "Nod",
+    6: "Black Hand",
+    7: "Marked of Kane",
+    8: "Commentator",
+    # Scrin group
+    9: "Scrin",
     10: "Reaper-17",
     11: "Traveler-59",
 }
@@ -83,7 +87,7 @@ KW_FACTION_KEY_MAX = 59  # 12 factions * 5 game_types - 1
 KW_GAME_KEY_NAMES: dict[int, str] = {
     106: "map_name",        # 0x6A - string, matchData+0x38
     107: "game_duration",   # 0x6B - int32, matchData+0x3C
-    108: "game_mode",       # 0x6C - string, matchData+0x40
+    108: "game_version",     # 0x6C - string, matchData+0x40 (e.g. "1.3")
     109: "is_ranked",       # 0x6D - byte, matchData+0x44
     110: "teams_enabled",   # 0x6E - byte, matchData+0x4C
     111: "host_name",       # 0x6F - string, matchData+0x48
