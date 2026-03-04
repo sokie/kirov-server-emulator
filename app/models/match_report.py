@@ -549,6 +549,19 @@ class MatchReport:
             for p in self.parsed_players
         ]
 
+    def get_local_player_index(self) -> int | None:
+        """
+        Identify the local (submitting) player by checking for duration_seconds.
+
+        The game only writes duration_seconds for the local player's stats.
+        KW base=60, RA3 base=15, key = base + game_type (0-4).
+        """
+        duration_keys = range(60, 65) if self.is_kw else range(15, 20)
+        for i, section in enumerate(self.player_section):
+            if section.keys() & set(duration_keys):
+                return i
+        return None
+
     def get_map_path(self) -> str:
         """Get the map path from the report."""
         if 61 in self.game_section:

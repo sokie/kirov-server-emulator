@@ -314,72 +314,53 @@ def handle_submit_report(
             player_faction = ""
             player_found = False
 
-            # First try to match by persona_id
-            for player in player_list:
-                if player.persona_id == profile_id:
-                    player_result = 0 if player.is_winner else 1
-                    player_faction = player.faction
-                    player_full_id = player.full_id
-                    player_found = True
-                    break
+            # Primary method: identify the local (submitting) player via the
+            # gameDuration key (0x3D / 61) which is only written for the local player.
+            local_idx = report.get_local_player_index()
+            if local_idx is not None and local_idx < len(player_list):
+                player = player_list[local_idx]
+                player_result = 0 if player.is_winner else 1
+                player_faction = player.faction
+                player_full_id = player.full_id
+                player_found = True
+                logger.info(
+                    "[%s] Identified submitter as player %d via gameDuration key "
+                    "(persona_id=%d, faction=%s, is_winner=%s)",
+                    request_id,
+                    local_idx,
+                    profile_id,
+                    player_faction,
+                    player.is_winner,
+                )
 
-            # If not found by persona_id, determine result from report structure
+            # Fallback: try to match by persona_id in the binary report
             if not player_found:
-                if len(player_list) == 1:
-                    # Partial report: the single player IS the submitter
-                    player = player_list[0]
-                    player_result = 0 if player.is_winner else 1
-                    player_faction = player.faction
-                    player_full_id = player.full_id
-                    player_found = True
-                    logger.info(
-                        "[%s] Used partial report player data (persona_id mismatch: profile=%d vs parsed=%d)",
-                        request_id,
-                        profile_id,
-                        player.persona_id,
-                    )
-                elif len(player_list) == 2:
-                    # Final report: determine result by elimination
-                    # Check if another player already reported for this session
-                    db_session = create_session()
-                    try:
-                        existing_reports = get_match_reports_for_session(db_session, csid)
-                        if existing_reports:
-                            # Another player already reported - we're the opposite result
-                            other_result = existing_reports[0].result
-                            player_result = 0 if other_result == 1 else 1  # Opposite
-                            player_found = True
-                            logger.info(
-                                "[%s] Final report: determined result by elimination (other_result=%d, our_result=%d)",
-                                request_id,
-                                other_result,
-                                player_result,
-                            )
-                            # Use faction from winner if we won, loser if we lost
-                            for player in player_list:
-                                if (player_result == 0 and player.is_winner) or (
-                                    player_result == 1 and not player.is_winner
-                                ):
-                                    player_faction = player.faction
-                                    player_full_id = player.full_id
-                                    break
-                        else:
-                            # We're first to report with final report
-                            # Use is_winner from binary as fallback (winner position in report)
-                            for player in player_list:
-                                if player.is_winner:
-                                    player_result = 0  # Win
-                                    player_faction = player.faction
-                                    player_full_id = player.full_id
-                                    player_found = True
-                                    logger.info(
-                                        "[%s] Final report (first): using is_winner from binary (persona_id=%d)",
-                                        request_id,
-                                        profile_id,
-                                    )
-                                    break
-                    finally:
-                        db_session.close()
+                for player in player_list:
+                    if player.persona_id == profile_id:
+                        player_result = 0 if player.is_winner else 1
+                        player_faction = player.faction
+                        player_full_id = player.full_id
+                        player_found = True
+                        logger.info(
+                            "[%s] Matched submitter by persona_id=%d in binary report",
+                            request_id,
+                            profile_id,
+                        )
+                        break
+
+            # Last resort: single-player partial report
+            if not player_found and len(player_list) == 1:
+                player = player_list[0]
+                player_result = 0 if player.is_winner else 1
+                player_faction = player.faction
+                player_full_id = player.full_id
+                player_found = True
+                logger.info(
+                    "[%s] Used partial report player data (persona_id mismatch: profile=%d vs parsed=%d)",
+                    request_id,
+                    profile_id,
+                    player.persona_id,
+                )
 
             # Map game type string to int
             # Valid1v1/AutoMatch1v1 -> 1, Valid2v2/AutoMatch2v2 -> 2
