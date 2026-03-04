@@ -1,5 +1,5 @@
 """
-Auth SOAP Service - Certificate management for RA3.
+Auth SOAP Service - Certificate management for RA3 and Kane's Wrath.
 
 Endpoint: /AuthService/AuthService.asmx
 
@@ -7,7 +7,9 @@ This service handles:
 - LoginRemoteAuth: Generates certificates with valid cryptographic signatures
 
 Certificates are dynamically generated with RSA keys and MD5 signatures
-computed over actual player data.
+computed over actual player data. The partnercode and namespaceid from
+the request are forwarded into the certificate and its signature, so
+different games (RA3=60/69, KW=24/32) get correctly signed certificates.
 """
 
 import base64
@@ -33,8 +35,10 @@ logger = get_logger(__name__)
 
 auth_router = APIRouter()
 
-# Cache generated certificates per profile to ensure consistency across requests
-_profile_certificates: dict[int, GeneratedCertificate] = {}
+# Cache generated certificates per (profile_id, partnercode, namespaceid) to ensure
+# consistency across requests. Different games use different partnercode/namespaceid
+# values which produce different signatures, so we must cache per-game.
+_profile_certificates: dict[tuple[int, int, int], GeneratedCertificate] = {}
 
 
 def parse_authtoken(authtoken: str) -> tuple[int, int]:
@@ -92,6 +96,13 @@ async def auth_handler(request: Request) -> Response:
             user_id, profile_id = parse_authtoken(authtoken)
             logger.debug("Auth: Parsed authtoken -> user_id=%s, profile_id=%s", user_id, profile_id)
 
+            # Extract game-specific values from request (RA3: 60/69, KW: 24/32)
+            partnercode_str = get_element_text(operation, "partnercode")
+            namespaceid_str = get_element_text(operation, "namespaceid")
+            partnercode = int(partnercode_str) if partnercode_str else 60
+            namespaceid = int(namespaceid_str) if namespaceid_str else 69
+            logger.debug("Auth: partnercode=%s, namespaceid=%s", partnercode, namespaceid)
+
             # Validate authtoken parsing succeeded
             if user_id == 0 or profile_id == 0:
                 logger.warning("Auth: Invalid authtoken - failed to parse user_id/profile_id")
@@ -143,23 +154,27 @@ async def auth_handler(request: Request) -> Response:
             finally:
                 session.close()
 
-            # Generate or retrieve cached certificate for this profile
-            # We cache by (profile_id, user_id, nickname) to regenerate if player data changes
-            cache_key = profile_id
+            # Generate or retrieve cached certificate for this profile+game
+            cache_key = (profile_id, partnercode, namespaceid)
             cached_cert = _profile_certificates.get(cache_key)
 
             if cached_cert is None:
                 logger.info(
-                    "Auth: Generating new certificate for profile_id=%s, user_id=%s, nickname=%s",
+                    "Auth: Generating new certificate for profile_id=%s, user_id=%s, nickname=%s, "
+                    "partnercode=%s, namespaceid=%s",
                     profile_id,
                     user_id,
                     nickname,
+                    partnercode,
+                    namespaceid,
                 )
                 cert = generate_certificate_for_player(
                     userid=user_id,
                     profileid=profile_id,
                     profilenick=nickname,
                     uniquenick=nickname,
+                    partnercode=partnercode,
+                    namespaceid=namespaceid,
                 )
                 _profile_certificates[cache_key] = cert
             else:
@@ -187,6 +202,8 @@ async def auth_handler(request: Request) -> Response:
                 signature=cert.signature,
                 peerkeyprivate=cert.peerkeyprivate,
                 timestamp=timestamp,
+                partnercode=partnercode,
+                namespaceid=namespaceid,
             )
             response_xml = wrap_soap_envelope(response_model)
 

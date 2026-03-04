@@ -78,6 +78,8 @@ class LoginRemoteAuthResponse(BaseXmlModel, tag="LoginRemoteAuthResponse", nsmap
         signature: str,
         peerkeyprivate: str,
         timestamp: str,
+        partnercode: int = 60,
+        namespaceid: int = 69,
     ) -> "LoginRemoteAuthResponse":
         """Create a successful response with real player data and dynamically generated crypto."""
         cert = Certificate(
@@ -90,6 +92,8 @@ class LoginRemoteAuthResponse(BaseXmlModel, tag="LoginRemoteAuthResponse", nsmap
             serverdata=serverdata,
             signature=signature,
             timestamp=timestamp,
+            partnercode=partnercode,
+            namespaceid=namespaceid,
         )
         result = LoginRemoteAuthResult(
             response_code=LoginResponseCode.SUCCESS,
