@@ -20,9 +20,9 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Response
 
 from app.db.crud import (
+    DEFAULT_GAME_ID,
     GAME_ID_KW,
     GAME_ID_RA,
-    DEFAULT_GAME_ID,
     create_competition_session,
     extract_persona_from_ccid,
     finalize_match,

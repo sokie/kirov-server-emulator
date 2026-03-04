@@ -63,10 +63,18 @@ FACTION_ENUM_MAP: dict[int, str] = {
 # KW faction enum (developer_version=100)
 # 12 factions: 3 base + 2 special + 6 subfactions → 60 faction indicator keys
 KW_FACTION_ENUM_MAP: dict[int, str] = {
-    0: "Random", 1: "GDI", 2: "Nod", 3: "Scrin",
-    4: "Observer", 5: "Commentator",
-    6: "Steel Talons", 7: "ZOCOM", 8: "Black Hand",
-    9: "Marked of Kane", 10: "Reaper-17", 11: "Traveler-59",
+    0: "Random",
+    1: "GDI",
+    2: "Nod",
+    3: "Scrin",
+    4: "Observer",
+    5: "Commentator",
+    6: "Steel Talons",
+    7: "ZOCOM",
+    8: "Black Hand",
+    9: "Marked of Kane",
+    10: "Reaper-17",
+    11: "Traveler-59",
 }
 
 KW_FACTION_KEY_MAX = 59  # 12 factions * 5 game_types - 1
@@ -74,9 +82,15 @@ KW_GAME_KEY_OFFSET = 45  # offset from RA3 game section keys
 
 # Map subfactions to parent faction for stats storage
 KW_PARENT_FACTION: dict[str, str] = {
-    "GDI": "GDI", "Steel Talons": "GDI", "ZOCOM": "GDI",
-    "Nod": "Nod", "Black Hand": "Nod", "Marked of Kane": "Nod",
-    "Scrin": "Scrin", "Reaper-17": "Scrin", "Traveler-59": "Scrin",
+    "GDI": "GDI",
+    "Steel Talons": "GDI",
+    "ZOCOM": "GDI",
+    "Nod": "Nod",
+    "Black Hand": "Nod",
+    "Marked of Kane": "Nod",
+    "Scrin": "Scrin",
+    "Reaper-17": "Scrin",
+    "Traveler-59": "Scrin",
 }
 
 # Game type names by offset (key = base + game_type_offset)
