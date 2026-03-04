@@ -583,36 +583,13 @@ class TestHandleGetpdJson:
     def test_existing_stats_returned_as_json(self):
         server, _ = _make_server("redalert3pc")
         mock_stats = MagicMock()
-        mock_stats.wins_ranked_1v1 = 5
-        mock_stats.losses_ranked_1v1 = 2
-        mock_stats.wins_ranked_2v2 = 0
-        mock_stats.losses_ranked_2v2 = 0
-        mock_stats.wins_unranked = 0
-        mock_stats.losses_unranked = 0
-        mock_stats.wins_clan_1v1 = 0
-        mock_stats.losses_clan_1v1 = 0
-        mock_stats.wins_clan_2v2 = 0
-        mock_stats.losses_clan_2v2 = 0
-        mock_stats.disconnects_ranked_1v1 = 0
-        mock_stats.disconnects_ranked_2v2 = 0
-        mock_stats.disconnects_unranked = 0
-        mock_stats.disconnects_clan_1v1 = 0
-        mock_stats.disconnects_clan_2v2 = 0
-        mock_stats.desyncs_ranked_1v1 = 0
-        mock_stats.desyncs_ranked_2v2 = 0
-        mock_stats.desyncs_unranked = 0
-        mock_stats.desyncs_clan_1v1 = 0
-        mock_stats.desyncs_clan_2v2 = 0
-        mock_stats.avg_game_length_ranked_1v1 = 0
-        mock_stats.avg_game_length_ranked_2v2 = 0
-        mock_stats.avg_game_length_unranked = 0
-        mock_stats.avg_game_length_clan_1v1 = 0
-        mock_stats.avg_game_length_clan_2v2 = 0
-        mock_stats.win_ratio_ranked_1v1 = 0.0
-        mock_stats.win_ratio_ranked_2v2 = 0.0
-        mock_stats.win_ratio_unranked = 0.0
-        mock_stats.win_ratio_clan_1v1 = 0.0
-        mock_stats.win_ratio_clan_2v2 = 0.0
+        mock_stats.stats = {
+            "ranked_1v1": {"wins": 5, "losses": 2, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
+            "ranked_2v2": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
+            "unranked": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
+            "clan_1v1": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
+            "clan_2v2": {"wins": 0, "losses": 0, "disconnects": 0, "desyncs": 0, "avg_game_length": 0, "win_ratio": 0.0},
+        }
         mock_stats.total_matches_online = 7
 
         with patch("app.servers.gamestats_server.get_player_stats", return_value=mock_stats):

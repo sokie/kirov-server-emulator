@@ -190,16 +190,24 @@ def get_requested_fields(operation: ET.Element) -> list[str]:
 # =============================================================================
 
 
-def _get_mode_values(stats: PlayerStats | None, attr_prefix: str) -> list:
-    """Get values for all 5 game modes from a PlayerStats object."""
+GAME_MODES = ["unranked", "ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
+
+
+def _get_mode_values(stats: PlayerStats | None, stat_key: str) -> list:
+    """Get values for all 5 game modes from a PlayerStats JSON stats dict."""
     if stats is None:
         return [0, 0, 0, 0, 0]
+    s = stats.stats or {}
+    return [s.get(mode, {}).get(stat_key, 0) for mode in GAME_MODES]
+
+
+def _get_faction_mode_values(stats: PlayerStats | None, faction: str, stat_key: str) -> list:
+    """Get faction-specific values for all 5 game modes from PlayerStats JSON."""
+    if stats is None:
+        return [0, 0, 0, 0, 0]
+    s = stats.stats or {}
     return [
-        getattr(stats, f"{attr_prefix}_unranked", 0),
-        getattr(stats, f"{attr_prefix}_ranked_1v1", 0),
-        getattr(stats, f"{attr_prefix}_ranked_2v2", 0),
-        getattr(stats, f"{attr_prefix}_clan_1v1", 0),
-        getattr(stats, f"{attr_prefix}_clan_2v2", 0),
+        s.get(mode, {}).get("factions", {}).get(faction, {}).get(stat_key, 0) for mode in GAME_MODES
     ]
 
 
@@ -437,7 +445,7 @@ def _build_ra_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     for v in _get_mode_values(stats, "total_time_played"):
         records.append(RecordValue.from_int(v))
     # [175-179] Allied wins per mode
-    for v in _get_mode_values(stats, "wins_allied"):
+    for v in _get_faction_mode_values(stats, "allied", "wins"):
         records.append(RecordValue.from_int(v))
 
     # [180-184] Disconnects per mode

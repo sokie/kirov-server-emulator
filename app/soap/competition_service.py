@@ -33,7 +33,13 @@ from app.db.crud import (
     submit_match_report,
 )
 from app.db.database import create_session
-from app.models.match_report import MatchReport, get_game_key_name, get_player_key_name
+from app.models.match_report import (
+    MatchReport,
+    get_game_key_name,
+    get_kw_game_key_name,
+    get_kw_player_key_name,
+    get_player_key_name,
+)
 from app.soap.envelope import (
     create_soap_fault,
     extract_soap_body,
@@ -142,7 +148,7 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
                 if i < len(report.player_section):
                     stats = {}
                     for k, v in sorted(report.player_section[i].items()):
-                        name = get_player_key_name(k)
+                        name = get_kw_player_key_name(k) if report.is_kw else get_player_key_name(k)
                         stats[name] = {"key": k, "type": v.value_type.name, "value": v.value}
                     player_dict["stats"] = stats
                 players_json.append(player_dict)
@@ -150,7 +156,7 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
             # Build game section with friendly key names
             game_section_json = {}
             for k, v in sorted(report.game_section.items()):
-                name = get_game_key_name(k)
+                name = get_kw_game_key_name(k) if report.is_kw else get_game_key_name(k)
                 game_section_json[name] = {"key": k, "type": v.value_type.name, "value": v.value}
 
             report_dict = {

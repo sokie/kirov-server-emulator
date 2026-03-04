@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 # =============================================================================
@@ -336,8 +336,9 @@ class PlayerStats(SQLModel, table=True):
     """
     Player Stats - Career statistics by game type.
 
-    Stores wins, losses, disconnects, desyncs, and other stats
-    for each game type (unranked, ranked 1v1, ranked 2v2, clan 1v1, clan 2v2).
+    ELO and game counts are real columns for SQL ORDER BY in leaderboard queries.
+    All other stats (wins, losses, streaks, faction data) are stored in a JSON column.
+    Each game defines its own stat shape — no cross-game column mapping needed.
     """
 
     __tablename__ = "player_stats"
@@ -347,122 +348,20 @@ class PlayerStats(SQLModel, table=True):
     persona_id: int = Field(foreign_key="persona.id", index=True)
     game_id: int = Field(default=2128, index=True)
 
-    # Wins per game type
-    wins_unranked: int = Field(default=0)
-    wins_ranked_1v1: int = Field(default=0)
-    wins_ranked_2v2: int = Field(default=0)
-    wins_clan_1v1: int = Field(default=0)
-    wins_clan_2v2: int = Field(default=0)
-
-    # Losses per game type
-    losses_unranked: int = Field(default=0)
-    losses_ranked_1v1: int = Field(default=0)
-    losses_ranked_2v2: int = Field(default=0)
-    losses_clan_1v1: int = Field(default=0)
-    losses_clan_2v2: int = Field(default=0)
-
-    # Disconnects per game type
-    disconnects_unranked: int = Field(default=0)
-    disconnects_ranked_1v1: int = Field(default=0)
-    disconnects_ranked_2v2: int = Field(default=0)
-    disconnects_clan_1v1: int = Field(default=0)
-    disconnects_clan_2v2: int = Field(default=0)
-
-    # Desyncs per game type
-    desyncs_unranked: int = Field(default=0)
-    desyncs_ranked_1v1: int = Field(default=0)
-    desyncs_ranked_2v2: int = Field(default=0)
-    desyncs_clan_1v1: int = Field(default=0)
-    desyncs_clan_2v2: int = Field(default=0)
-
-    # Average game length (seconds) per game type
-    avg_game_length_unranked: int = Field(default=0)
-    avg_game_length_ranked_1v1: int = Field(default=0)
-    avg_game_length_ranked_2v2: int = Field(default=0)
-    avg_game_length_clan_1v1: int = Field(default=0)
-    avg_game_length_clan_2v2: int = Field(default=0)
-
-    # Win/loss ratio per game type (stored as percentage * 100, e.g., 50.5% = 5050)
-    win_ratio_unranked: float = Field(default=0.0)
-    win_ratio_ranked_1v1: float = Field(default=0.0)
-    win_ratio_ranked_2v2: float = Field(default=0.0)
-    win_ratio_clan_1v1: float = Field(default=0.0)
-    win_ratio_clan_2v2: float = Field(default=0.0)
-
-    total_matches_online: int = Field(default=0)
-
-    # ELO ratings per game type (initial 1200)
+    # Real columns — needed for SQL ORDER BY in leaderboard queries
     elo_ranked_1v1: int = Field(default=1200)
     elo_ranked_2v2: int = Field(default=1200)
     elo_clan_1v1: int = Field(default=1200)
     elo_clan_2v2: int = Field(default=1200)
-
-    # Game counts for K-factor calculation
     games_ranked_1v1: int = Field(default=0)
     games_ranked_2v2: int = Field(default=0)
     games_clan_1v1: int = Field(default=0)
     games_clan_2v2: int = Field(default=0)
+    total_matches_online: int = Field(default=0)
 
-    # Win streaks per game type (current and longest)
-    current_win_streak_unranked: int = Field(default=0)
-    current_win_streak_ranked_1v1: int = Field(default=0)
-    current_win_streak_ranked_2v2: int = Field(default=0)
-    current_win_streak_clan_1v1: int = Field(default=0)
-    current_win_streak_clan_2v2: int = Field(default=0)
-    current_loss_streak_unranked: int = Field(default=0)
-    current_loss_streak_ranked_1v1: int = Field(default=0)
-    current_loss_streak_ranked_2v2: int = Field(default=0)
-    current_loss_streak_clan_1v1: int = Field(default=0)
-    current_loss_streak_clan_2v2: int = Field(default=0)
-    longest_win_streak_unranked: int = Field(default=0)
-    longest_win_streak_ranked_1v1: int = Field(default=0)
-    longest_win_streak_ranked_2v2: int = Field(default=0)
-    longest_win_streak_clan_1v1: int = Field(default=0)
-    longest_win_streak_clan_2v2: int = Field(default=0)
-    longest_loss_streak_unranked: int = Field(default=0)
-    longest_loss_streak_ranked_1v1: int = Field(default=0)
-    longest_loss_streak_ranked_2v2: int = Field(default=0)
-    longest_loss_streak_clan_1v1: int = Field(default=0)
-    longest_loss_streak_clan_2v2: int = Field(default=0)
-
-    # Faction wins/losses: Allied, Soviet, Japan (per game type)
-    wins_allied_unranked: int = Field(default=0)
-    wins_allied_ranked_1v1: int = Field(default=0)
-    wins_allied_ranked_2v2: int = Field(default=0)
-    wins_allied_clan_1v1: int = Field(default=0)
-    wins_allied_clan_2v2: int = Field(default=0)
-    losses_allied_unranked: int = Field(default=0)
-    losses_allied_ranked_1v1: int = Field(default=0)
-    losses_allied_ranked_2v2: int = Field(default=0)
-    losses_allied_clan_1v1: int = Field(default=0)
-    losses_allied_clan_2v2: int = Field(default=0)
-    wins_soviet_unranked: int = Field(default=0)
-    wins_soviet_ranked_1v1: int = Field(default=0)
-    wins_soviet_ranked_2v2: int = Field(default=0)
-    wins_soviet_clan_1v1: int = Field(default=0)
-    wins_soviet_clan_2v2: int = Field(default=0)
-    losses_soviet_unranked: int = Field(default=0)
-    losses_soviet_ranked_1v1: int = Field(default=0)
-    losses_soviet_ranked_2v2: int = Field(default=0)
-    losses_soviet_clan_1v1: int = Field(default=0)
-    losses_soviet_clan_2v2: int = Field(default=0)
-    wins_japan_unranked: int = Field(default=0)
-    wins_japan_ranked_1v1: int = Field(default=0)
-    wins_japan_ranked_2v2: int = Field(default=0)
-    wins_japan_clan_1v1: int = Field(default=0)
-    wins_japan_clan_2v2: int = Field(default=0)
-    losses_japan_unranked: int = Field(default=0)
-    losses_japan_ranked_1v1: int = Field(default=0)
-    losses_japan_ranked_2v2: int = Field(default=0)
-    losses_japan_clan_1v1: int = Field(default=0)
-    losses_japan_clan_2v2: int = Field(default=0)
-
-    # Total time played per game type (seconds, cumulative)
-    total_time_played_unranked: int = Field(default=0)
-    total_time_played_ranked_1v1: int = Field(default=0)
-    total_time_played_ranked_2v2: int = Field(default=0)
-    total_time_played_clan_1v1: int = Field(default=0)
-    total_time_played_clan_2v2: int = Field(default=0)
+    # All other stats — nested JSON dict
+    # Structure: { "ranked_1v1": { "wins": 5, "losses": 3, "factions": { "gdi": { "wins": 2 } } } }
+    stats: dict = Field(default_factory=dict, sa_type=JSON)
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

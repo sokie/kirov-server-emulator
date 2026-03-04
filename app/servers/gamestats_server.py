@@ -450,45 +450,29 @@ class GameStatsServer(asyncio.Protocol):
         return self._handle_getpd_json(pid, lid, request_id, request_data)
 
     def _handle_getpd_json(self, pid: int, lid: str, request_id: str, request_data: dict[str, str]) -> str:
-        """Handle getpd for CNC3/RA3 (JSON format)."""
+        """Handle getpd for CNC3/RA3/KW (JSON format).
+
+        Converts nested JSON stats → flat keys for the game client wire format.
+        """
+        from app.models.game_config import GAME_TYPES
+
         game_id = GAMENAME_TO_GAME_ID.get(self.gamename, DEFAULT_GAME_ID)
         stats = get_player_stats(self.db_session, pid, game_id=game_id)
 
         stats_data = {}
         if stats:
-            stats_data = {
-                "wins_unranked": stats.wins_unranked,
-                "wins_ranked_1v1": stats.wins_ranked_1v1,
-                "wins_ranked_2v2": stats.wins_ranked_2v2,
-                "wins_clan_1v1": stats.wins_clan_1v1,
-                "wins_clan_2v2": stats.wins_clan_2v2,
-                "losses_unranked": stats.losses_unranked,
-                "losses_ranked_1v1": stats.losses_ranked_1v1,
-                "losses_ranked_2v2": stats.losses_ranked_2v2,
-                "losses_clan_1v1": stats.losses_clan_1v1,
-                "losses_clan_2v2": stats.losses_clan_2v2,
-                "disconnects_unranked": stats.disconnects_unranked,
-                "disconnects_ranked_1v1": stats.disconnects_ranked_1v1,
-                "disconnects_ranked_2v2": stats.disconnects_ranked_2v2,
-                "disconnects_clan_1v1": stats.disconnects_clan_1v1,
-                "disconnects_clan_2v2": stats.disconnects_clan_2v2,
-                "desyncs_unranked": stats.desyncs_unranked,
-                "desyncs_ranked_1v1": stats.desyncs_ranked_1v1,
-                "desyncs_ranked_2v2": stats.desyncs_ranked_2v2,
-                "desyncs_clan_1v1": stats.desyncs_clan_1v1,
-                "desyncs_clan_2v2": stats.desyncs_clan_2v2,
-                "avg_game_length_unranked": stats.avg_game_length_unranked,
-                "avg_game_length_ranked_1v1": stats.avg_game_length_ranked_1v1,
-                "avg_game_length_ranked_2v2": stats.avg_game_length_ranked_2v2,
-                "avg_game_length_clan_1v1": stats.avg_game_length_clan_1v1,
-                "avg_game_length_clan_2v2": stats.avg_game_length_clan_2v2,
-                "win_ratio_unranked": stats.win_ratio_unranked,
-                "win_ratio_ranked_1v1": stats.win_ratio_ranked_1v1,
-                "win_ratio_ranked_2v2": stats.win_ratio_ranked_2v2,
-                "win_ratio_clan_1v1": stats.win_ratio_clan_1v1,
-                "win_ratio_clan_2v2": stats.win_ratio_clan_2v2,
-                "total_matches_online": stats.total_matches_online,
-            }
+            s = stats.stats or {}
+            # Flatten nested JSON → flat keys: stats["ranked_1v1"]["wins"] → "wins_ranked_1v1"
+            flat_stat_keys = [
+                "wins", "losses", "disconnects", "desyncs",
+                "avg_game_length", "win_ratio",
+            ]
+            for game_type in GAME_TYPES:
+                mode_stats = s.get(game_type, {})
+                for key in flat_stat_keys:
+                    stats_data[f"{key}_{game_type}"] = mode_stats.get(key, 0)
+
+            stats_data["total_matches_online"] = stats.total_matches_online
 
         data_json = json.dumps(stats_data)
         data_len = len(data_json)
