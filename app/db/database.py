@@ -48,10 +48,6 @@ def create_db_and_tables():
 
     SQLModel.metadata.create_all(engine)
 
-    from app.db.crud import migrate_player_stats_columns
-
-    migrate_player_stats_columns(engine)
-
 
 def get_session():
     """

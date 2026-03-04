@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 # =============================================================================
@@ -340,9 +341,11 @@ class PlayerStats(SQLModel, table=True):
     """
 
     __tablename__ = "player_stats"
+    __table_args__ = (UniqueConstraint("persona_id", "game_id"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    persona_id: int = Field(foreign_key="persona.id", unique=True, index=True)
+    persona_id: int = Field(foreign_key="persona.id", index=True)
+    game_id: int = Field(default=2128, index=True)
 
     # Wins per game type
     wins_unranked: int = Field(default=0)
@@ -473,9 +476,11 @@ class PlayerLevel(SQLModel, table=True):
     """
 
     __tablename__ = "player_level"
+    __table_args__ = (UniqueConstraint("persona_id", "game_id"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    persona_id: int = Field(foreign_key="persona.id", unique=True, index=True)
+    persona_id: int = Field(foreign_key="persona.id", index=True)
+    game_id: int = Field(default=2128, index=True)
     rank: int = Field(default=1)  # 1-87
     score: int = Field(default=0)  # XP points
 
@@ -490,6 +495,7 @@ class MatchReport(SQLModel, table=True):
     __tablename__ = "match_report"
 
     id: int | None = Field(default=None, primary_key=True)
+    game_id: int = Field(default=2128, index=True)
     csid: str = Field(index=True)  # Competition Session ID
     ccid: str = Field(index=True)  # Competition Channel ID (player identifier)
     persona_id: int = Field(foreign_key="persona.id", index=True)

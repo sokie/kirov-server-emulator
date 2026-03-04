@@ -263,8 +263,11 @@ def _build_kw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     avg_of_avg = sum(non_zero) // len(non_zero) if non_zero else 0
     records.append(RecordValue.from_int(avg_of_avg))
 
-    # [342-347] 6 int(0) - Total time played (not tracked)
-    records.extend([RecordValue.from_int(0)] * 6)
+    # [342-347] Total time played per mode + total
+    time_played = _get_mode_values(stats, "total_time_played")
+    for val in time_played:
+        records.append(RecordValue.from_int(val))
+    records.append(RecordValue.from_int(sum(time_played)))
 
     # [348-389] 42 int(0) padding
     records.extend([RecordValue.from_int(0)] * 42)
@@ -486,7 +489,7 @@ def handle_get_my_records(
     try:
         # Large request = full positional career stats
         if len(requested_fields) > 10:
-            stats = get_player_stats(session, profile_id)
+            stats = get_player_stats(session, profile_id, game_id=game_id)
 
             if game_id == GAME_ID_KW:
                 records = _build_kw_career_stats(stats)
@@ -498,8 +501,8 @@ def handle_get_my_records(
             return GetMyRecordsResponse.success(records)
 
         # Small request = field-name based
-        stats = get_player_stats(session, profile_id)
-        level = get_player_level(session, profile_id)
+        stats = get_player_stats(session, profile_id, game_id=game_id)
+        level = get_player_level(session, profile_id, game_id=game_id)
 
         records = []
         for field in requested_fields:
@@ -609,7 +612,7 @@ def handle_search_for_records(
                 personas = session.exec(stmt).all()
 
                 for persona in personas:
-                    level = get_player_level(session, persona.id)
+                    level = get_player_level(session, persona.id, game_id=game_id)
                     rank = level.rank if level else 1
                     score = level.score if level else 0
 

@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 from app.config.app_settings import app_config
 from app.db.crud import (
+    DEFAULT_GAME_ID,
     create_or_update_generals_stats,
     create_or_update_player_stats,
     get_generals_player_stats,
@@ -40,6 +41,17 @@ from app.util.cipher import gs_chresp_num, gs_xor
 from app.util.logging_helper import format_hex, get_logger
 
 logger = get_logger(__name__)
+
+# Map gamename to game_id for per-game stats
+GAMENAME_TO_GAME_ID = {
+    "redalert3pc": 2128,
+    "cncra3pc": 2128,
+    "cc3xp1": 1814,
+    "cnc3ep1pc": 1814,
+    "cc3": 1422,
+    "cc3tibwars": 1422,
+    "cnc3pc": 1422,
+}
 
 if TYPE_CHECKING:
     pass
@@ -439,7 +451,8 @@ class GameStatsServer(asyncio.Protocol):
 
     def _handle_getpd_json(self, pid: int, lid: str, request_id: str, request_data: dict[str, str]) -> str:
         """Handle getpd for CNC3/RA3 (JSON format)."""
-        stats = get_player_stats(self.db_session, pid)
+        game_id = GAMENAME_TO_GAME_ID.get(self.gamename, DEFAULT_GAME_ID)
+        stats = get_player_stats(self.db_session, pid, game_id=game_id)
 
         stats_data = {}
         if stats:
@@ -586,7 +599,8 @@ class GameStatsServer(asyncio.Protocol):
             stats_data = {}
 
         if stats_data:
-            create_or_update_player_stats(self.db_session, pid, stats_data)
+            game_id = GAMENAME_TO_GAME_ID.get(self.gamename, DEFAULT_GAME_ID)
+            create_or_update_player_stats(self.db_session, pid, stats_data, game_id=game_id)
 
         response_data = {
             "setpdr": "1",

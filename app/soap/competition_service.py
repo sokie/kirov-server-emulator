@@ -20,6 +20,9 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Response
 
 from app.db.crud import (
+    GAME_ID_KW,
+    GAME_ID_RA,
+    DEFAULT_GAME_ID,
     create_competition_session,
     extract_persona_from_ccid,
     finalize_match,
@@ -52,6 +55,9 @@ competition_router = APIRouter()
 
 # Namespace definitions
 COMP_NS = "http://gamespy.net/competition/"
+
+# Partnercode to game_id mapping
+PARTNERCODE_TO_GAME_ID = {60: GAME_ID_RA, 24: GAME_ID_KW}
 
 
 def extract_profile_id_from_certificate(operation: any) -> int:
@@ -249,7 +255,7 @@ def handle_set_report_intention(csid: str, ccid: str, profile_id: int) -> SetRep
 
 
 def handle_submit_report(
-    csid: str, ccid: str, profile_id: int, raw_report: bytes, request_id: str
+    csid: str, ccid: str, profile_id: int, raw_report: bytes, request_id: str, game_id: int = DEFAULT_GAME_ID
 ) -> SubmitReportResponse:
     """
     Handle SubmitReport SOAP operation.
@@ -454,7 +460,7 @@ def handle_submit_report(
     session = create_session()
     try:
         # Store the match report
-        submit_match_report(session, csid, ccid, profile_id, report_data)
+        submit_match_report(session, csid, ccid, profile_id, report_data, game_id=game_id)
 
         # Mark report intent as reported and update full_id
         if ccid:
@@ -471,7 +477,7 @@ def handle_submit_report(
                 comp_session.received_reports,
                 comp_session.expected_players,
             )
-            if finalize_match(session, csid):
+            if finalize_match(session, csid, game_id=game_id):
                 logger.info("[%s] Match finalized successfully with ELO updates", request_id)
             else:
                 logger.warning("[%s] Match finalization returned False", request_id)
@@ -492,7 +498,7 @@ def handle_submit_report(
         session.close()
 
 
-def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, int, bytes]:
+def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, int, bytes, int]:
     """
     Extract data from SubmitReport request.
 
@@ -506,7 +512,7 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
         request_id: Unique request ID for logging.
 
     Returns:
-        Tuple of (csid, ccid, profile_id, raw_report).
+        Tuple of (csid, ccid, profile_id, raw_report, partnercode).
     """
     logger.info("[%s] Extracting SubmitReport data from body (size=%d bytes)", request_id, len(body))
 
@@ -579,6 +585,21 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
             authoritative = body[auth_start:auth_end].decode("ascii", errors="ignore")
     logger.info("[%s] Extracted authoritative=%s", request_id, authoritative)
 
+    # Extract partnercode
+    partnercode = 0
+    partnercode_marker = b"<gsc:partnercode>"
+    partnercode_end_marker = b"</gsc:partnercode>"
+    pc_start = body.find(partnercode_marker)
+    if pc_start != -1:
+        pc_start += len(partnercode_marker)
+        pc_end = body.find(partnercode_end_marker, pc_start)
+        if pc_end != -1:
+            try:
+                partnercode = int(body[pc_start:pc_end].decode("ascii"))
+            except ValueError:
+                pass
+    logger.info("[%s] Extracted partnercode=%d", request_id, partnercode)
+
     # Extract binary report (after "application/bin\0" marker)
     raw_report = b""
     bin_pos = body.find(bin_marker)
@@ -599,7 +620,7 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
         len(raw_report),
     )
 
-    return csid, ccid, profile_id, raw_report
+    return csid, ccid, profile_id, raw_report, partnercode
 
 
 @competition_router.post("/competitionservice/competitionservice.asmx")
@@ -637,8 +658,9 @@ async def competition_handler(request: Request) -> Response:
         if "SubmitReport" in soap_action:
             logger.info("[%s] Handling SubmitReport (binary data expected)", request_id)
             logger.debug("[%s] Request body (first 500 bytes): %s", request_id, body[:500])
-            csid, ccid, profile_id, raw_report = extract_submit_report_data(body, request_id)
-            response_model = handle_submit_report(csid, ccid, profile_id, raw_report, request_id)
+            csid, ccid, profile_id, raw_report, partnercode = extract_submit_report_data(body, request_id)
+            game_id = PARTNERCODE_TO_GAME_ID.get(partnercode, DEFAULT_GAME_ID)
+            response_model = handle_submit_report(csid, ccid, profile_id, raw_report, request_id, game_id=game_id)
             response_xml = wrap_soap_envelope(response_model)
         else:
             # For other operations, parse as pure XML

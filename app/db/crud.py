@@ -4,7 +4,6 @@ import secrets
 import string
 from datetime import datetime
 
-import sqlalchemy
 from sqlmodel import Session, select
 
 from app.models.models import (
@@ -34,79 +33,16 @@ from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
 
-# All 65 new columns added to player_stats for RA3 extended stats
-_PLAYER_STATS_NEW_COLUMNS = [
-    "current_win_streak_unranked",
-    "current_win_streak_ranked_1v1",
-    "current_win_streak_ranked_2v2",
-    "current_win_streak_clan_1v1",
-    "current_win_streak_clan_2v2",
-    "current_loss_streak_unranked",
-    "current_loss_streak_ranked_1v1",
-    "current_loss_streak_ranked_2v2",
-    "current_loss_streak_clan_1v1",
-    "current_loss_streak_clan_2v2",
-    "longest_win_streak_unranked",
-    "longest_win_streak_ranked_1v1",
-    "longest_win_streak_ranked_2v2",
-    "longest_win_streak_clan_1v1",
-    "longest_win_streak_clan_2v2",
-    "longest_loss_streak_unranked",
-    "longest_loss_streak_ranked_1v1",
-    "longest_loss_streak_ranked_2v2",
-    "longest_loss_streak_clan_1v1",
-    "longest_loss_streak_clan_2v2",
-    "wins_allied_unranked",
-    "wins_allied_ranked_1v1",
-    "wins_allied_ranked_2v2",
-    "wins_allied_clan_1v1",
-    "wins_allied_clan_2v2",
-    "losses_allied_unranked",
-    "losses_allied_ranked_1v1",
-    "losses_allied_ranked_2v2",
-    "losses_allied_clan_1v1",
-    "losses_allied_clan_2v2",
-    "wins_soviet_unranked",
-    "wins_soviet_ranked_1v1",
-    "wins_soviet_ranked_2v2",
-    "wins_soviet_clan_1v1",
-    "wins_soviet_clan_2v2",
-    "losses_soviet_unranked",
-    "losses_soviet_ranked_1v1",
-    "losses_soviet_ranked_2v2",
-    "losses_soviet_clan_1v1",
-    "losses_soviet_clan_2v2",
-    "wins_japan_unranked",
-    "wins_japan_ranked_1v1",
-    "wins_japan_ranked_2v2",
-    "wins_japan_clan_1v1",
-    "wins_japan_clan_2v2",
-    "losses_japan_unranked",
-    "losses_japan_ranked_1v1",
-    "losses_japan_ranked_2v2",
-    "losses_japan_clan_1v1",
-    "losses_japan_clan_2v2",
-    "total_time_played_unranked",
-    "total_time_played_ranked_1v1",
-    "total_time_played_ranked_2v2",
-    "total_time_played_clan_1v1",
-    "total_time_played_clan_2v2",
-]
+# Game ID constants
+GAME_ID_RA = 2128
+GAME_ID_KW = 1814
+GAME_ID_TW = 1422
+DEFAULT_GAME_ID = GAME_ID_RA
 
-FACTION_KEY_MAP = {"Allied": "allied", "Soviet": "soviet", "Empire": "japan", "Japan": "japan"}
-
-
-def migrate_player_stats_columns(engine) -> None:
-    """Add missing columns to the player_stats table for existing databases."""
-    inspector = sqlalchemy.inspect(engine)
-    existing = {col["name"] for col in inspector.get_columns("player_stats")}
-    with engine.begin() as conn:
-        for col_name in _PLAYER_STATS_NEW_COLUMNS:
-            if col_name not in existing:
-                conn.execute(
-                    sqlalchemy.text(f"ALTER TABLE player_stats ADD COLUMN {col_name} INTEGER NOT NULL DEFAULT 0")
-                )
-                logger.info("Migrated player_stats: added column %s", col_name)
+FACTION_KEY_MAP = {
+    "Allied": "allied", "Soviet": "soviet", "Empire": "japan", "Japan": "japan",
+    "GDI": "allied", "Nod": "soviet", "Scrin": "japan",
+}
 
 
 # =============================================================================
@@ -691,13 +627,15 @@ def get_pending_invites_for_persona(session: Session, persona_id: int) -> list[G
 # =============================================================================
 
 
-def get_player_stats(session: Session, persona_id: int) -> PlayerStats | None:
+def get_player_stats(session: Session, persona_id: int, game_id: int = DEFAULT_GAME_ID) -> PlayerStats | None:
     """Gets player stats for a persona."""
-    stmt = select(PlayerStats).where(PlayerStats.persona_id == persona_id)
+    stmt = select(PlayerStats).where(PlayerStats.persona_id == persona_id, PlayerStats.game_id == game_id)
     return session.exec(stmt).first()
 
 
-def create_or_update_player_stats(session: Session, persona_id: int, stats_data: dict) -> PlayerStats:
+def create_or_update_player_stats(
+    session: Session, persona_id: int, stats_data: dict, game_id: int = DEFAULT_GAME_ID
+) -> PlayerStats:
     """
     Creates or updates player stats for a persona.
 
@@ -705,14 +643,15 @@ def create_or_update_player_stats(session: Session, persona_id: int, stats_data:
         session: Database session
         persona_id: Persona ID
         stats_data: Dictionary of stats fields to update
+        game_id: Game ID (RA3=2128, KW=1814, TW=1422)
 
     Returns:
         Updated or created PlayerStats
     """
-    stats = get_player_stats(session, persona_id)
+    stats = get_player_stats(session, persona_id, game_id=game_id)
 
     if stats is None:
-        stats = PlayerStats(persona_id=persona_id)
+        stats = PlayerStats(persona_id=persona_id, game_id=game_id)
         session.add(stats)
 
     # Update fields from stats_data
@@ -950,13 +889,15 @@ def get_generals_player_profile(session: Session, persona_id: int) -> dict | Non
     }
 
 
-def get_player_level(session: Session, persona_id: int) -> PlayerLevel | None:
+def get_player_level(session: Session, persona_id: int, game_id: int = DEFAULT_GAME_ID) -> PlayerLevel | None:
     """Gets player level for a persona."""
-    stmt = select(PlayerLevel).where(PlayerLevel.persona_id == persona_id)
+    stmt = select(PlayerLevel).where(PlayerLevel.persona_id == persona_id, PlayerLevel.game_id == game_id)
     return session.exec(stmt).first()
 
 
-def create_or_update_player_level(session: Session, persona_id: int, rank: int = 1, score: int = 0) -> PlayerLevel:
+def create_or_update_player_level(
+    session: Session, persona_id: int, rank: int = 1, score: int = 0, game_id: int = DEFAULT_GAME_ID
+) -> PlayerLevel:
     """
     Creates or updates player level for a persona.
 
@@ -965,14 +906,15 @@ def create_or_update_player_level(session: Session, persona_id: int, rank: int =
         persona_id: Persona ID
         rank: Player rank (1-87)
         score: XP score
+        game_id: Game ID (RA3=2128, KW=1814, TW=1422)
 
     Returns:
         Updated or created PlayerLevel
     """
-    level = get_player_level(session, persona_id)
+    level = get_player_level(session, persona_id, game_id=game_id)
 
     if level is None:
-        level = PlayerLevel(persona_id=persona_id, rank=rank, score=score)
+        level = PlayerLevel(persona_id=persona_id, game_id=game_id, rank=rank, score=score)
         session.add(level)
     else:
         level.rank = rank
@@ -1054,6 +996,7 @@ def update_player_elo(
     opponent_rating: int,
     won: bool,
     disconnected: bool = False,
+    game_id: int = DEFAULT_GAME_ID,
 ) -> PlayerStats:
     """
     Update a player's ELO rating after a match.
@@ -1069,9 +1012,9 @@ def update_player_elo(
     Returns:
         Updated PlayerStats.
     """
-    stats = get_player_stats(session, persona_id)
+    stats = get_player_stats(session, persona_id, game_id=game_id)
     if stats is None:
-        stats = PlayerStats(persona_id=persona_id)
+        stats = PlayerStats(persona_id=persona_id, game_id=game_id)
         session.add(stats)
         session.commit()
         session.refresh(stats)
@@ -1126,6 +1069,7 @@ def update_player_win_loss(
     result: int,
     duration: int = 0,
     faction: str = "",
+    game_id: int = DEFAULT_GAME_ID,
 ) -> PlayerStats:
     """
     Update a player's win/loss/disconnect/dsync counters, streaks, faction stats, and time played.
@@ -1141,9 +1085,9 @@ def update_player_win_loss(
     Returns:
         Updated PlayerStats.
     """
-    stats = get_player_stats(session, persona_id)
+    stats = get_player_stats(session, persona_id, game_id=game_id)
     if stats is None:
-        stats = PlayerStats(persona_id=persona_id)
+        stats = PlayerStats(persona_id=persona_id, game_id=game_id)
         session.add(stats)
         session.commit()
         session.refresh(stats)
@@ -1396,6 +1340,7 @@ def submit_match_report(
     ccid: str,
     persona_id: int,
     report_data: dict,
+    game_id: int = DEFAULT_GAME_ID,
 ) -> MatchReport:
     """
     Submits a match report.
@@ -1406,6 +1351,7 @@ def submit_match_report(
         ccid: Competition Channel ID
         persona_id: Persona ID of reporter
         report_data: Match report data (result, faction, duration, gametype, map_name)
+        game_id: Game ID (RA3=2128, KW=1814, TW=1422)
 
     Returns:
         Created MatchReport
@@ -1414,6 +1360,7 @@ def submit_match_report(
         csid=csid,
         ccid=ccid,
         persona_id=persona_id,
+        game_id=game_id,
         submitted_by=str(persona_id),
         result=report_data.get("result", 0),
         faction=report_data.get("faction", ""),
@@ -1456,7 +1403,7 @@ def get_match_reports_for_session(session: Session, csid: str) -> list[MatchRepo
     return list(session.exec(stmt).all())
 
 
-def finalize_match(session: Session, csid: str) -> bool:
+def finalize_match(session: Session, csid: str, game_id: int = DEFAULT_GAME_ID) -> bool:
     """
     Finalize a match by calculating and updating ELO ratings.
 
@@ -1504,7 +1451,7 @@ def finalize_match(session: Session, csid: str) -> bool:
         persona_id = report.persona_id
         if persona_id not in player_results:
             # Get current ELO for this player
-            stats = get_player_stats(session, persona_id)
+            stats = get_player_stats(session, persona_id, game_id=game_id)
             game_type = game_type_map.get(report.gametype, "unranked")
 
             # Get current ELO based on game type
@@ -1542,7 +1489,9 @@ def finalize_match(session: Session, csid: str) -> bool:
             is_disconnect = result == 3
 
             # Update win/loss counters
-            update_player_win_loss(session, persona_id, game_type, result, duration, faction=data["faction"])
+            update_player_win_loss(
+                session, persona_id, game_type, result, duration, faction=data["faction"], game_id=game_id
+            )
 
             # Update ELO if this is a ranked game type
             if game_type != "unranked":
@@ -1554,6 +1503,7 @@ def finalize_match(session: Session, csid: str) -> bool:
                     opponent_elo,
                     won=is_winner,
                     disconnected=is_disconnect,
+                    game_id=game_id,
                 )
 
         # Mark session as finalized only after stats were updated
@@ -1631,6 +1581,7 @@ def get_leaderboard(
     session: Session,
     game_type: str = "ranked_1v1",
     limit: int = 50,
+    game_id: int = DEFAULT_GAME_ID,
 ) -> list[dict]:
     """
     Query PlayerStats joined with Persona, sorted by ELO descending.
@@ -1654,6 +1605,7 @@ def get_leaderboard(
     stmt = (
         select(PlayerStats, Persona)
         .join(Persona, PlayerStats.persona_id == Persona.id)
+        .where(PlayerStats.game_id == game_id)
         .order_by(getattr(PlayerStats, elo_field).desc())
         .limit(limit)
     )
@@ -1683,9 +1635,9 @@ def get_leaderboard(
     return leaderboard
 
 
-def get_ra3_player_profile(session: Session, persona_id: int) -> dict | None:
+def get_ra3_player_profile(session: Session, persona_id: int, game_id: int = DEFAULT_GAME_ID) -> dict | None:
     """Return detailed RA3 stats for a player profile page."""
-    stats = get_player_stats(session, persona_id)
+    stats = get_player_stats(session, persona_id, game_id=game_id)
     if stats is None:
         return None
 

@@ -60,6 +60,25 @@ FACTION_ENUM_MAP: dict[int, str] = {
     2: Faction.EMPIRE,
 }
 
+# KW faction enum (developer_version=100)
+# 12 factions: 3 base + 2 special + 6 subfactions → 60 faction indicator keys
+KW_FACTION_ENUM_MAP: dict[int, str] = {
+    0: "Random", 1: "GDI", 2: "Nod", 3: "Scrin",
+    4: "Observer", 5: "Commentator",
+    6: "Steel Talons", 7: "ZOCOM", 8: "Black Hand",
+    9: "Marked of Kane", 10: "Reaper-17", 11: "Traveler-59",
+}
+
+KW_FACTION_KEY_MAX = 59  # 12 factions * 5 game_types - 1
+KW_GAME_KEY_OFFSET = 45  # offset from RA3 game section keys
+
+# Map subfactions to parent faction for stats storage
+KW_PARENT_FACTION: dict[str, str] = {
+    "GDI": "GDI", "Steel Talons": "GDI", "ZOCOM": "GDI",
+    "Nod": "Nod", "Black Hand": "Nod", "Marked of Kane": "Nod",
+    "Scrin": "Scrin", "Reaper-17": "Scrin", "Traveler-59": "Scrin",
+}
+
 # Game type names by offset (key = base + game_type_offset)
 GAME_TYPE_NAMES: dict[int, str] = {
     0: "unranked",
@@ -117,19 +136,22 @@ def get_faction_from_key(key: int) -> tuple[str, int]:
     return faction, game_type
 
 
-def get_player_key_name(key: int) -> str:
+def get_player_key_name(key: int, is_kw: bool = False) -> str:
     """
     Get a human-readable name for a player section key.
 
-    Keys 0-14 are faction indicators (faction_enum * 5 + game_type).
-    Keys 15+ are stats using formula: key = stat_base + game_type_offset.
+    Keys 0-14 (RA3) or 0-59 (KW) are faction indicators (faction_enum * 5 + game_type).
+    Keys after that are stats using formula: key = stat_base + game_type_offset.
     """
     game_type = key % 5
     gt_name = GAME_TYPE_NAMES.get(game_type, f"gt{game_type}")
 
-    if 0 <= key <= 14:
+    faction_key_max = KW_FACTION_KEY_MAX if is_kw else 14
+    faction_map = KW_FACTION_ENUM_MAP if is_kw else FACTION_ENUM_MAP
+
+    if 0 <= key <= faction_key_max:
         faction_enum = key // 5
-        faction = FACTION_ENUM_MAP.get(faction_enum, f"faction{faction_enum}")
+        faction = faction_map.get(faction_enum, f"faction{faction_enum}")
         return f"faction_indicator.{faction}.{gt_name}"
 
     base = key - game_type
@@ -137,12 +159,26 @@ def get_player_key_name(key: int) -> str:
     return f"{stat_name}.{gt_name}"
 
 
-def get_game_key_name(key: int) -> str:
+def get_game_key_name(key: int, is_kw: bool = False) -> str:
     """Get a human-readable name for a game section key."""
+    # RA3 game_type keys: 72-77, KW game_type keys: 117-122
     if 72 <= key <= 77:
         gt = key - 72
         gt_name = GAME_TYPE_NAMES.get(gt, f"gt{gt}")
         return f"game_type_flag.{gt_name}"
+    if 117 <= key <= 122:
+        gt = key - 117
+        gt_name = GAME_TYPE_NAMES.get(gt, f"gt{gt}")
+        return f"game_type_flag.{gt_name}"
+    # KW game section keys (RA3 key + 45)
+    if is_kw:
+        kw_key_names = {
+            106: "map_path",
+            107: "duration_seconds",
+            108: "version",
+        }
+        if key in kw_key_names:
+            return kw_key_names[key]
     return GAME_KEY_NAMES.get(key, f"unknown_{key}")
 
 
@@ -280,6 +316,11 @@ class MatchReport:
     parsed_players: list[ParsedPlayer] = field(default_factory=list)
     is_auto_match: bool = False
 
+    @property
+    def is_kw(self) -> bool:
+        """Check if this is a Kane's Wrath report (developer_version=100)."""
+        return self.developer_version == 100
+
     @classmethod
     def from_bytes(cls, data: bytes) -> "MatchReport":
         """Parse a match report from binary data."""
@@ -377,13 +418,22 @@ class MatchReport:
 
             # Detect faction from player section keys using formula:
             # key = faction_enum * 5 + game_type
-            # Find INT16 keys in range 0-14 (covers all faction/game_type combos)
+            # RA3: keys 0-14 (3 factions * 5 game_types)
+            # KW: keys 0-59 (12 factions * 5 game_types)
+            faction_key_max = KW_FACTION_KEY_MAX if self.is_kw else 14
+            faction_map = KW_FACTION_ENUM_MAP if self.is_kw else FACTION_ENUM_MAP
             for key, value in player_data.items():
-                if value.value_type == ValueType.INT16 and 0 <= key <= 14:
-                    detected_faction, detected_game_type = get_faction_from_key(key)
-                    faction = detected_faction
+                if value.value_type == ValueType.INT16 and 0 <= key <= faction_key_max:
+                    game_type = key % 5
+                    faction_enum = key // 5
+                    detected_faction = faction_map.get(faction_enum, Faction.UNKNOWN)
+                    # For KW, map subfactions to parent faction for stats
+                    if self.is_kw and detected_faction in KW_PARENT_FACTION:
+                        faction = KW_PARENT_FACTION[detected_faction]
+                    else:
+                        faction = detected_faction
                     # game_type 1 or 2 indicates auto-match (ranked)
-                    if detected_game_type in (1, 2):
+                    if game_type in (1, 2):
                         auto_match_count += 1
                     break
 
@@ -429,6 +479,9 @@ class MatchReport:
         """Get the map path from the report."""
         if 61 in self.game_section:
             return str(self.game_section[61].value)
+        # KW: map key = 61 + 45 = 106
+        if 106 in self.game_section:
+            return str(self.game_section[106].value)
         return ""
 
     def get_replay_guid(self) -> str:
@@ -448,6 +501,9 @@ class MatchReport:
         """
         if 62 in self.game_section:
             return int(self.game_section[62].value)
+        # KW: duration key = 62 + 45 = 107
+        if 107 in self.game_section:
+            return int(self.game_section[107].value)
         return 0
 
     def get_game_type_from_key(self) -> int:
@@ -471,6 +527,9 @@ class MatchReport:
         for key in self.game_section:
             if 72 <= key <= 77:
                 return key - 72
+            # KW: game_type keys = 72-77 + 45 = 117-122
+            if 117 <= key <= 122:
+                return key - 117
         return 0  # Default to unranked
 
     def is_clan_game(self) -> bool:
