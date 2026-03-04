@@ -4,6 +4,7 @@ import secrets
 import string
 from datetime import datetime
 
+import sqlalchemy
 from sqlmodel import Session, select
 
 from app.models.models import (
@@ -29,6 +30,86 @@ from app.models.models import (
     WebSession,
 )
 from app.security import hash_password, md5_hash, verify_password
+from app.util.logging_helper import get_logger
+
+logger = get_logger(__name__)
+
+# All 65 new columns added to player_stats for RA3 extended stats
+_PLAYER_STATS_NEW_COLUMNS = [
+    "current_win_streak_unranked",
+    "current_win_streak_ranked_1v1",
+    "current_win_streak_ranked_2v2",
+    "current_win_streak_clan_1v1",
+    "current_win_streak_clan_2v2",
+    "current_loss_streak_unranked",
+    "current_loss_streak_ranked_1v1",
+    "current_loss_streak_ranked_2v2",
+    "current_loss_streak_clan_1v1",
+    "current_loss_streak_clan_2v2",
+    "longest_win_streak_unranked",
+    "longest_win_streak_ranked_1v1",
+    "longest_win_streak_ranked_2v2",
+    "longest_win_streak_clan_1v1",
+    "longest_win_streak_clan_2v2",
+    "longest_loss_streak_unranked",
+    "longest_loss_streak_ranked_1v1",
+    "longest_loss_streak_ranked_2v2",
+    "longest_loss_streak_clan_1v1",
+    "longest_loss_streak_clan_2v2",
+    "wins_allied_unranked",
+    "wins_allied_ranked_1v1",
+    "wins_allied_ranked_2v2",
+    "wins_allied_clan_1v1",
+    "wins_allied_clan_2v2",
+    "losses_allied_unranked",
+    "losses_allied_ranked_1v1",
+    "losses_allied_ranked_2v2",
+    "losses_allied_clan_1v1",
+    "losses_allied_clan_2v2",
+    "wins_soviet_unranked",
+    "wins_soviet_ranked_1v1",
+    "wins_soviet_ranked_2v2",
+    "wins_soviet_clan_1v1",
+    "wins_soviet_clan_2v2",
+    "losses_soviet_unranked",
+    "losses_soviet_ranked_1v1",
+    "losses_soviet_ranked_2v2",
+    "losses_soviet_clan_1v1",
+    "losses_soviet_clan_2v2",
+    "wins_japan_unranked",
+    "wins_japan_ranked_1v1",
+    "wins_japan_ranked_2v2",
+    "wins_japan_clan_1v1",
+    "wins_japan_clan_2v2",
+    "losses_japan_unranked",
+    "losses_japan_ranked_1v1",
+    "losses_japan_ranked_2v2",
+    "losses_japan_clan_1v1",
+    "losses_japan_clan_2v2",
+    "total_time_played_unranked",
+    "total_time_played_ranked_1v1",
+    "total_time_played_ranked_2v2",
+    "total_time_played_clan_1v1",
+    "total_time_played_clan_2v2",
+]
+
+FACTION_KEY_MAP = {"Allied": "allied", "Soviet": "soviet", "Empire": "japan", "Japan": "japan"}
+
+
+def migrate_player_stats_columns(engine) -> None:
+    """Add missing columns to the player_stats table for existing databases."""
+    inspector = sqlalchemy.inspect(engine)
+    existing = {col["name"] for col in inspector.get_columns("player_stats")}
+    with engine.begin() as conn:
+        for col_name in _PLAYER_STATS_NEW_COLUMNS:
+            if col_name not in existing:
+                conn.execute(
+                    sqlalchemy.text(
+                        f"ALTER TABLE player_stats ADD COLUMN {col_name} INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+                logger.info("Migrated player_stats: added column %s", col_name)
+
 
 # =============================================================================
 # User CRUD Operations
@@ -1026,15 +1107,30 @@ def update_player_elo(
     return stats
 
 
+def get_stats_value(stats: "PlayerStats | None", level: "PlayerLevel | None", field: str) -> int:
+    """Map a field name to its value from PlayerStats or PlayerLevel."""
+    field_lower = field.lower()
+    if field_lower == "score":
+        return level.score if level else 0
+    if field_lower == "rank":
+        return level.rank if level else 1
+    if stats is not None:
+        val = getattr(stats, field_lower, None)
+        if val is not None:
+            return int(val)
+    return 0
+
+
 def update_player_win_loss(
     session: Session,
     persona_id: int,
     game_type: str,
     result: int,
     duration: int = 0,
+    faction: str = "",
 ) -> PlayerStats:
     """
-    Update a player's win/loss/disconnect/dsync counters.
+    Update a player's win/loss/disconnect/dsync counters, streaks, faction stats, and time played.
 
     Args:
         session: Database session.
@@ -1042,6 +1138,7 @@ def update_player_win_loss(
         game_type: Game type (unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2).
         result: Match result (0=win, 1=loss, 3=disconnect, 4=dsync).
         duration: Match duration in seconds.
+        faction: Player's faction (Allied, Soviet, Empire/Japan).
 
     Returns:
         Updated PlayerStats.
@@ -1053,23 +1150,57 @@ def update_player_win_loss(
         session.commit()
         session.refresh(stats)
 
+    faction_key = FACTION_KEY_MAP.get(faction, "")
+
     # Update win/loss/dc/dsync counters
     if result == 0:  # Win
         wins_field = f"wins_{game_type}"
-        current_wins = getattr(stats, wins_field, 0)
-        setattr(stats, wins_field, current_wins + 1)
+        setattr(stats, wins_field, getattr(stats, wins_field, 0) + 1)
+
+        # Faction-specific wins
+        if faction_key:
+            f = f"wins_{faction_key}_{game_type}"
+            setattr(stats, f, getattr(stats, f, 0) + 1)
+
     elif result == 1:  # Loss
         losses_field = f"losses_{game_type}"
-        current_losses = getattr(stats, losses_field, 0)
-        setattr(stats, losses_field, current_losses + 1)
+        setattr(stats, losses_field, getattr(stats, losses_field, 0) + 1)
+
+        # Faction-specific losses
+        if faction_key:
+            f = f"losses_{faction_key}_{game_type}"
+            setattr(stats, f, getattr(stats, f, 0) + 1)
+
     elif result == 3:  # Disconnect
         dc_field = f"disconnects_{game_type}"
-        current_dc = getattr(stats, dc_field, 0)
-        setattr(stats, dc_field, current_dc + 1)
+        setattr(stats, dc_field, getattr(stats, dc_field, 0) + 1)
     elif result == 4:  # Dsync
         dsync_field = f"desyncs_{game_type}"
-        current_dsync = getattr(stats, dsync_field, 0)
-        setattr(stats, dsync_field, current_dsync + 1)
+        setattr(stats, dsync_field, getattr(stats, dsync_field, 0) + 1)
+
+    # Win/loss streak tracking
+    cws = f"current_win_streak_{game_type}"
+    cls_ = f"current_loss_streak_{game_type}"
+    lws = f"longest_win_streak_{game_type}"
+    lls = f"longest_loss_streak_{game_type}"
+
+    if result == 0:  # Win
+        new_cws = getattr(stats, cws, 0) + 1
+        setattr(stats, cws, new_cws)
+        setattr(stats, cls_, 0)
+        if new_cws > getattr(stats, lws, 0):
+            setattr(stats, lws, new_cws)
+    elif result in (1, 3, 4):  # Loss/DC/desync
+        new_cls = getattr(stats, cls_, 0) + 1
+        setattr(stats, cls_, new_cls)
+        setattr(stats, cws, 0)
+        if new_cls > getattr(stats, lls, 0):
+            setattr(stats, lls, new_cls)
+
+    # Total time played (cumulative)
+    if duration > 0:
+        ttp = f"total_time_played_{game_type}"
+        setattr(stats, ttp, getattr(stats, ttp, 0) + duration)
 
     # Update average game length
     if duration > 0:
@@ -1350,8 +1481,13 @@ def finalize_match(session: Session, csid: str) -> bool:
     if not reports:
         return False
 
-    # Calculate match duration from session creation time
-    duration = int((datetime.utcnow() - comp_session.created_at).total_seconds())
+    # Use duration from reports (game client's measurement) when available,
+    # fall back to session creation time delta
+    report_durations = [r.duration for r in reports if r.duration > 0]
+    if report_durations:
+        duration = max(report_durations)
+    else:
+        duration = int((datetime.utcnow() - comp_session.created_at).total_seconds())
 
     # Determine game type string from the gametype int
     # 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=clan_1v1, 4=clan_2v2
@@ -1408,7 +1544,7 @@ def finalize_match(session: Session, csid: str) -> bool:
             is_disconnect = result == 3
 
             # Update win/loss counters
-            update_player_win_loss(session, persona_id, game_type, result, duration)
+            update_player_win_loss(session, persona_id, game_type, result, duration, faction=data["faction"])
 
             # Update ELO if this is a ranked game type
             if game_type != "unranked":
@@ -1535,6 +1671,7 @@ def get_leaderboard(
         leaderboard.append(
             {
                 "rank": rank,
+                "persona_id": persona.id,
                 "name": persona.name,
                 "elo": getattr(stats, elo_field, 1200),
                 "wins": wins,
@@ -1546,6 +1683,75 @@ def get_leaderboard(
         )
 
     return leaderboard
+
+
+def get_ra3_player_profile(session: Session, persona_id: int) -> dict | None:
+    """Return detailed RA3 stats for a player profile page."""
+    stats = get_player_stats(session, persona_id)
+    if stats is None:
+        return None
+
+    persona = get_persona_by_id(session, persona_id)
+    if persona is None:
+        return None
+
+    modes = ["ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
+    mode_data = {}
+    best_elo = 0
+
+    for mode in modes:
+        elo = getattr(stats, f"elo_{mode}", 1200)
+        w = getattr(stats, f"wins_{mode}", 0)
+        lo = getattr(stats, f"losses_{mode}", 0)
+        games = w + lo
+        wr = round((w / games) * 100, 1) if games > 0 else 0.0
+        if elo > best_elo:
+            best_elo = elo
+
+        mode_data[mode] = {
+            "elo": elo,
+            "wins": w,
+            "losses": lo,
+            "games": games,
+            "win_ratio": wr,
+            "current_win_streak": getattr(stats, f"current_win_streak_{mode}", 0),
+            "longest_win_streak": getattr(stats, f"longest_win_streak_{mode}", 0),
+            "current_loss_streak": getattr(stats, f"current_loss_streak_{mode}", 0),
+            "longest_loss_streak": getattr(stats, f"longest_loss_streak_{mode}", 0),
+            "total_time_played": getattr(stats, f"total_time_played_{mode}", 0),
+            "disconnects": getattr(stats, f"disconnects_{mode}", 0),
+        }
+
+    factions = []
+    for display_name, key in [("Allied", "allied"), ("Soviet", "soviet"), ("Empire", "japan")]:
+        factions.append(
+            {
+                "name": display_name,
+                "key": key,
+                "wins_1v1": getattr(stats, f"wins_{key}_ranked_1v1", 0),
+                "losses_1v1": getattr(stats, f"losses_{key}_ranked_1v1", 0),
+                "wins_2v2": getattr(stats, f"wins_{key}_ranked_2v2", 0),
+                "losses_2v2": getattr(stats, f"losses_{key}_ranked_2v2", 0),
+            }
+        )
+
+    total_wins = sum(md["wins"] for md in mode_data.values())
+    total_losses = sum(md["losses"] for md in mode_data.values())
+    total_games = total_wins + total_losses
+    total_time = sum(md["total_time_played"] for md in mode_data.values())
+
+    return {
+        "persona_id": persona.id,
+        "name": persona.name,
+        "best_elo": best_elo,
+        **mode_data,
+        "factions": factions,
+        "total_wins": total_wins,
+        "total_losses": total_losses,
+        "total_games": total_games,
+        "total_time_played": total_time,
+        "win_ratio": round((total_wins / total_games) * 100, 1) if total_games > 0 else 0.0,
+    }
 
 
 # =============================================================================

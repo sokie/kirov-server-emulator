@@ -21,6 +21,7 @@ from app.db.crud import (
     get_persona_clan,
     get_persona_clan_membership,
     get_personas_for_user,
+    get_ra3_player_profile,
 )
 from app.db.database import get_session
 from app.models.models import User
@@ -303,6 +304,7 @@ async def player_profile_page(
         return RedirectResponse(url="/leaderboard", status_code=302)
 
     generals = get_generals_player_profile(session, persona_id)
+    ra3 = get_ra3_player_profile(session, persona_id)
 
     return templates.TemplateResponse(
         "player_profile.html",
@@ -311,6 +313,7 @@ async def player_profile_page(
             "user": user,
             "persona": persona,
             "generals": generals,
+            "ra3": ra3,
         },
     )
 

@@ -10,17 +10,18 @@
     </div>
 </div>
 
-{# Game tabs #}
+{# Game tabs — RA3 active by default unless only Generals data exists #}
+{% set ra3_active = not generals or ra3 %}
 <ul class="nav nav-tabs mb-4" id="profileTabs" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link {% if not generals %}active{% endif %}" id="ra3-tab"
+        <button class="nav-link {% if ra3_active %}active{% endif %}" id="ra3-tab"
                 data-bs-toggle="tab" data-bs-target="#ra3-panel"
                 type="button" role="tab">
             <i class="bi bi-controller me-1"></i>Red Alert 3
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link {% if generals %}active{% endif %}" id="generals-tab"
+        <button class="nav-link {% if not ra3_active %}active{% endif %}" id="generals-tab"
                 data-bs-toggle="tab" data-bs-target="#generals-panel"
                 type="button" role="tab">
             <i class="bi bi-star me-1"></i>Generals / Zero Hour
@@ -30,20 +31,196 @@
 
 <div class="tab-content" id="profileTabContent">
 
-    {# RA3 Tab — NOP #}
-    <div class="tab-pane fade {% if not generals %}show active{% endif %}"
+    {# RA3 Tab #}
+    <div class="tab-pane fade {% if ra3_active %}show active{% endif %}"
          id="ra3-panel" role="tabpanel">
+        {% if ra3 %}
+
+        {# Overview row #}
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold">
+                            <span class="badge bg-dark border border-secondary fs-6 px-3 py-2">{{ ra3.best_elo }}</span>
+                        </div>
+                        <div class="text-secondary small mt-1">Best ELO</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold text-success">{{ ra3.total_wins }}</div>
+                        <div class="text-secondary small">Wins</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold text-danger">{{ ra3.total_losses }}</div>
+                        <div class="text-secondary small">Losses</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-4 fw-bold
+                            {% if ra3.win_ratio >= 60 %}text-success
+                            {% elif ra3.win_ratio >= 40 %}text-warning
+                            {% else %}text-danger{% endif %}">
+                            {{ ra3.win_ratio }}%
+                        </div>
+                        <div class="text-secondary small">Win Rate</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Secondary stats row #}
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-5 fw-bold">{{ ra3.total_games }}</div>
+                        <div class="text-secondary small">Total Games</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center">
+                    <div class="card-body py-3">
+                        <div class="fs-5 fw-bold">{{ (ra3.total_time_played / 3600) | round(1) }}h</div>
+                        <div class="text-secondary small">Play Time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Game mode breakdown #}
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">
+                            <i class="bi bi-trophy-fill me-2"></i>Game Mode Breakdown
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Mode</th>
+                                        <th class="text-center">ELO</th>
+                                        <th class="text-center">Wins</th>
+                                        <th class="text-center">Losses</th>
+                                        <th class="text-center">Win%</th>
+                                        <th class="text-center d-none d-md-table-cell">Best Streak</th>
+                                        <th class="text-center d-none d-md-table-cell">Play Time</th>
+                                        <th class="text-center d-none d-sm-table-cell">DC</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for mode_name, mode_label in [("ranked_1v1", "Ranked 1v1"), ("ranked_2v2", "Ranked 2v2"), ("clan_1v1", "Clan 1v1"), ("clan_2v2", "Clan 2v2")] %}
+                                    {% set m = ra3[mode_name] %}
+                                    <tr {% if m.games == 0 %}class="text-muted"{% endif %}>
+                                        <td>{{ mode_label }}</td>
+                                        <td class="text-center">
+                                            <span class="badge bg-dark border border-secondary">{{ m.elo }}</span>
+                                        </td>
+                                        <td class="text-center">
+                                            {% if m.wins > 0 %}<span class="text-success">{{ m.wins }}</span>{% else %}0{% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if m.losses > 0 %}<span class="text-danger">{{ m.losses }}</span>{% else %}0{% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if m.games > 0 %}
+                                                {% if m.win_ratio >= 60 %}
+                                                    <span class="text-success">{{ m.win_ratio }}%</span>
+                                                {% elif m.win_ratio >= 40 %}
+                                                    <span class="text-warning">{{ m.win_ratio }}%</span>
+                                                {% else %}
+                                                    <span class="text-danger">{{ m.win_ratio }}%</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">&mdash;</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center d-none d-md-table-cell">{{ m.longest_win_streak }}</td>
+                                        <td class="text-center d-none d-md-table-cell text-secondary">{{ (m.total_time_played / 3600) | round(1) }}h</td>
+                                        <td class="text-center d-none d-sm-table-cell {% if m.disconnects > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ m.disconnects }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Faction breakdown #}
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">
+                            <i class="bi bi-bar-chart-fill me-2"></i>Faction Breakdown
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-dark table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Faction</th>
+                                        <th class="text-center">Wins (1v1)</th>
+                                        <th class="text-center">Losses (1v1)</th>
+                                        <th class="text-center">Wins (2v2)</th>
+                                        <th class="text-center">Losses (2v2)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for f in ra3.factions %}
+                                    <tr>
+                                        <td>
+                                            <span class="badge bg-secondary bg-opacity-25 border border-secondary">{{ f.name }}</span>
+                                        </td>
+                                        <td class="text-center">
+                                            {% if f.wins_1v1 > 0 %}<span class="text-success">{{ f.wins_1v1 }}</span>{% else %}0{% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if f.losses_1v1 > 0 %}<span class="text-danger">{{ f.losses_1v1 }}</span>{% else %}0{% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if f.wins_2v2 > 0 %}<span class="text-success">{{ f.wins_2v2 }}</span>{% else %}0{% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if f.losses_2v2 > 0 %}<span class="text-danger">{{ f.losses_2v2 }}</span>{% else %}0{% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
         <div class="card">
             <div class="card-body text-center py-5">
                 <i class="bi bi-controller fs-1 text-secondary d-block mb-3"></i>
-                <h5 class="text-secondary">Red Alert 3 Stats</h5>
-                <p class="text-muted">Detailed per-player stats are not yet available for Red Alert 3.</p>
+                <h5 class="text-secondary">No Red Alert 3 Stats</h5>
+                <p class="text-muted">This player hasn't played any Red Alert 3 matches yet.</p>
             </div>
         </div>
+        {% endif %}
     </div>
 
     {# Generals / ZH Tab #}
-    <div class="tab-pane fade {% if generals %}show active{% endif %}"
+    <div class="tab-pane fade {% if not ra3_active %}show active{% endif %}"
          id="generals-panel" role="tabpanel">
         {% if generals %}
 
@@ -289,5 +466,13 @@
     // Initialize Bootstrap tooltips
     const tooltipEls = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltipEls.forEach(el => new bootstrap.Tooltip(el));
+
+    // Activate tab from ?tab= query param
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab) {
+        const btn = document.getElementById(tab + '-tab');
+        if (btn) { new bootstrap.Tab(btn).show(); }
+    }
 </script>
 {% endblock %}

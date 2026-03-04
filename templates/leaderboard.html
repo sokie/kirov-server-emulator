@@ -84,7 +84,7 @@
                         {% endif %}
                     </th>
                     <td>
-                        <strong>{{ player.name }}</strong>
+                        <a href="/players/{{ player.persona_id }}?tab=ra3" class="text-link fw-bold">{{ player.name }}</a>
                     </td>
                     <td class="text-center">
                         <span class="badge bg-dark border border-secondary">{{ player.elo }}</span>
@@ -163,7 +163,7 @@
                         {% endif %}
                     </th>
                     <td>
-                        <a href="/players/{{ player.persona_id }}" class="text-link fw-bold">{{ player.name }}</a>
+                        <a href="/players/{{ player.persona_id }}?tab=generals" class="text-link fw-bold">{{ player.name }}</a>
                     </td>
                     <td class="text-center">
                         <span class="badge rank-badge-{{ player.rank_level }}">{{ player.rank_name }}</span>

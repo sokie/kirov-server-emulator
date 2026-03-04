@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 from fastapi import APIRouter, Request, Response
 from sqlmodel import select
 
-from app.db.crud import get_player_level, get_player_stats
+from app.db.crud import get_player_level, get_player_stats, get_stats_value
 from app.db.database import create_session
 from app.models.models import Persona, PlayerStats
 from app.soap.envelope import (
@@ -418,8 +418,24 @@ def _build_ra_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
     # [145-149] 5 float(0) padding
     records.extend([RecordValue.from_float(0.0)] * 5)
 
-    # [150-179] 30 int(0) - RA-specific extra padding
-    records.extend([RecordValue.from_int(0)] * 30)
+    # [150-154] current win streak per mode
+    for v in _get_mode_values(stats, "current_win_streak"):
+        records.append(RecordValue.from_int(v))
+    # [155-159] current loss streak per mode
+    for v in _get_mode_values(stats, "current_loss_streak"):
+        records.append(RecordValue.from_int(v))
+    # [160-164] longest win streak per mode
+    for v in _get_mode_values(stats, "longest_win_streak"):
+        records.append(RecordValue.from_int(v))
+    # [165-169] longest loss streak per mode
+    for v in _get_mode_values(stats, "longest_loss_streak"):
+        records.append(RecordValue.from_int(v))
+    # [170-174] total time played per mode (seconds)
+    for v in _get_mode_values(stats, "total_time_played"):
+        records.append(RecordValue.from_int(v))
+    # [175-179] Allied wins per mode
+    for v in _get_mode_values(stats, "wins_allied"):
+        records.append(RecordValue.from_int(v))
 
     # [180-184] Disconnects per mode
     for val in disconnects:
@@ -481,19 +497,13 @@ def handle_get_my_records(
 
             return GetMyRecordsResponse.success(records)
 
-        # Small request = field-name based (score/rank)
+        # Small request = field-name based
+        stats = get_player_stats(session, profile_id)
         level = get_player_level(session, profile_id)
 
         records = []
         for field in requested_fields:
-            value = 0
-            field_lower = field.lower()
-
-            if field_lower == "score":
-                value = level.score if level else 0
-            elif field_lower == "rank":
-                value = level.rank if level else 1
-
+            value = get_stats_value(stats, level, field)
             records.append(RecordValue.from_int(value))
 
         return GetMyRecordsResponse.success(records)
