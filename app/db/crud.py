@@ -44,6 +44,20 @@ FACTION_KEY_MAP = {
     "GDI": "allied", "Nod": "soviet", "Scrin": "japan",
 }
 
+# XP thresholds for 87 ranks — duplicated from sake_service to avoid circular import
+LEVEL_THRESHOLDS = [
+    0, 5, 13, 23, 35, 50, 67, 86, 106, 127, 150, 175, 202, 231, 262, 295, 330,
+    367, 406, 447, 490, 535, 582, 631, 682, 735, 790, 847, 906, 967, 1030, 1095,
+    1162, 1231, 1302, 1375, 1454, 1538, 1628, 1724, 1825, 1927, 2030, 2134, 2239,
+    2345, 2452, 2560, 2674, 2794, 2920, 3049, 3180, 3314, 3451, 3590, 3738, 3894,
+    4058, 4230, 4410, 4595, 4784, 4978, 5177, 5380, 5590, 5807, 6031, 6262, 6500,
+    6744, 6993, 7247, 7506, 7770, 8044, 8328, 8622, 8926, 9240, 9562, 9890, 10224,
+    10564, 10910, 11310,
+]
+
+# XP awarded per win by game-type index: 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=clan
+SCORING_MULTIPLIERS = [1, 2, 2, 5]
+
 
 # =============================================================================
 # User CRUD Operations
@@ -925,6 +939,43 @@ def create_or_update_player_level(
     return level
 
 
+def _rank_from_score(score: int) -> int:
+    """Return 1-based rank for a given XP score using LEVEL_THRESHOLDS."""
+    rank = 1
+    for i, threshold in enumerate(LEVEL_THRESHOLDS):
+        if score >= threshold:
+            rank = i + 1
+        else:
+            break
+    return rank
+
+
+def award_xp_and_update_rank(
+    session: Session, persona_id: int, game_type: str, is_winner: bool, game_id: int = DEFAULT_GAME_ID
+) -> None:
+    """Award XP for a match result and recompute the player's rank.
+
+    Only winners receive XP.  The amount depends on the game mode index:
+    unranked=1, ranked_1v1=2, ranked_2v2=2, clan=5 (from SCORING_MULTIPLIERS).
+    """
+    if not is_winner:
+        return
+
+    mode_index_map = {"unranked": 0, "ranked_1v1": 1, "ranked_2v2": 2, "clan_1v1": 3, "clan_2v2": 3}
+    mode_index = mode_index_map.get(game_type, 0)
+    xp_gain = SCORING_MULTIPLIERS[mode_index]
+
+    level = get_player_level(session, persona_id, game_id=game_id)
+    if level is None:
+        new_score = xp_gain
+        new_rank = _rank_from_score(new_score)
+        create_or_update_player_level(session, persona_id, rank=new_rank, score=new_score, game_id=game_id)
+    else:
+        new_score = level.score + xp_gain
+        new_rank = _rank_from_score(new_score)
+        create_or_update_player_level(session, persona_id, rank=new_rank, score=new_score, game_id=game_id)
+
+
 # =============================================================================
 # ELO Rating Operations
 # =============================================================================
@@ -1506,6 +1557,9 @@ def finalize_match(session: Session, csid: str, game_id: int = DEFAULT_GAME_ID) 
                     game_id=game_id,
                 )
 
+            # Award XP and update rank for winners
+            award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
+
         # Mark session as finalized only after stats were updated
         comp_session.finalized = True
         comp_session.status = "completed"
@@ -1674,6 +1728,75 @@ def get_ra3_player_profile(session: Session, persona_id: int, game_id: int = DEF
 
     factions = []
     for display_name, key in [("Allied", "allied"), ("Soviet", "soviet"), ("Empire", "japan")]:
+        factions.append(
+            {
+                "name": display_name,
+                "key": key,
+                "wins_1v1": getattr(stats, f"wins_{key}_ranked_1v1", 0),
+                "losses_1v1": getattr(stats, f"losses_{key}_ranked_1v1", 0),
+                "wins_2v2": getattr(stats, f"wins_{key}_ranked_2v2", 0),
+                "losses_2v2": getattr(stats, f"losses_{key}_ranked_2v2", 0),
+            }
+        )
+
+    total_wins = sum(md["wins"] for md in mode_data.values())
+    total_losses = sum(md["losses"] for md in mode_data.values())
+    total_games = total_wins + total_losses
+    total_time = sum(md["total_time_played"] for md in mode_data.values())
+
+    return {
+        "persona_id": persona.id,
+        "name": persona.name,
+        "best_elo": best_elo,
+        **mode_data,
+        "factions": factions,
+        "total_wins": total_wins,
+        "total_losses": total_losses,
+        "total_games": total_games,
+        "total_time_played": total_time,
+        "win_ratio": round((total_wins / total_games) * 100, 1) if total_games > 0 else 0.0,
+    }
+
+
+def get_kw_player_profile(session: Session, persona_id: int) -> dict | None:
+    """Return detailed Kane's Wrath stats for a player profile page."""
+    stats = get_player_stats(session, persona_id, game_id=GAME_ID_KW)
+    if stats is None:
+        return None
+
+    persona = get_persona_by_id(session, persona_id)
+    if persona is None:
+        return None
+
+    modes = ["ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
+    mode_data = {}
+    best_elo = 0
+
+    for mode in modes:
+        elo = getattr(stats, f"elo_{mode}", 1200)
+        w = getattr(stats, f"wins_{mode}", 0)
+        lo = getattr(stats, f"losses_{mode}", 0)
+        games = w + lo
+        wr = round((w / games) * 100, 1) if games > 0 else 0.0
+        if elo > best_elo:
+            best_elo = elo
+
+        mode_data[mode] = {
+            "elo": elo,
+            "wins": w,
+            "losses": lo,
+            "games": games,
+            "win_ratio": wr,
+            "current_win_streak": getattr(stats, f"current_win_streak_{mode}", 0),
+            "longest_win_streak": getattr(stats, f"longest_win_streak_{mode}", 0),
+            "current_loss_streak": getattr(stats, f"current_loss_streak_{mode}", 0),
+            "longest_loss_streak": getattr(stats, f"longest_loss_streak_{mode}", 0),
+            "total_time_played": getattr(stats, f"total_time_played_{mode}", 0),
+            "disconnects": getattr(stats, f"disconnects_{mode}", 0),
+        }
+
+    factions = []
+    for display_name, key in [("GDI", "allied"), ("Nod", "soviet"), ("Scrin", "japan")]:
         factions.append(
             {
                 "name": display_name,

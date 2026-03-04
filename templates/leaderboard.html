@@ -206,16 +206,102 @@
 </div>
 
 {% elif game == 'kanes_wrath' %}
+{# KW game-type sub-filter #}
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-secondary small">Game Mode:</span>
+                <div class="btn-group" role="group">
+                    {% for gt in game_types %}
+                    <a href="/leaderboard?game=kanes_wrath&game_type={{ gt }}"
+                       class="btn btn-sm btn-game-type {% if gt == game_type %}active{% endif %}">
+                        {{ gt.replace('_', ' ').title() }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            <span class="text-secondary small">
+                <i class="bi bi-info-circle me-1"></i>Showing top 50 players
+            </span>
+        </div>
+    </div>
+</div>
+
 <div class="card">
-    <div class="card-body text-center py-5">
-        <i class="bi bi-lightning fs-1 text-secondary d-block mb-3"></i>
-        <h5 class="text-secondary">Kane's Wrath Leaderboard</h5>
-        <p class="text-muted">Coming soon — stats tracking for Kane's Wrath is not yet implemented.</p>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+            <thead>
+                <tr>
+                    <th scope="col" style="width: 60px;">Rank</th>
+                    <th scope="col">Player</th>
+                    <th scope="col" class="text-center" style="width: 100px;">ELO</th>
+                    <th scope="col" class="text-center" style="width: 80px;">Wins</th>
+                    <th scope="col" class="text-center" style="width: 80px;">Losses</th>
+                    <th scope="col" class="text-center d-none d-md-table-cell" style="width: 80px;">DC</th>
+                    <th scope="col" class="text-center" style="width: 100px;">Win Rate</th>
+                    <th scope="col" class="text-center d-none d-sm-table-cell" style="width: 80px;">Games</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for player in players %}
+                <tr class="{% if player.rank == 1 %}rank-gold{% elif player.rank == 2 %}rank-silver{% elif player.rank == 3 %}rank-bronze{% endif %}">
+                    <th scope="row">
+                        {% if player.rank == 1 %}
+                            <i class="bi bi-trophy-fill text-warning"></i>
+                        {% elif player.rank == 2 %}
+                            <i class="bi bi-trophy-fill" style="color: #c0c0c0;"></i>
+                        {% elif player.rank == 3 %}
+                            <i class="bi bi-trophy-fill" style="color: #cd7f32;"></i>
+                        {% else %}
+                            {{ player.rank }}
+                        {% endif %}
+                    </th>
+                    <td>
+                        <a href="/players/{{ player.persona_id }}?tab=kw" class="text-link fw-bold">{{ player.name }}</a>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge bg-dark border border-secondary">{{ player.elo }}</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="stat-badge wins">{{ player.wins }}</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="stat-badge losses">{{ player.losses }}</span>
+                    </td>
+                    <td class="text-center d-none d-md-table-cell text-secondary">
+                        {{ player.disconnects }}
+                    </td>
+                    <td class="text-center">
+                        {% if player.win_ratio >= 60 %}
+                            <span class="text-success">{{ player.win_ratio }}%</span>
+                        {% elif player.win_ratio >= 40 %}
+                            <span class="text-warning">{{ player.win_ratio }}%</span>
+                        {% else %}
+                            <span class="text-danger">{{ player.win_ratio }}%</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center d-none d-sm-table-cell text-secondary">
+                        {{ player.total_games }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center py-5">
+                        <i class="bi bi-inbox fs-1 text-secondary d-block mb-3"></i>
+                        <span class="text-secondary">No players found for this game mode.</span>
+                        <br>
+                        <small class="text-secondary">Be the first to play!</small>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 {% endif %}
 
-{% if (game == 'ra3' and players) or (game == 'generals' and generals_players) %}
+{% if (game == 'ra3' and players) or (game == 'kanes_wrath' and players) or (game == 'generals' and generals_players) %}
 <div class="text-center mt-4">
     <small class="text-secondary">
         <i class="bi bi-clock-history me-1"></i>

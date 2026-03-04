@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 
 from app.db.crud import (
+    GAME_ID_KW,
     get_all_clans,
     get_all_generals_stats,
     get_clan_by_id,
@@ -16,6 +17,7 @@ from app.db.crud import (
     get_clan_members,
     get_generals_leaderboard,
     get_generals_player_profile,
+    get_kw_player_profile,
     get_leaderboard,
     get_persona_by_id,
     get_persona_clan,
@@ -272,6 +274,10 @@ async def leaderboard_page(
         if game_type not in GAME_TYPES:
             game_type = "ranked_1v1"
         players = get_leaderboard(session, game_type)
+    elif game == "kanes_wrath":
+        if game_type not in GAME_TYPES:
+            game_type = "ranked_1v1"
+        players = get_leaderboard(session, game_type, game_id=GAME_ID_KW)
     elif game == "generals":
         generals_players = get_generals_leaderboard(session)
 
@@ -305,6 +311,7 @@ async def player_profile_page(
 
     generals = get_generals_player_profile(session, persona_id)
     ra3 = get_ra3_player_profile(session, persona_id)
+    kw = get_kw_player_profile(session, persona_id)
 
     return templates.TemplateResponse(
         "player_profile.html",
@@ -314,6 +321,7 @@ async def player_profile_page(
             "persona": persona,
             "generals": generals,
             "ra3": ra3,
+            "kw": kw,
         },
     )
 
