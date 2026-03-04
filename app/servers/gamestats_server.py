@@ -507,7 +507,7 @@ class GameStatsServer(asyncio.Protocol):
 
         if stats and stats.raw_data:
             # Inject computed battle honors and rank into the response data
-            parsed = parse_generals_kv(stats.raw_data)
+            parsed = parse_generals_kv(stats.raw_data.replace('\x00', ''))
             rank = calculate_rank(parsed)
             parsed["battle"] = str(stats.battle_honors)
             parsed["rank"] = str(rank)

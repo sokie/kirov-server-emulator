@@ -822,6 +822,8 @@ def create_or_update_generals_stats(session: Session, persona_id: int, raw_data:
         parse_generals_kv,
     )
 
+    raw_data = raw_data.replace('\x00', '')
+
     # Extract per-game honors from the incoming setpd data (before merge overwrites `battle` key)
     incoming_parsed = parse_generals_kv(raw_data)
     client_per_game = extract_client_per_game_honors(incoming_parsed)

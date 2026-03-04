@@ -537,6 +537,23 @@ class TestHandleGetpdGenerals:
         assert "\\battle\\65536" in response
         assert "\\battle\\49152" not in response
 
+    def test_null_bytes_stripped_from_response(self):
+        """Null bytes in stored raw_data are stripped so the C client sees all fields."""
+        server, _ = _make_server("ccgenzh")
+        # DSRow value has embedded \x00; wins8 and battle come after it
+        raw = r"\DSRow\0" + "\x00" + r"\wins8\5\losses8\2"
+        fake_stats = self._make_fake_stats(raw, battle_honors=65536)
+
+        with patch("app.servers.gamestats_server.get_generals_player_stats", return_value=fake_stats):
+            response = server._handle_getpd_generals(1, "0", "1", {})
+
+        # No null bytes anywhere in the response
+        assert "\x00" not in response
+        # Fields after the original null byte are visible
+        assert "\\wins8\\5" in response
+        assert "\\losses8\\2" in response
+        assert "\\battle\\65536" in response
+
     def test_live_p3_data_produces_fair_play_in_response(self):
         """End-to-end: live raw_data → getpd response contains HONOR_FAIR_PLAY."""
         from app.util.generals_stats import HONOR_FAIR_PLAY

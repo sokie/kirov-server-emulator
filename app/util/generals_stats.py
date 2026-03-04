@@ -287,7 +287,7 @@ def evaluate_battle_honors(stats: dict[str, str], rank: int | None = None) -> in
         honors |= HONOR_DOMINATION_ONLINE
 
     # CHALLENGE_MODE: all challenge medals earned
-    challenge_medals = _get_int(stats, "chlgMedals")
+    challenge_medals = _get_int(stats, "challenge")
     if challenge_medals > 0:
         honors |= HONOR_CHALLENGE_MODE
 

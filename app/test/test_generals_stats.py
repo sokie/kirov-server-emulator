@@ -233,6 +233,8 @@ class TestParseGeneralsKv:
         # Game payload ends with \x00 (C string null terminator).
         # The null byte lands in the value of the last key before it,
         # but all keys after the null byte must still be parsed.
+        # Note: the server strips null bytes before calling parse_generals_kv,
+        # but the parser itself faithfully preserves them if present.
         data = r"\DCRow\0\DSRow\0" + "\x00" + r"\wins6\1\losses6\1"
         result = parse_generals_kv(data)
         # Keys after the null byte are accessible
@@ -639,7 +641,7 @@ class TestEvaluateBattleHonors:
     # --- CHALLENGE_MODE ---
 
     def test_challenge_mode_requires_medals(self):
-        stats = {"chlgMedals": "1"}
+        stats = {"challenge": "1"}
         assert evaluate_battle_honors(stats) & HONOR_CHALLENGE_MODE
 
     def test_challenge_mode_not_awarded_zero_medals(self):
