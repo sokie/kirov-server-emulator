@@ -11,15 +11,13 @@ from datetime import datetime
 from fastapi import APIRouter, Response
 
 from app.db.crud import (
-    GAME_ID_KW,
-    GAME_ID_RA,
-    GAME_ID_TW,
     get_clan_by_id,
     get_persona_clan_membership,
     get_player_level,
     get_player_stats,
     parse_ticket,
 )
+from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
 from app.db.database import create_session
 from app.models.models import PlayerStats
 from app.soap.models.clan import ClanInfoResponse, NotMemberResponse
