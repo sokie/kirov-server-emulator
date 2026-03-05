@@ -34,8 +34,6 @@ from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
 from app.models.match_report import (
     MatchReport,
     get_game_key_name,
-    get_kw_game_key_name,
-    get_kw_player_key_name,
     get_player_key_name,
 )
 from app.soap.envelope import (
@@ -154,7 +152,7 @@ def save_match_report(
                 if i < len(report.player_section):
                     stats = {}
                     for k, v in sorted(report.player_section[i].items()):
-                        name = get_kw_player_key_name(k) if report.is_kw else get_player_key_name(k)
+                        name = get_player_key_name(k, game_id=report.game_id)
                         stats[name] = {"key": k, "type": v.value_type.name, "value": v.value}
                     player_dict["stats"] = stats
                 players_json.append(player_dict)
@@ -162,7 +160,7 @@ def save_match_report(
             # Build game section with friendly key names
             game_section_json = {}
             for k, v in sorted(report.game_section.items()):
-                name = get_kw_game_key_name(k) if report.is_kw else get_game_key_name(k)
+                name = get_game_key_name(k, game_id=report.game_id)
                 game_section_json[name] = {"key": k, "type": v.value_type.name, "value": v.value}
 
             report_dict = {
@@ -301,7 +299,7 @@ def handle_submit_report(
     # Parse the binary report
     if raw_report:
         try:
-            report = MatchReport.from_bytes(raw_report)
+            report = MatchReport.from_bytes(raw_report, game_id=game_id)
 
             # Extract useful data for database storage
             player_list = report.get_player_list()

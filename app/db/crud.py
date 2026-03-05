@@ -11,11 +11,13 @@ from app.models.game_config import (
     FACTION_MAPS,
     GAME_ID_KW,
     GAME_ID_RA,
+    GAME_ID_TW,
     GAME_TYPES,
     KW_FACTION_DISPLAY,
     RA3_FACTION_DISPLAY,
     SAGE_LEVEL_THRESHOLDS,
     SAGE_SCORING_MULTIPLIERS,
+    TW_FACTION_DISPLAY,
 )
 from app.models.models import (
     AuthCertificate,
@@ -1826,6 +1828,76 @@ def get_kw_player_profile(session: Session, persona_id: int) -> dict | None:
 
     factions = []
     for display_name, key in KW_FACTION_DISPLAY:
+        factions.append(
+            {
+                "name": display_name,
+                "key": key,
+                "wins_1v1": get_faction_stat(s, "ranked_1v1", key, "wins"),
+                "losses_1v1": get_faction_stat(s, "ranked_1v1", key, "losses"),
+                "wins_2v2": get_faction_stat(s, "ranked_2v2", key, "wins"),
+                "losses_2v2": get_faction_stat(s, "ranked_2v2", key, "losses"),
+            }
+        )
+
+    total_wins = sum(md["wins"] for md in mode_data.values())
+    total_losses = sum(md["losses"] for md in mode_data.values())
+    total_games = total_wins + total_losses
+    total_time = sum(md["total_time_played"] for md in mode_data.values())
+
+    return {
+        "persona_id": persona.id,
+        "name": persona.name,
+        "best_elo": best_elo,
+        **mode_data,
+        "factions": factions,
+        "total_wins": total_wins,
+        "total_losses": total_losses,
+        "total_games": total_games,
+        "total_time_played": total_time,
+        "win_ratio": round((total_wins / total_games) * 100, 1) if total_games > 0 else 0.0,
+    }
+
+
+def get_tw_player_profile(session: Session, persona_id: int) -> dict | None:
+    """Return detailed Tiberium Wars stats for a player profile page — 3 factions."""
+    stats = get_player_stats(session, persona_id, game_id=GAME_ID_TW)
+    if stats is None:
+        return None
+
+    persona = get_persona_by_id(session, persona_id)
+    if persona is None:
+        return None
+
+    s = stats.stats or {}
+    modes = ["ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
+    mode_data = {}
+    best_elo = 0
+
+    for mode in modes:
+        elo = getattr(stats, f"elo_{mode}", 1200)
+        wins = get_stat(s, mode, "wins")
+        losses = get_stat(s, mode, "losses")
+        games = wins + losses
+        win_ratio = round((wins / games) * 100, 1) if games > 0 else 0.0
+        if elo > best_elo:
+            best_elo = elo
+
+        mode_data[mode] = {
+            "elo": elo,
+            "wins": wins,
+            "losses": losses,
+            "games": games,
+            "win_ratio": win_ratio,
+            "current_win_streak": get_stat(s, mode, "current_win_streak"),
+            "longest_win_streak": get_stat(s, mode, "longest_win_streak"),
+            "current_loss_streak": get_stat(s, mode, "current_loss_streak"),
+            "longest_loss_streak": get_stat(s, mode, "longest_loss_streak"),
+            "total_time_played": get_stat(s, mode, "total_time_played"),
+            "disconnects": get_stat(s, mode, "disconnects"),
+        }
+
+    factions = []
+    for display_name, key in TW_FACTION_DISPLAY:
         factions.append(
             {
                 "name": display_name,
