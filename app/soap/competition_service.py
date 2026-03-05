@@ -21,8 +21,6 @@ from fastapi import APIRouter, Request, Response
 
 from app.db.crud import (
     DEFAULT_GAME_ID,
-    GAME_ID_KW,
-    GAME_ID_RA,
     create_competition_session,
     extract_persona_from_ccid,
     finalize_match,
@@ -32,6 +30,7 @@ from app.db.crud import (
     submit_match_report,
 )
 from app.db.database import create_session
+from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
 from app.models.match_report import (
     MatchReport,
     get_game_key_name,
@@ -53,6 +52,7 @@ from app.soap.models.competition import (
     SubmitReportResponse,
 )
 from app.util.logging_helper import get_logger
+from app.util.paths import get_runtime_path
 
 logger = get_logger(__name__)
 
@@ -60,9 +60,6 @@ competition_router = APIRouter()
 
 # Namespace definitions
 COMP_NS = "http://gamespy.net/competition/"
-
-# Partnercode to game_id mapping
-PARTNERCODE_TO_GAME_ID = {60: GAME_ID_RA, 24: GAME_ID_KW}
 
 
 def extract_profile_id_from_certificate(operation: any) -> int:
@@ -93,10 +90,19 @@ def extract_profile_id_from_certificate(operation: any) -> int:
 
 
 # Directory to save match reports
-REPORT_DIR = os.path.join(os.getcwd(), "Report")
+REPORT_DIR = os.path.join(get_runtime_path(), "Report")
+
+# Game ID to subfolder name mapping
+GAME_ID_TO_FOLDER = {
+    GAME_ID_RA: "ra3",
+    GAME_ID_KW: "KW",
+    GAME_ID_TW: "TW",
+}
 
 
-def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchReport | None) -> None:
+def save_match_report(
+    csid: str, ccid: str, raw_report: bytes, report: MatchReport | None, game_id: int = DEFAULT_GAME_ID
+) -> None:
     """
     Save match report to files (binary and parsed JSON).
 
@@ -105,9 +111,12 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
         ccid: Competition Channel ID (player ID).
         raw_report: Raw binary report data.
         report: Parsed MatchReport object, or None if parsing failed.
+        game_id: Game ID to determine subfolder (ra3, KW, TW).
     """
     try:
-        os.makedirs(REPORT_DIR, exist_ok=True)
+        game_folder = GAME_ID_TO_FOLDER.get(game_id, "ra3")
+        report_dir = os.path.join(REPORT_DIR, game_folder)
+        os.makedirs(report_dir, exist_ok=True)
 
         # Generate timestamp for unique filenames
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -117,7 +126,7 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
 
         # Save raw binary report
         bin_filename = f"Report_{csid}_{player_id}_{timestamp}.bin"
-        bin_path = os.path.join(REPORT_DIR, bin_filename)
+        bin_path = os.path.join(report_dir, bin_filename)
         with open(bin_path, "wb") as f:
             f.write(raw_report)
         logger.info("Saved raw report to %s (%d bytes)", bin_path, len(raw_report))
@@ -125,7 +134,7 @@ def save_match_report(csid: str, ccid: str, raw_report: bytes, report: MatchRepo
         # Save parsed report as JSON
         if report:
             json_filename = f"Report_{csid}_{player_id}_{timestamp}.json"
-            json_path = os.path.join(REPORT_DIR, json_filename)
+            json_path = os.path.join(report_dir, json_filename)
             player_list = report.get_player_list()
             # Convert team_section DataValue objects to JSON-serializable format
             team_section_json = [
@@ -411,7 +420,7 @@ def handle_submit_report(
             logger.exception("[%s] Error parsing report: %s", request_id, e)
 
         # Save report to files
-        save_match_report(csid, ccid, raw_report, report)
+        save_match_report(csid, ccid, raw_report, report, game_id=game_id)
     else:
         logger.warning("[%s] No report data received!", request_id)
 
@@ -472,7 +481,7 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
         request_id: Unique request ID for logging.
 
     Returns:
-        Tuple of (csid, ccid, profile_id, raw_report, partnercode).
+        Tuple of (csid, ccid, profile_id, raw_report, game_id).
     """
     logger.info("[%s] Extracting SubmitReport data from body (size=%d bytes)", request_id, len(body))
 
@@ -545,20 +554,20 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
             authoritative = body[auth_start:auth_end].decode("ascii", errors="ignore")
     logger.info("[%s] Extracted authoritative=%s", request_id, authoritative)
 
-    # Extract partnercode
-    partnercode = 0
-    partnercode_marker = b"<gsc:partnercode>"
-    partnercode_end_marker = b"</gsc:partnercode>"
-    pc_start = body.find(partnercode_marker)
-    if pc_start != -1:
-        pc_start += len(partnercode_marker)
-        pc_end = body.find(partnercode_end_marker, pc_start)
-        if pc_end != -1:
+    # Extract gameid (maps directly to GAME_ID_* constants: 2128=RA3, 1814=KW, 1422=TW)
+    game_id = 0
+    gameid_marker = b"<gsc:gameid>"
+    gameid_end_marker = b"</gsc:gameid>"
+    gid_start = body.find(gameid_marker)
+    if gid_start != -1:
+        gid_start += len(gameid_marker)
+        gid_end = body.find(gameid_end_marker, gid_start)
+        if gid_end != -1:
             try:
-                partnercode = int(body[pc_start:pc_end].decode("ascii"))
+                game_id = int(body[gid_start:gid_end].decode("ascii"))
             except ValueError:
                 pass
-    logger.info("[%s] Extracted partnercode=%d", request_id, partnercode)
+    logger.info("[%s] Extracted gameid=%d", request_id, game_id)
 
     # Extract binary report (after "application/bin\0" marker)
     raw_report = b""
@@ -580,7 +589,7 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
         len(raw_report),
     )
 
-    return csid, ccid, profile_id, raw_report, partnercode
+    return csid, ccid, profile_id, raw_report, game_id
 
 
 @competition_router.post("/competitionservice/competitionservice.asmx")
@@ -618,8 +627,9 @@ async def competition_handler(request: Request) -> Response:
         if "SubmitReport" in soap_action:
             logger.info("[%s] Handling SubmitReport (binary data expected)", request_id)
             logger.debug("[%s] Request body (first 500 bytes): %s", request_id, body[:500])
-            csid, ccid, profile_id, raw_report, partnercode = extract_submit_report_data(body, request_id)
-            game_id = PARTNERCODE_TO_GAME_ID.get(partnercode, DEFAULT_GAME_ID)
+            csid, ccid, profile_id, raw_report, game_id = extract_submit_report_data(body, request_id)
+            if not game_id:
+                game_id = DEFAULT_GAME_ID
             response_model = handle_submit_report(csid, ccid, profile_id, raw_report, request_id, game_id=game_id)
             response_xml = wrap_soap_envelope(response_model)
         else:
