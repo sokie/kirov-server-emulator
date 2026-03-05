@@ -13,8 +13,8 @@ from app.models.game_config import (
     GAME_ID_RA,
     GAME_TYPES,
     KW_FACTION_DISPLAY,
-    SAGE_LEVEL_THRESHOLDS,
     RA3_FACTION_DISPLAY,
+    SAGE_LEVEL_THRESHOLDS,
     SAGE_SCORING_MULTIPLIERS,
 )
 from app.models.models import (

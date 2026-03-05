@@ -14,6 +14,13 @@ from sqlalchemy import create_engine as _sa_create_engine
 from sqlmodel import SQLModel
 
 import app.db.database as _db_module
+from app.models.game_config import (
+    GAME_ID_KW,
+    GAME_ID_RA,
+    GAME_ID_TW,
+    SAGE_LEVEL_THRESHOLDS,
+    SAGE_SCORING_MULTIPLIERS,
+)
 from app.soap.envelope import extract_soap_body, get_element_text, wrap_soap_envelope
 from app.soap.models.auth import LoginRemoteAuthResponse, LoginResponseCode
 from app.soap.models.common import RecordValue
@@ -25,13 +32,6 @@ from app.soap.models.competition import (
 from app.soap.models.sake import (
     GetMyRecordsResponse,
     SAKEResultCode,
-)
-from app.models.game_config import (
-    GAME_ID_KW,
-    GAME_ID_RA,
-    GAME_ID_TW,
-    SAGE_LEVEL_THRESHOLDS,
-    SAGE_SCORING_MULTIPLIERS,
 )
 from app.soap.sake_service import (
     handle_get_my_records,
