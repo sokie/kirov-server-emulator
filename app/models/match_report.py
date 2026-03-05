@@ -100,7 +100,7 @@ KW_GAME_KEY_NAMES: dict[int, str] = {
 }
 
 # KW per-player stat base IDs (from disassembled binary format)
-# Key = stat_base + game_type (0=unranked, 1=ranked_1v1, etc.)
+# Key = stat_base + game_type (0=unknown, 1=custom, 2=ranked_1v1, etc.)
 KW_PLAYER_STAT_BASE_NAMES: dict[int, str] = {
     60: "duration_seconds",  # base+0x3C — only written for the local (submitting) player
     65: "career_wins",  # base+0x41
@@ -126,12 +126,14 @@ KW_PARENT_FACTION: dict[str, str] = {
 }
 
 # Game type names by offset (key = base + game_type_offset)
+# Offset = lobby_game_type_id - 2 (lobby IDs: 3=custom, 4=ranked_1v1, 5=ranked_2v2, 6=clan_1v1, 7=clan_2v2)
 GAME_TYPE_NAMES: dict[int, str] = {
-    0: "unranked",
-    1: "ranked_1v1",
-    2: "ranked_2v2",
-    3: "clan_1v1",
-    4: "clan_2v2",
+    0: "unknown",
+    1: "custom",
+    2: "ranked_1v1",
+    3: "ranked_2v2",
+    4: "clan_1v1",
+    5: "clan_2v2",
 }
 
 # Player section: stat base ID → name (key = base + game_type_offset)
@@ -168,7 +170,7 @@ def get_faction_from_key(key: int) -> tuple[str, int]:
     Formula: key = faction_enum * 5 + game_type
     Where:
         - faction_enum: 0=Allied, 1=Soviet, 2=Empire
-        - game_type: 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=clan_1v1, 4=clan_2v2
+        - game_type: 0=unknown, 1=custom, 2=ranked_1v1, 3=ranked_2v2, 4=clan_1v1
 
     Args:
         key: The player section key containing faction info.
@@ -469,8 +471,6 @@ class MatchReport:
 
     def _process_player_list(self) -> None:
         """Process the roster and player sections to extract player information."""
-        auto_match_count = 0
-
         for i in range(self.player_count):
             if i >= len(self.roster_section):
                 break
@@ -494,13 +494,9 @@ class MatchReport:
             faction_map = KW_FACTION_ENUM_MAP if self.is_kw else FACTION_ENUM_MAP
             for key, value in player_data.items():
                 if value.value_type == ValueType.INT16 and 0 <= key <= faction_key_max:
-                    game_type = key % 5
                     faction_enum = key // 5
                     detected_faction = faction_map.get(faction_enum, Faction.UNKNOWN)
                     faction = detected_faction
-                    # game_type 1 or 2 indicates auto-match (ranked)
-                    if game_type in (1, 2):
-                        auto_match_count += 1
                     break
 
             # Result: 0=win, 1=loss, 3=disconnect, 4=dsync
@@ -517,8 +513,6 @@ class MatchReport:
                     team_id=team_id,
                 )
             )
-
-        self.is_auto_match = auto_match_count > 0
 
     def get_player_list(self) -> list[MatchPlayer]:
         """Get the list of players with their match results."""
@@ -580,19 +574,19 @@ class MatchReport:
         """
         Extract game_type from Game Section key.
 
-        The game section contains a key in range 72-77 where:
-        key = 72 + game_type
+        The game section contains a key in range 72-77 (RA3) or 117-122 (KW):
+        key = base + game_type, where base is 72 (RA3) or 117 (KW).
 
-        Game types:
-            0 = unranked
-            1 = ranked_1v1
-            2 = ranked_2v2
-            3 = ???
-            4 = clan_1v1
-            5 = clan_2v2
+        Game type offsets (= lobby_game_type_id - 2):
+            0 = unknown
+            1 = custom/unranked (lobby ID 3)
+            2 = ranked_1v1 (lobby ID 4)
+            3 = ranked_2v2 (lobby ID 5)
+            4 = clan_1v1 (lobby ID 6)
+            5 = clan_2v2 (lobby ID 7)
 
         Returns:
-            The game_type integer (0-5), defaults to 0 (unranked) if not found.
+            The game_type integer (0-5), defaults to 0 if not found.
         """
         for key in self.game_section:
             if 72 <= key <= 77:
@@ -611,50 +605,25 @@ class MatchReport:
         # First check for disconnect/dsync
         for player in self.parsed_players:
             if player.result == 3:
-                return GameType.AUTO_MATCH_DISCONNECT if self.is_auto_match else GameType.DISCONNECT
+                return GameType.DISCONNECT
             elif player.result == 4:
-                return GameType.AUTO_MATCH_DSYNC if self.is_auto_match else GameType.DSYNC
+                return GameType.DSYNC
 
         # Get game_type from game section key
         game_type_int = self.get_game_type_from_key()
 
-        # Count winners for 1v1 vs 2v2 distinction
-        winner_count = sum(1 for p in self.parsed_players if p.result == 0)
-
-        # Map game_type_int to GameType string
-        # Values are (auto_match_type, non_auto_match_type) or single type
+        # Map game_type offset to GameType string
+        # Offsets: 0=unknown, 1=custom, 2=ranked_1v1, 3=ranked_2v2, 4=clan_1v1, 5=clan_2v2
         game_type_map = {
-            0: GameType.VALID_OTHER,  # unranked
-            1: (GameType.AUTO_MATCH_1V1, GameType.VALID_1V1),
-            2: (GameType.AUTO_MATCH_2V2, GameType.VALID_2V2),
+            0: GameType.VALID_OTHER,
+            1: GameType.VALID_OTHER,  # custom/unranked
+            2: GameType.VALID_1V1,    # ranked 1v1
+            3: GameType.VALID_2V2,    # ranked 2v2
             4: GameType.CLAN_1V1,
             5: GameType.CLAN_2V2,
         }
 
-        if game_type_int in game_type_map:
-            result = game_type_map[game_type_int]
-            if isinstance(result, tuple):
-                return result[0] if self.is_auto_match else result[1]
-            return result
-
-        # Fallback: use winner/loser count method
-        winner_count = 0
-        loser_count = 0
-        for player in self.parsed_players:
-            if player.result == 0:
-                winner_count += 1
-            elif player.result == 1:
-                loser_count += 1
-
-        if winner_count == loser_count:
-            game_type_map = {
-                1: GameType.AUTO_MATCH_1V1 if self.is_auto_match else GameType.VALID_1V1,
-                2: GameType.AUTO_MATCH_2V2 if self.is_auto_match else GameType.VALID_2V2,
-                3: GameType.VALID_3V3,
-            }
-            return game_type_map.get(winner_count, GameType.VALID_OTHER)
-
-        return GameType.VALID_OTHER
+        return game_type_map.get(game_type_int, GameType.VALID_OTHER)
 
     def get_faction_list(self) -> list[str]:
         """Get list of all player factions."""

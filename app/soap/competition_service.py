@@ -340,8 +340,8 @@ def handle_submit_report(
                     request_id,
                 )
 
-            # Map game type string to int
-            # Valid1v1/AutoMatch1v1 -> 1, Valid2v2/AutoMatch2v2 -> 2
+            # Map game type string to database gametype int
+            # Valid1v1 -> 1, Valid2v2 -> 2
             # Clan1v1 -> 3, Clan2v2 -> 4
             # ValidOther -> 0 (unranked/custom)
             game_type_str = report.get_game_type()
