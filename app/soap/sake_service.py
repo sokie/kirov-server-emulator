@@ -19,6 +19,13 @@ from sqlmodel import select
 
 from app.db.crud import get_player_level, get_player_stats, get_stats_value
 from app.db.database import create_session
+from app.models.game_config import (
+    GAME_ID_KW,
+    GAME_ID_RA,
+    GAME_ID_TW,
+    SAGE_LEVEL_THRESHOLDS,
+    SAGE_SCORING_MULTIPLIERS,
+)
 from app.models.models import Persona, PlayerStats
 from app.soap.envelope import (
     create_soap_fault,
@@ -42,105 +49,6 @@ sake_router = APIRouter()
 
 # Namespace definitions
 SAKE_NS = "http://gamespy.net/sake"
-
-# Game ID constants
-GAME_ID_KW = 1814
-GAME_ID_TW = 1422
-GAME_ID_RA = 2128
-
-# XP thresholds for 87 ranks (Levels table)
-LEVEL_THRESHOLDS = [
-    0,
-    5,
-    13,
-    23,
-    35,
-    50,
-    67,
-    86,
-    106,
-    127,
-    150,
-    175,
-    202,
-    231,
-    262,
-    295,
-    330,
-    367,
-    406,
-    447,
-    490,
-    535,
-    582,
-    631,
-    682,
-    735,
-    790,
-    847,
-    906,
-    967,
-    1030,
-    1095,
-    1162,
-    1231,
-    1302,
-    1375,
-    1454,
-    1538,
-    1628,
-    1724,
-    1825,
-    1927,
-    2030,
-    2134,
-    2239,
-    2345,
-    2452,
-    2560,
-    2674,
-    2794,
-    2920,
-    3049,
-    3180,
-    3314,
-    3451,
-    3590,
-    3738,
-    3894,
-    4058,
-    4230,
-    4410,
-    4595,
-    4784,
-    4978,
-    5177,
-    5380,
-    5590,
-    5807,
-    6031,
-    6262,
-    6500,
-    6744,
-    6993,
-    7247,
-    7506,
-    7770,
-    8044,
-    8328,
-    8622,
-    8926,
-    9240,
-    9562,
-    9890,
-    10224,
-    10564,
-    10910,
-    11310,
-]
-
-# Scoring multipliers (fixed values)
-SCORING_MULTIPLIERS = [1, 2, 2, 5]
 
 # News ticker messages shown in-game
 NEWS_TICKER_MESSAGES = [
@@ -540,7 +448,7 @@ def handle_get_specific_records(
     records = []
 
     if "ScoringMultipliers" in str(table_id) or table_id == "1":
-        for mult in SCORING_MULTIPLIERS:
+        for mult in SAGE_SCORING_MULTIPLIERS:
             records.append(RecordValue.from_short(mult))
 
     elif "UnrankedLosses" in str(table_id):
@@ -589,7 +497,7 @@ def handle_search_for_records(
 
     # Handle Levels table - return XP thresholds
     if "Levels" in str(table_id) or "levels" in str(filter_str).lower():
-        for threshold in LEVEL_THRESHOLDS:
+        for threshold in SAGE_LEVEL_THRESHOLDS:
             record_lists.append([RecordValue.from_int(threshold)])
 
     # Handle PlayerStats - leaderboard or ownerid lookup

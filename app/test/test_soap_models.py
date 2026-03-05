@@ -26,12 +26,14 @@ from app.soap.models.sake import (
     GetMyRecordsResponse,
     SAKEResultCode,
 )
-from app.soap.sake_service import (
+from app.models.game_config import (
     GAME_ID_KW,
     GAME_ID_RA,
     GAME_ID_TW,
-    LEVEL_THRESHOLDS,
-    SCORING_MULTIPLIERS,
+    SAGE_LEVEL_THRESHOLDS,
+    SAGE_SCORING_MULTIPLIERS,
+)
+from app.soap.sake_service import (
     handle_get_my_records,
     handle_get_specific_records,
     handle_search_for_records,
@@ -69,7 +71,7 @@ class TestSakeService:
         assert "GetSpecificRecordsResponse" in xml
         assert "<GetSpecificRecordsResult>Success</GetSpecificRecordsResult>" in xml
         # Verify all 4 multipliers are present as shortValue
-        for mult in SCORING_MULTIPLIERS:
+        for mult in SAGE_SCORING_MULTIPLIERS:
             assert f"<shortValue><value>{mult}</value></shortValue>" in xml
 
     def test_get_specific_records_unknown_table_returns_empty(self):
@@ -112,7 +114,7 @@ class TestSakeService:
         assert "<intValue><value>5</value></intValue>" in xml  # Level 2
         assert "<intValue><value>13</value></intValue>" in xml  # Level 3
         # Should have 87 ArrayOfRecordValue elements (one per level)
-        assert xml.count("<ArrayOfRecordValue>") == len(LEVEL_THRESHOLDS)
+        assert xml.count("<ArrayOfRecordValue>") == len(SAGE_LEVEL_THRESHOLDS)
 
     def test_search_for_records_news_ticker_returns_messages(self):
         """Test SearchForRecords returns news messages for NewsTicker table."""
@@ -559,8 +561,8 @@ class TestSakeServiceIntegration:
         assert "soap:Envelope" in xml
         assert "soap:Body" in xml
         # Should have 87 ArrayOfRecordValue elements (one per level)
-        assert xml.count("<ArrayOfRecordValue>") == len(LEVEL_THRESHOLDS)
+        assert xml.count("<ArrayOfRecordValue>") == len(SAGE_LEVEL_THRESHOLDS)
         # Each level contains one RecordValue with XP threshold
-        assert xml.count("<RecordValue>") == len(LEVEL_THRESHOLDS)
+        assert xml.count("<RecordValue>") == len(SAGE_LEVEL_THRESHOLDS)
         # Verify first XP threshold (level 1 = 0 XP)
         assert "<intValue><value>0</value></intValue>" in xml

@@ -617,8 +617,8 @@ class MatchReport:
         game_type_map = {
             0: GameType.VALID_OTHER,
             1: GameType.VALID_OTHER,  # custom/unranked
-            2: GameType.VALID_1V1,    # ranked 1v1
-            3: GameType.VALID_2V2,    # ranked 2v2
+            2: GameType.VALID_1V1,  # ranked 1v1
+            3: GameType.VALID_2V2,  # ranked 2v2
             4: GameType.CLAN_1V1,
             5: GameType.CLAN_2V2,
         }

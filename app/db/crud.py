@@ -13,7 +13,9 @@ from app.models.game_config import (
     GAME_ID_RA,
     GAME_TYPES,
     KW_FACTION_DISPLAY,
+    SAGE_LEVEL_THRESHOLDS,
     RA3_FACTION_DISPLAY,
+    SAGE_SCORING_MULTIPLIERS,
 )
 from app.models.models import (
     AuthCertificate,
@@ -64,101 +66,6 @@ def get_faction_stat(stats_dict: dict, game_type: str, faction: str, key: str, d
 def set_faction_stat(stats_dict: dict, game_type: str, faction: str, key: str, value):
     """Set faction stat in nested JSON: stats[game_type]["factions"][faction][key] = value."""
     stats_dict.setdefault(game_type, {}).setdefault("factions", {}).setdefault(faction, {})[key] = value
-
-
-# XP thresholds for 87 ranks — duplicated from sake_service to avoid circular import
-LEVEL_THRESHOLDS = [
-    0,
-    5,
-    13,
-    23,
-    35,
-    50,
-    67,
-    86,
-    106,
-    127,
-    150,
-    175,
-    202,
-    231,
-    262,
-    295,
-    330,
-    367,
-    406,
-    447,
-    490,
-    535,
-    582,
-    631,
-    682,
-    735,
-    790,
-    847,
-    906,
-    967,
-    1030,
-    1095,
-    1162,
-    1231,
-    1302,
-    1375,
-    1454,
-    1538,
-    1628,
-    1724,
-    1825,
-    1927,
-    2030,
-    2134,
-    2239,
-    2345,
-    2452,
-    2560,
-    2674,
-    2794,
-    2920,
-    3049,
-    3180,
-    3314,
-    3451,
-    3590,
-    3738,
-    3894,
-    4058,
-    4230,
-    4410,
-    4595,
-    4784,
-    4978,
-    5177,
-    5380,
-    5590,
-    5807,
-    6031,
-    6262,
-    6500,
-    6744,
-    6993,
-    7247,
-    7506,
-    7770,
-    8044,
-    8328,
-    8622,
-    8926,
-    9240,
-    9562,
-    9890,
-    10224,
-    10564,
-    10910,
-    11310,
-]
-
-# XP awarded per win by game-type index: 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=clan
-SCORING_MULTIPLIERS = [1, 2, 2, 5]
 
 
 # =============================================================================
@@ -1070,9 +977,9 @@ def create_or_update_player_level(
 
 
 def _rank_from_score(score: int) -> int:
-    """Return 1-based rank for a given XP score using LEVEL_THRESHOLDS."""
+    """Return 1-based rank for a given XP score using SAGE_LEVEL_THRESHOLDS."""
     rank = 1
-    for i, threshold in enumerate(LEVEL_THRESHOLDS):
+    for i, threshold in enumerate(SAGE_LEVEL_THRESHOLDS):
         if score >= threshold:
             rank = i + 1
         else:
@@ -1086,14 +993,14 @@ def award_xp_and_update_rank(
     """Award XP for a match result and recompute the player's rank.
 
     Only winners receive XP.  The amount depends on the game mode index:
-    unranked=1, ranked_1v1=2, ranked_2v2=2, clan=5 (from SCORING_MULTIPLIERS).
+    unranked=1, ranked_1v1=2, ranked_2v2=2, clan=5 (from SAGE_SCORING_MULTIPLIERS).
     """
     if not is_winner:
         return
 
     mode_index_map = {"unranked": 0, "ranked_1v1": 1, "ranked_2v2": 2, "clan_1v1": 3, "clan_2v2": 3}
     mode_index = mode_index_map.get(game_type, 0)
-    xp_gain = SCORING_MULTIPLIERS[mode_index]
+    xp_gain = SAGE_SCORING_MULTIPLIERS[mode_index]
 
     level = get_player_level(session, persona_id, game_id=game_id)
     if level is None:
