@@ -108,3 +108,21 @@ def pick_random_map_index(common_bitset: str) -> int:
     """Pick a random map index from a common bitset. Returns -1 if none available."""
     indices = [i for i, c in enumerate(common_bitset) if c == "1"]
     return random.choice(indices) if indices else -1
+
+
+# GameSpy peerchat username encoding (piMangleIP / piDemangleUser)
+# Format: X<8 encoded chars>X|<profileID>
+# The game decodes the bot's username to validate the sender before accepting
+# any MBOT: messages. An invalid username causes all messages to be silently dropped.
+
+_GAMESPY_XOR_KEY = 0xC3801DC7
+_GAMESPY_ALPHABET = "aFl4uOD9sfWq1vGp"
+_HEX_CHARS = "0123456789abcdef"
+
+
+def encode_gamespy_username(ip: int, profile_id: int) -> str:
+    """Encode an IP + profile ID into GameSpy peerchat username format."""
+    xored = ip ^ _GAMESPY_XOR_KEY
+    hex_str = f"{xored:08x}"
+    encoded = "".join(_GAMESPY_ALPHABET[_HEX_CHARS.index(c)] for c in hex_str)
+    return f"X{encoded}X|{profile_id}"

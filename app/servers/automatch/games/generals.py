@@ -4,7 +4,7 @@ import random
 import time
 from dataclasses import dataclass, field
 
-from app.servers.automatch.base import BasePlayer, GameFactory, find_common_maps, pick_random_map_index
+from app.servers.automatch.base import BasePlayer, GameFactory, encode_gamespy_username, find_common_maps, pick_random_map_index
 
 
 @dataclass
@@ -26,7 +26,10 @@ class GeneralsGameFactory(GameFactory):
 
     game_id = "generals_zh"
     nickname = "qmbot"
-    username = "0|0"
+    # Username must be GameSpy-encoded: X<encoded_ip>X|<profile_id>
+    # The game decodes this via piDemangleUser before accepting any MBOT: messages.
+    # encode_gamespy_username(0x0A000001, 17461195) -> "X1fsaFv1DX|17461195"
+    username = encode_gamespy_username(0x0A000001, 17461195)
     channels = ["#GPG!597", "#GPG!392"]
     match_interval = 2.0
     valid_num_players = [2, 4, 6, 8]
