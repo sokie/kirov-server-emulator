@@ -4,7 +4,13 @@ import random
 import time
 from dataclasses import dataclass, field
 
-from app.servers.automatch.base import BasePlayer, GameFactory, encode_gamespy_username, find_common_maps, pick_random_map_index
+from app.servers.automatch.base import (
+    BasePlayer,
+    GameFactory,
+    encode_gamespy_username,
+    find_common_maps,
+    pick_random_map_index,
+)
 
 
 @dataclass
