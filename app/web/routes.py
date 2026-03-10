@@ -9,6 +9,7 @@ from sqlmodel import Session
 
 from app.db.crud import (
     GAME_ID_KW,
+    GAME_ID_TW,
     get_all_clans,
     get_all_generals_stats,
     get_clan_by_id,
@@ -24,6 +25,7 @@ from app.db.crud import (
     get_persona_clan_membership,
     get_personas_for_user,
     get_ra3_player_profile,
+    get_tw_player_profile,
 )
 from app.db.database import get_session
 from app.models.models import User
@@ -250,7 +252,7 @@ async def logout_page(
     return response
 
 
-LEADERBOARD_GAMES = ["ra3", "generals", "kanes_wrath"]
+LEADERBOARD_GAMES = ["ra3", "generals", "kanes_wrath", "tw"]
 
 
 @router.get("/leaderboard", response_class=HTMLResponse)
@@ -278,6 +280,10 @@ async def leaderboard_page(
         if game_type not in GAME_TYPES:
             game_type = "ranked_1v1"
         players = get_leaderboard(session, game_type, game_id=GAME_ID_KW)
+    elif game == "tw":
+        if game_type not in GAME_TYPES:
+            game_type = "ranked_1v1"
+        players = get_leaderboard(session, game_type, game_id=GAME_ID_TW)
     elif game == "generals":
         generals_players = get_generals_leaderboard(session)
 
@@ -312,6 +318,7 @@ async def player_profile_page(
     generals = get_generals_player_profile(session, persona_id)
     ra3 = get_ra3_player_profile(session, persona_id)
     kw = get_kw_player_profile(session, persona_id)
+    tw = get_tw_player_profile(session, persona_id)
 
     return templates.TemplateResponse(
         "player_profile.html",
@@ -322,6 +329,7 @@ async def player_profile_page(
             "generals": generals,
             "ra3": ra3,
             "kw": kw,
+            "tw": tw,
         },
     )
 
