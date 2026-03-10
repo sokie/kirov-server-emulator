@@ -94,7 +94,7 @@ The parser strips the `\CINFO` prefix, splits on `\`, and pairs up remaining tok
 | Message | When Sent |
 |---------|-----------|
 | `MBOT:WORKING {pool_size}` | Player queued successfully; sent to the new player and all others in the pool |
-| `MBOT:POOLSIZE {pool_size}` | Periodic pool size update, every 30 seconds |
+| `MBOT:POOLSIZE {ladderId} {pool_size}` | Periodic pool size update, every 30 seconds. Includes the player's ladder ID so the client can match it to the correct pool. |
 | `MBOT:BADCINFO` | `NumPlayers` value not in the game's valid set |
 | `MBOT:BADMAPS` | `Maps` field is empty or missing |
 
@@ -122,10 +122,12 @@ MBOT:MATCHED {mapIdx} {matchId} 1 {nick} {ip} {side} {color} {nat} -1 {points} {
 
 Player blocks repeat for each participant. In 1v1, team IDs are 0 and 1. In 2v2, team IDs are 0, 0, 1, 1.
 
-### Generals MATCHED Format (1v1)
+### Generals MATCHED Format
+
+Used for all game sizes (1v1 through 4v4):
 
 ```
-MBOT:MATCHED {mapIdx} {seed} {nick} {ip} {side} {color} {nat} {nick2} {ip2} {side2} {color2} {nat2}
+MBOT:MATCHED {mapIdx} {seed} {nick} {ip} {side} {color} {nat} {nick2} {ip2} {side2} {color2} {nat2} ...
 ```
 
 | Field | Description |
@@ -138,15 +140,7 @@ MBOT:MATCHED {mapIdx} {seed} {nick} {ip} {side} {color} {nat} {nick2} {ip2} {sid
 | `color` | Color |
 | `nat` | NAT type |
 
-### Generals TEAMMATCH Format (Team Games)
-
-Used for NumPlayers 4, 6, or 8:
-
-```
-MBOT:TEAMMATCH {mapIdx} {seed} {nick1} {ip1} {side1} {color1} {nat1} {nick2} {ip2} ...
-```
-
-Same field layout as MATCHED, but with `MBOT:TEAMMATCH` prefix and more player blocks.
+Player blocks repeat for each participant (2 for 1v1, 4 for 2v2, etc.).
 
 ### Generals-Only Messages
 
@@ -268,7 +262,7 @@ For team games (NumPlayers 4, 6, or 8), the algorithm uses greedy team formation
 2. Add compatible players (fitness > 0 with the seed) until team A has `N/2` members
 3. Find `N/2` players for team B where each has fitness > 0 with every member of team A
 4. Check map compatibility across all players
-5. If successful, send `MBOT:TEAMMATCH`; otherwise try the next seed
+5. If successful, send `MBOT:MATCHED`; otherwise try the next seed
 
 ## Extra Commands
 

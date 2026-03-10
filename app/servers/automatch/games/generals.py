@@ -171,7 +171,7 @@ class GeneralsGameFactory(GameFactory):
             if map_index == -1:
                 continue
 
-            msg = self._format_team_matched(all_players, map_index)
+            msg = self._format_matched(all_players, map_index)
             return list(all_players), msg
 
         return None
@@ -198,21 +198,6 @@ class GeneralsGameFactory(GameFactory):
         """
         seed = random.randint(0, 2**31 - 1)
         parts = [f"MBOT:MATCHED {map_index} {seed}"]
-
-        for player in players:
-            ip_unsigned = player.ip & 0xFFFFFFFF
-            parts.append(f"{player.nickname} {ip_unsigned} {player.side} {player.color} {player.nat}")
-
-        return " ".join(parts)
-
-    def _format_team_matched(self, players: list[GeneralsPlayer], map_index: int) -> str:
-        """
-        Build Generals MBOT:TEAMMATCH message for team games.
-
-        Format: MBOT:TEAMMATCH {mapIdx} {seed} {p1} {ip1} {side1} {color1} {nat1} ...
-        """
-        seed = random.randint(0, 2**31 - 1)
-        parts = [f"MBOT:TEAMMATCH {map_index} {seed}"]
 
         for player in players:
             ip_unsigned = player.ip & 0xFFFFFFFF

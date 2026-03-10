@@ -164,7 +164,8 @@ class AutoMatchBot:
                     next_pool_announce = now + pool_announce_interval
                     pool_size = len(self._players)
                     for nick in self._players:
-                        await self._send_to_player(nick, f"MBOT:POOLSIZE {pool_size}")
+                        ladder_id = self._players[nick].ladder_id
+                        await self._send_to_player(nick, f"MBOT:POOLSIZE {ladder_id} {pool_size}")
 
                 # Attempt matching
                 matches = self.factory.try_match(self._players)
