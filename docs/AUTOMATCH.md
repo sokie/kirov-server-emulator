@@ -9,9 +9,35 @@ Each game has a dedicated bot with a fixed IRC identity:
 | Game | Bot Nickname | Bot Username | Channel(s) | Match Interval |
 |------|-------------|-------------|------------|----------------|
 | Red Alert 3 | `anpwcjnybr2008` | `XDqGfsuOsX\|167408418` | `#GSP!redalert3pc` | 10s |
-| Generals / ZH | `qmbot` | `0\|0` | `#GPG!597`, `#GPG!392` | 2s |
+| Generals / ZH | `qmbot` | `X1fsaFv1DX\|17461195` | `#GPG!597`, `#GPG!392` | 2s |
 
 The bot registers in IRC state as a virtual client (no real socket) and joins its channels on server startup. It appears in NAMES lists and responds to WHO/GETCKEY like any other user.
+
+### Username Encoding (piMangleIP)
+
+The bot username **must** be in GameSpy encoded format: `X<8 encoded chars>X|<profileID>`. The game client calls `piDemangleUser` on the bot's username (from the WHO response) before accepting any `MBOT:` messages. If decoding fails, all messages from the bot are **silently dropped**.
+
+**Encoding algorithm** (from the binary at `0x0080da50`):
+
+1. XOR the IP with key `0xC3801DC7`
+2. Format as 8-digit lowercase hex
+3. Substitute each hex char using the alphabet `aFl4uOD9sfWq1vGp`:
+   ```
+   0→a  1→F  2→l  3→4  4→u  5→O  6→D  7→9
+   8→s  9→f  a→W  b→q  c→1  d→v  e→G  f→p
+   ```
+4. Wrap with `X...X`, append `|<profileID>`
+
+**Decoding validation** (from `0x0080d930`):
+
+1. String length must be ≥ 12 characters
+2. `str[0]` must be `'X'` and `str[9]` must be `'X'`
+3. Reverse-substitute chars 1–8 back to hex, parse as integer
+4. XOR with `0xC3801DC7` to recover the IP
+5. IP must be non-zero (0.0.0.0 is rejected)
+6. Profile ID is parsed from `str[11:]` via `atoi()`
+
+The encoded IP can be any valid non-zero address (the bot is virtual, so the actual IP doesn't matter). The profile ID should match the original bot's ID from the game's `config.txt` (served via servserv). Use `encode_gamespy_username()` from `base.py` to generate values.
 
 ## Message Flow
 
