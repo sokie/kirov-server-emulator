@@ -13,6 +13,7 @@ from app.models.irc_types import (
     irc_client_data_var,
 )
 from app.models.peerchat_state import irc_channels, irc_clients, irc_clients_lock, part_channel
+from app.servers.automatch import bot_coordinator
 from app.util.logging_helper import get_logger
 from app.util.peerchat_crypt import PeerchatCipherFactory
 
@@ -243,6 +244,10 @@ async def cleanup_client(client: IRCClient):
         if nickname in irc_clients:
             del irc_clients[nickname]
 
+    # Notify automatch bots of disconnect
+    if bot_coordinator:
+        bot_coordinator.on_player_disconnect(nickname)
+
     logger.info(f"Cleaned up IRC client {nickname}")
 
 
@@ -262,6 +267,10 @@ def ping_sender(loop: asyncio.AbstractEventLoop):
 
                 for nickname, client in list(irc_clients.items()):
                     try:
+                        # Skip virtual bot clients (no real socket)
+                        if client.writer is None:
+                            continue
+
                         # Check for timeout (no PONG in 90 seconds)
                         if time.time() - client.last_pong_time > 90:
                             logger.warning(f"IRC client {nickname} timed out")

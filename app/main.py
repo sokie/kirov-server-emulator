@@ -6,11 +6,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+import app.servers.automatch as automatch_module
 from app._version import __version__
 from app.config.app_settings import app_config
 from app.db.database import create_db_and_tables
 from app.rest.routes import clans_api_router
 from app.rest.routes import router as rest_router
+from app.servers.automatch.coordinator import BotCoordinator
+from app.servers.automatch.games import ALL_GAME_FACTORIES
 from app.servers.fesl_server import start_fesl_server
 from app.servers.gamestats_server import start_gamestats_server
 from app.servers.gp_server import start_gp_server
@@ -58,6 +61,18 @@ async def lifespan(app: FastAPI):
     print(f"INFO:     Starting Peerchat IRC server on {irc_host}:{irc_port}...")
     irc_server = await start_irc_server(host=irc_host, port=irc_port)
     print(f"INFO:     Peerchat IRC server is listening on {irc_host}:{irc_port}")
+
+    # Start Automatch bots
+    coordinator = None
+    if app_config.matchbot.enabled:
+        # Filter factories by per-game settings
+        enabled_factories = [f for f in ALL_GAME_FACTORIES if app_config.matchbot.games.get(f.game_id, True)]
+        if enabled_factories:
+            coordinator = BotCoordinator()
+            await coordinator.start(enabled_factories)
+            automatch_module.bot_coordinator = coordinator
+            game_ids = ", ".join(f.game_id for f in enabled_factories)
+            print(f"INFO:     Automatch bots started for: {game_ids}")
 
     # Start GameSpy Protocol server
     gp_host = app_config.gp.host
@@ -128,6 +143,11 @@ async def lifespan(app: FastAPI):
 
     # Shutdown - consistent pattern for all servers
     print("INFO:     Application shutdown...")
+
+    # Stop automatch bots
+    if coordinator:
+        await coordinator.stop()
+        automatch_module.bot_coordinator = None
     servers = [fesl_server, irc_server, gp_server]
     if master_server:
         servers.append(master_server)

@@ -85,6 +85,16 @@ class GeneralsRankSettings(BaseModel):
     disconnect_multiplier: float = Field(default=-5.0)
 
 
+class MatchbotSettings(BaseModel):
+    """Automatch bot settings."""
+
+    enabled: bool = Field(default=True, description="Enable automatch bots")
+    games: dict[str, bool] = Field(
+        default_factory=dict,
+        description="Per-game enable/disable (e.g. {'ra3': true, 'generals_zh': false})",
+    )
+
+
 # Compute config path at module load time for frozen executable support
 _config_path = os.path.join(get_runtime_path(), "config.json")
 
@@ -98,6 +108,7 @@ class AppSettings(BaseSettings):
     relay: RelaySettings = Field(default_factory=RelaySettings)
     gamestats: GameStatsSettings = Field(default_factory=GameStatsSettings)
     generals_rank: GeneralsRankSettings = Field(default_factory=GeneralsRankSettings)
+    matchbot: MatchbotSettings = Field(default_factory=MatchbotSettings)
     game: GameSettings = Field()
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
