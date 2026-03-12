@@ -578,6 +578,9 @@ class IRCFactory:
             join_message = IRCMessage(command="JOIN", params=[channel_name], prefix=client.user.get_prefix())
             await client.broadcast_to_channel(channel_name, join_message, exclude_self=False)
 
+            # NOTE: Do NOT send 324 (RPL_CHANNELMODEIS) here — real GameSpy peerchat
+            # does not include MODE in the JOIN response. The SDK handles MODE separately.
+
             # Send NAMES list
             await IRCFactory.send_names(client, channel_name)
 
@@ -632,9 +635,11 @@ class IRCFactory:
                 names.append(nickname)
 
         # Send RPL_NAMREPLY (353)
+        # GameSpy uses "*" for private (#GSP!) channels, "=" for public
+        channel_type = "*" if channel.is_private() else "="
         await client.send_numeric(
             IRCNumeric.RPL_NAMREPLY,
-            "=",  # Public channel
+            channel_type,
             channel_name,
             " ".join(names),
         )
@@ -724,7 +729,13 @@ class IRCFactory:
                 if mode_params:
                     channel.modes += " " + mode_params
 
-                # Broadcast mode change to channel (no response needed for self)
+                # Broadcast mode change to all channel members (standard IRC behavior)
+                mode_msg = IRCMessage(
+                    command="MODE",
+                    params=[target, mode_changes] + ([mode_params] if mode_params else []),
+                    prefix=client.user.get_prefix(),
+                )
+                await client.broadcast_to_channel(target, mode_msg, exclude_self=False)
                 logger.debug(f"Channel {target} mode set to: {channel.modes}")
         else:
             # User mode

@@ -557,6 +557,8 @@ def build_game_list_response(
 
     # Game entries — no per-entry terminator
     for game in games:
+        entry_start = len(response)
+
         # Result type '~' for full entry
         response += struct.pack("B", RESULT_TYPE_FULL)
 
@@ -571,6 +573,16 @@ def build_game_list_response(
         # Traced IP/port (same as public if not specified)
         response += ip_to_bytes(game.traced_ip)
 
+        header_bytes = response[entry_start:]
+        logger.info(
+            "Game entry header (%d bytes): %s | pub=%s:%d priv=%s:%d traced=%s",
+            len(header_bytes),
+            " ".join(f"{b:02x}" for b in header_bytes),
+            game.public_ip, game.public_port,
+            game.private_ip, game.private_port,
+            game.traced_ip,
+        )
+
         # Field values
         for field_name in fields:
             value = game.get_field_value(field_name)
@@ -580,8 +592,64 @@ def build_game_list_response(
     response += b"\x00"
     response += END_MARKER
 
-    logger.debug("Built game list response: %d bytes, %d games", len(response), len(games))
+    logger.info(
+        "Built game list response: %d bytes, %d games, header hex: %s",
+        len(response), len(games),
+        " ".join(f"{b:02x}" for b in response[:40]),
+    )
+    logger.info(
+        "Response tail hex (last 20 bytes): %s",
+        " ".join(f"{b:02x}" for b in response[-20:]),
+    )
     return response
+
+
+def build_server_info_message(game, field_table: list[str]) -> bytes:
+    """
+    Build a msg_type 0x01 server-info response.
+
+    This is sent on the same encrypted TCP stream as the initial server list.
+    The GameSpy SDK (FUN_009a5deb) expects:
+
+        u16be   message_length (including these 2 bytes)
+        u8      0x01 (msg_type)
+        u8      field_count
+        repeat field_count:
+            u8    key_index (index into the field table from the initial response)
+            str0  field_value (NUL-terminated)
+
+    Args:
+        game: GameEntry with field data
+        field_table: Ordered list of field names declared in the initial response
+
+    Returns:
+        Complete length-prefixed message bytes
+    """
+    payload = b""
+    payload += struct.pack("B", 0x01)  # msg_type
+
+    # Collect fields that have values
+    entries = []
+    for idx, field_name in enumerate(field_table):
+        value = game.get_field_value(field_name)
+        if value:  # skip empty values
+            entries.append((idx, value))
+
+    payload += struct.pack("B", len(entries))  # field_count
+
+    for key_index, value in entries:
+        payload += struct.pack("B", key_index)
+        payload += value.encode("utf-8") + b"\x00"
+
+    # Length includes the 2-byte length field itself
+    length = len(payload) + 2
+    message = struct.pack("!H", length) + payload
+
+    logger.debug(
+        "Built server info message: %d bytes, %d fields",
+        len(message), len(entries),
+    )
+    return message
 
 
 # =============================================================================

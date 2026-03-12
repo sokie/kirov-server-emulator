@@ -641,9 +641,14 @@ class GameSessionRegistry:
             del self._sessions[client_id]
             logger.info("Unregistered game: client_id=%d", client_id)
 
-    def get_games(self) -> list:
-        """Get all registered games as a list of GameEntry objects."""
-        return list(self._sessions.values())
+    def get_games(self, gamename: str | None = None) -> list:
+        """Get registered games, optionally filtered by gamename."""
+        if gamename is None:
+            return list(self._sessions.values())
+        return [
+            g for g in self._sessions.values()
+            if g.fields.get("gamename", "").lower() == gamename.lower()
+        ]
 
     def get_game(self, client_id: int) -> GameEntry | None:
         """Get a specific game by client ID."""

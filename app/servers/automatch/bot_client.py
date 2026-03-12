@@ -30,13 +30,14 @@ class BotClient:
         self._message_handler: Callable[[IRCMessage], Coroutine[Any, Any, None]] | None = None
 
     async def send_message(self, message: IRCMessage):
-        """Route incoming PRIVMSGs to the bot's message handler."""
-        if (
-            self._message_handler
-            and message.command == "PRIVMSG"
-            and message.params
-            and not message.params[0].startswith("#")
-        ):
+        """Route incoming messages to the bot's message handler."""
+        if not self._message_handler or not message.params:
+            return
+
+        if message.command in ("PRIVMSG", "UTM") and not message.params[0].startswith("#"):
+            await self._message_handler(message)
+        elif message.command == "702" and len(message.params) >= 5 and message.params[3] == "BCAST":
+            # SETCKEY broadcast: 702 <chan> <chan> <nick> BCAST \key\val...
             await self._message_handler(message)
 
     async def send_numeric(self, *args, **kwargs):
