@@ -81,6 +81,12 @@ class GameFactory(ABC):
         """
         return []
 
+    def create_bot(self):
+        """Create the bot instance for this game. Override for custom bot types."""
+        from app.servers.automatch.bot import AutoMatchBot
+
+        return AutoMatchBot(self)
+
 
 def find_common_maps(bitset1: str, bitset2: str) -> str:
     """

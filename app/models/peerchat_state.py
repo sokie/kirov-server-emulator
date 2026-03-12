@@ -75,7 +75,8 @@ async def part_channel(client, channel_name: str, reason: str = ""):
     if client.user.nickname in channel.user_stats:
         del channel.user_stats[client.user.nickname]
 
-    # Delete empty private channels (GameSpy lobbies)
-    if len(channel.users) == 0 and channel.is_private():
+    # Delete empty private channels, but keep #GSP! staging rooms
+    # (game clients may rejoin them; bot sends QMGO/ to these channels)
+    if len(channel.users) == 0 and channel.is_private() and not channel_name.startswith("#GSP!"):
         del irc_channels[channel_name]
         logger.info(f"Deleted empty private channel: {channel_name}")

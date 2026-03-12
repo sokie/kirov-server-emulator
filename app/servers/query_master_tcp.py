@@ -5,6 +5,7 @@ Handles TCP queries from game clients requesting room lists and game lists.
 """
 
 import asyncio
+import socket
 import struct
 
 from app.config.app_settings import app_config
@@ -16,6 +17,7 @@ from app.servers.query_master_parsing import (
     QueryRequest,
     build_game_list_response,
     build_room_list_response,
+    build_server_info_message,
     create_default_rooms,
     create_rooms_by_game,
     is_room_list_request,
@@ -27,6 +29,17 @@ from app.util.cipher import EncTypeX
 from app.util.logging_helper import format_hex, get_logger
 
 logger = get_logger(__name__)
+
+# Fields managed internally by the GameSpy ServerBrowser SDK.
+# Including these in the server response can confuse the SDK's parser.
+_SDK_INTERNAL_FIELDS = frozenset({
+    "publicip", "publicport",
+    "localip0", "localip1", "localip2", "localip3",
+    "localport",
+    "natneg",
+    "statechanged",
+    "gamename",
+})
 
 
 # =============================================================================
@@ -68,25 +81,23 @@ class QueryMasterHandler:
         self.games = games
 
     def handle_query(
-        self, data: bytes, client_ip: str = "0.0.0.0", client_port: int = 0, encrypt: bool = True
-    ) -> bytes:
+        self, data: bytes, client_ip: str = "0.0.0.0", client_port: int = 0
+    ) -> tuple[bytes, QueryRequest | None]:
         """
-        Handle an incoming TCP query and return the appropriate response.
+        Handle an incoming TCP query and return the plaintext response.
 
-        Args:
-            data: Raw TCP data from client
-            client_ip: Client's IP address (echoed back in response header)
-            client_port: Client's source port (echoed back in response header)
-            encrypt: Whether to encrypt the response (default True)
+        Encryption is handled by the per-connection protocol handler, NOT here,
+        because the GameSpy SDK uses a persistent stream cipher across the
+        entire TCP connection.
 
         Returns:
-            Response bytes to send back to client (encrypted if encrypt=True)
+            (plaintext_response, parsed_request_or_None)
         """
         request = parse_tcp_query(data)
 
         if not request.game_name:
             logger.warning("Invalid query: no game name found")
-            return b""
+            return b"", None
 
         # Determine if this is a room list or game list request
         if is_room_list_request(request):
@@ -94,45 +105,39 @@ class QueryMasterHandler:
         else:
             response = self._handle_game_list_request(request, client_ip, client_port)
 
-        # Encrypt the response if requested
-        if encrypt and response and request.validate_token:
-            response = self._encrypt_response(response, request.validate_token, request.game_name)
+        return response, request
 
-        return response
-
-    def _encrypt_response(self, response: bytes, validate_token: bytes, game_name: str = "") -> bytes:
+    def handle_server_info(self, data: bytes, field_table: list[str]) -> bytes:
         """
-        Encrypt response data using EncTypeX cipher.
+        Handle a server info request (msg_type 0x01).
 
-        Args:
-            response: Plaintext response data
-            validate_token: The validate token from the client request
-            game_name: Game name from the request, used to look up the correct key
-
-        Returns:
-            Encrypted response with header
+        Format: length(2) + 0x01(1) + server_ip(4) + server_port(2).
+        Returns the response as a length-prefixed msg_type 0x01 message
+        (NOT the classic server list format).
         """
-        try:
-            # Look up per-game key
-            config_key = GAMESPY_GAME_KEY_MAP.get(game_name.lower(), "")
-            gamekey = self.gamekeys.get(config_key, "")
-            if not gamekey:
-                logger.warning("No gamekey found for master server game: %s, trying first available", game_name)
-                # Fall back to first available key
-                gamekey = next(iter(self.gamekeys.values()), "")
+        server_ip = socket.inet_ntoa(data[3:7])
+        server_port = struct.unpack("!H", data[7:9])[0]
+        logger.info("Server info request for %s:%d", server_ip, server_port)
 
-            cipher = EncTypeX(key=gamekey, validate=validate_token)
-            encrypted = cipher.encode(response)
-            logger.debug(
-                "Encrypted response: plaintext=%d bytes, encrypted=%d bytes",
-                len(response),
-                len(encrypted),
-            )
-            return encrypted
-        except Exception as e:
-            logger.exception("Failed to encrypt response: %s", e)
-            # Fall back to unencrypted response
-            return response
+        # Look up the game in the registry by matching IP:port
+        registry = GameSessionRegistry.get_instance()
+        game = None
+        for g in registry.get_games():
+            if (g.public_ip == server_ip or g.private_ip == server_ip or g.traced_ip == server_ip) \
+                    and (g.public_port == server_port or g.private_port == server_port):
+                game = g
+                break
+
+        if not game:
+            logger.warning("Server info request: no game found for %s:%d", server_ip, server_port)
+            return b""
+
+        logger.info(
+            "Server info response for %s:%d: %d fields in table",
+            server_ip, server_port, len(field_table),
+        )
+
+        return build_server_info_message(game, field_table)
 
     def _handle_room_list_request(self, request: QueryRequest, client_ip: str) -> bytes:
         """Handle a room list request, returning game-specific rooms."""
@@ -171,16 +176,28 @@ class QueryMasterHandler:
         filter_conditions = parse_filter_string(request.filter_string)
 
         # Get games from shared registry (populated by UDP heartbeats)
-        # Also include any manually added games
+        # Filter by gamename so e.g. cc3xp1am queries only return automatch games
         registry = GameSessionRegistry.get_instance()
-        all_games = registry.get_games() + self.games
+        all_games = registry.get_games(gamename=request.game_name) + self.games
 
         # Filter games based on conditions
         filtered_games = self._filter_games(all_games, filter_conditions)
 
         logger.info("Game list: %d total, %d after filter", len(all_games), len(filtered_games))
 
-        fields = request.fields if request.fields else []
+        # Use requested fields; if none, derive from game heartbeat data so the
+        # SDK gets complete server info in the initial response (avoiding the
+        # need for individual msg_type 0x01 follow-up queries).
+        # Exclude SDK-internal fields that the ServerBrowser manages itself.
+        fields = request.fields
+        if not fields and filtered_games:
+            field_set: set[str] = set()
+            for game in filtered_games:
+                for k in (game.fields or {}):
+                    if not k.startswith("_") and k not in _SDK_INTERNAL_FIELDS:
+                        field_set.add(k)
+            fields = sorted(field_set)
+            logger.info("Derived %d fields from game data: %s", len(fields), fields)
 
         return build_game_list_response(
             games=filtered_games,
@@ -219,7 +236,9 @@ class QueryMasterHandler:
 
             actual = game.fields.get(field_name)
             if actual is None:
-                return False
+                # Game doesn't have this field — skip this condition
+                # (heartbeat-registered games may not have all filterable fields)
+                continue
 
             # Normalize types for comparison
             if isinstance(expected, int):
@@ -258,13 +277,12 @@ class QueryMasterServer(asyncio.Protocol):
     """
     GameSpy Master Server TCP Protocol handler.
 
-    This server handles TCP queries from game clients requesting:
-    - Room/lobby lists (groupid=2167)
-    - Game session lists (groupid=2166)
-
-    Protocol:
-    - Client sends a length-prefixed query packet
-    - Server responds with room/game list in classic GameSpy format
+    Manages per-connection EncTypeX cipher state.  The GameSpy SDK uses a
+    persistent stream cipher for the entire TCP session: the initial server
+    list response is encrypted with ``cipher.encode()`` (which prepends the
+    cipher challenge header), and all subsequent messages (e.g. msg_type 0x01
+    server-info responses) are encrypted with ``cipher.encrypt()`` continuing
+    the same cipher stream.
     """
 
     # Shared handler instance with room/game data
@@ -288,11 +306,16 @@ class QueryMasterServer(asyncio.Protocol):
         self.transport = None
         self.peername = None
         self.buffer = b""
+        # Per-connection cipher state (initialized on first response)
+        self.cipher: EncTypeX | None = None
+        # Field table declared in the initial response — msg_type 0x01 responses
+        # reference fields by index into this table.
+        self.field_table: list[str] = []
 
     def connection_made(self, transport):
         self.transport = transport
         self.peername = transport.get_extra_info("peername")
-        logger.debug("Master server: new connection from %s", self.peername)
+        logger.info("Master server: new TCP connection from %s", self.peername)
 
     def data_received(self, data: bytes):
         """Handle incoming data from client."""
@@ -305,6 +328,16 @@ class QueryMasterServer(asyncio.Protocol):
         # Process complete packets
         while self._process_packet():
             pass
+
+    def _create_cipher(self, validate_token: bytes, game_name: str) -> EncTypeX:
+        """Create an EncTypeX cipher for this connection."""
+        handler = self.get_handler()
+        config_key = GAMESPY_GAME_KEY_MAP.get(game_name.lower(), "")
+        gamekey = handler.gamekeys.get(config_key, "")
+        if not gamekey:
+            logger.warning("No gamekey for game %s, trying first available", game_name)
+            gamekey = next(iter(handler.gamekeys.values()), "")
+        return EncTypeX(key=gamekey, validate=validate_token)
 
     def _process_packet(self) -> bool:
         """
@@ -330,34 +363,113 @@ class QueryMasterServer(asyncio.Protocol):
         logger.debug("Processing packet: %d bytes", len(packet))
 
         try:
-            # Get the handler and process the query
             handler = self.get_handler()
-
-            # Get client IP/port from connection
             client_ip = "0.0.0.0"
             client_port = 0
             if self.peername:
                 client_ip = self.peername[0]
                 client_port = self.peername[1]
 
-            # Process the query with client IP/port
-            response = handler.handle_query(packet, client_ip=client_ip, client_port=client_port)
-
-            if response:
-                logger.debug("Sending response: %d bytes", len(response))
-                logger.debug("TX hex (first 100): %s", format_hex(response[:100]))
-                self.transport.write(response)
+            # Check for msg_type 0x01 (server info request)
+            if len(packet) >= 9 and packet[2] == 0x01:
+                logger.info(
+                    "Server info request raw hex (%d bytes): %s",
+                    len(packet),
+                    " ".join(f"{b:02x}" for b in packet),
+                )
+                self._handle_server_info(handler, packet)
             else:
-                logger.warning("No response generated for query")
+                self._handle_initial_query(handler, packet, client_ip, client_port)
 
         except Exception as e:
             logger.exception("Error processing master server query: %s", e)
 
         return True
 
+    def _handle_initial_query(
+        self, handler: QueryMasterHandler, packet: bytes, client_ip: str, client_port: int
+    ):
+        """Handle the initial server-list / room-list query."""
+        response, request = handler.handle_query(packet, client_ip=client_ip, client_port=client_port)
+
+        if not response:
+            logger.warning("No response generated for query")
+            return
+
+        # Remember the field table so msg_type 0x01 can reference it
+        if request and request.fields:
+            self.field_table = list(request.fields)
+        else:
+            # We derived fields from game data — extract them from the response.
+            # The field list is at offset 6 in the plaintext response:
+            # clientIP(4) + clientPort(2) + fieldCount(1) + fields...
+            if len(response) > 6:
+                field_count = response[6]
+                self.field_table = self._extract_field_names(response[7:], field_count)
+
+        # Encrypt with EncTypeX (encode = header + encrypted data)
+        if request and request.validate_token:
+            logger.info(
+                "Cipher init: validate=%s, game=%s",
+                " ".join(f"{b:02x}" for b in request.validate_token),
+                request.game_name,
+            )
+            self.cipher = self._create_cipher(request.validate_token, request.game_name)
+            encrypted = self.cipher.encode(response)
+            logger.info(
+                "Sending initial response for %s to %s: plaintext=%d, encrypted=%d, fields=%s",
+                request.game_name, self.peername,
+                len(response), len(encrypted), self.field_table,
+            )
+            logger.info(
+                "Encrypted first 40 bytes: %s",
+                " ".join(f"{b:02x}" for b in encrypted[:40]),
+            )
+            self.transport.write(encrypted)
+        else:
+            # No validate token — send plaintext (shouldn't happen normally)
+            self.transport.write(response)
+
+    @staticmethod
+    def _extract_field_names(data: bytes, count: int) -> list[str]:
+        """Extract field names from the field list section of a response."""
+        names = []
+        pos = 0
+        for _ in range(count):
+            if pos >= len(data):
+                break
+            pos += 1  # skip field type byte
+            end = data.find(b"\x00", pos)
+            if end == -1:
+                break
+            names.append(data[pos:end].decode("utf-8", errors="ignore"))
+            pos = end + 1
+        return names
+
+    def _handle_server_info(self, handler: QueryMasterHandler, packet: bytes):
+        """Handle msg_type 0x01 (server info request) with continuing cipher."""
+        response = handler.handle_server_info(packet, self.field_table)
+
+        if not response:
+            logger.warning("No server info response generated")
+            return
+
+        if self.cipher:
+            encrypted = self.cipher.encrypt(response)
+            logger.debug(
+                "Encrypted server info response: plaintext=%d, encrypted=%d",
+                len(response), len(encrypted),
+            )
+            self.transport.write(encrypted)
+        else:
+            logger.warning("No cipher for server info response — sending plaintext")
+            self.transport.write(response)
+
     def connection_lost(self, exc):
-        logger.debug("Master server: connection closed for %s", self.peername)
+        logger.info("Master server: TCP connection closed for %s (exc=%s)", self.peername, exc)
         self.buffer = b""
+        self.cipher = None
+        self.field_table = []
 
 
 # =============================================================================
