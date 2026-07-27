@@ -1272,23 +1272,19 @@ def generate_csid() -> str:
 
 def generate_ccid(persona_id: int = 0) -> str:
     """
-    Generates a unique Competition Channel ID with embedded persona_id.
+    Generate a Competition Channel ID (a GameSpy SC connection GUID) with the persona embedded.
 
-    Format: base64url(persona_id as 4 bytes big-endian) + random suffix
-    This allows us to recover the persona_id from the ccid later.
+    The SC report blob carries no real profileid; the only per-player identity is each roster slot's
+    16-byte connection GUID, which the game round-trips VERBATIM from whatever ccid the backend returns.
+    So this returns a real GUID string whose LEADING DWORD is the persona_id - on SubmitReport each roster
+    slot's leading dword is then that player's persona, giving deterministic per-player attribution from a
+    single authoritative report, with no cross-report correlation. (A non-GUID ccid is why the game used to
+    fall back to a MAC-derived roster GUID.) The BEEF-CAFE marker makes the value recognisable in a capture;
+    the trailing groups are random so each session's ccid is still unique.
 
-    Args:
-        persona_id: The persona ID to embed in the ccid.
-
-    Returns:
-        A unique ccid string with embedded persona_id.
+    Format: PPPPPPPP-BEEF-CAFE-RRRR-RRRRRRRRRRRR  (P = persona hex, R = random).
     """
-    # Encode persona_id as 4 bytes big-endian, then base64url (6 chars without padding)
-    persona_bytes = persona_id.to_bytes(4, "big")
-    encoded = base64.urlsafe_b64encode(persona_bytes).decode().rstrip("=")
-    # Add random suffix for uniqueness
-    random_suffix = secrets.token_urlsafe(8)
-    return f"{encoded}{random_suffix}"
+    return f"{persona_id & 0xFFFFFFFF:08X}-BEEF-CAFE-{secrets.token_hex(2)}-{secrets.token_hex(6)}"
 
 
 def extract_persona_from_ccid(ccid: str) -> int | None:
@@ -1302,12 +1298,11 @@ def extract_persona_from_ccid(ccid: str) -> int | None:
         The embedded persona_id, or None if extraction fails.
     """
     try:
-        # First 6 chars are base64url encoded persona_id (4 bytes -> 6 chars)
-        encoded = ccid[:6]
-        # Add padding for base64 decoding
-        padded = encoded + "=="
-        persona_bytes = base64.urlsafe_b64decode(padded)
-        return int.from_bytes(persona_bytes, "big")
+        # GUID-format ccid ("PPPPPPPP-...."): the leading dword hex IS the persona_id.
+        if len(ccid) >= 9 and ccid[8] == "-":
+            return int(ccid[:8], 16)
+        # Legacy base64url ccid: first 6 chars = base64url(persona_id as 4 bytes big-endian).
+        return int.from_bytes(base64.urlsafe_b64decode(ccid[:6] + "=="), "big")
     except Exception:
         return None
 
@@ -1471,137 +1466,69 @@ def complete_competition_session(session: Session, csid: str) -> bool:
     return False
 
 
-def increment_received_reports(session: Session, csid: str) -> CompetitionSession | None:
-    """Increments the received_reports counter for a competition session."""
-    comp_session = get_competition_session(session, csid)
-    if comp_session:
-        comp_session.received_reports += 1
-        session.add(comp_session)
-        session.commit()
-        session.refresh(comp_session)
-    return comp_session
+def finalize_match_from_report(
+    session: Session,
+    csid: str,
+    players: list[dict],
+    game_type_int: int,
+    duration: int,
+    game_id: int = DEFAULT_GAME_ID,
+) -> bool:
+    """Finalize a match from a single authoritative report.
 
-
-def get_match_reports_for_session(session: Session, csid: str) -> list[MatchReport]:
-    """Gets all match reports for a competition session."""
-    stmt = select(MatchReport).where(MatchReport.csid == csid)
-    return list(session.exec(stmt).all())
-
-
-def finalize_match(session: Session, csid: str, game_id: int = DEFAULT_GAME_ID) -> bool:
-    """
-    Finalize a match by calculating and updating ELO ratings.
-
-    This function should be called when all reports have been received.
-    It correlates winners/losers from the reports and updates player stats.
-
-    Args:
-        session: Database session.
-        csid: Competition Session ID.
-
-    Returns:
-        True if match was finalized successfully.
+    The authoritative report already names every player (each roster connection GUID's leading dword is the
+    persona) and carries every result, so win/loss, ELO and XP are computed from this one report at face
+    value: no waiting for each client to report and no cross-report correlation. `players` is
+    [{persona_id, result, faction}, ...] with result 0=win, 1=loss, 3=disconnect, 4=dsync. The
+    comp_session.finalized flag makes a re-sent report a no-op so stats are never double counted.
     """
     comp_session = get_competition_session(session, csid)
     if comp_session is None or comp_session.finalized:
         return False
 
-    # Get all match reports for this session
-    reports = get_match_reports_for_session(session, csid)
-    if not reports:
+    # Only players that authenticated through our backend carry a recoverable persona.
+    players = [p for p in players if p.get("persona_id")]
+    if len(players) < 2:
         return False
 
-    # Use duration from reports (game client's measurement) when available,
-    # fall back to session creation time delta
-    report_durations = [r.duration for r in reports if r.duration > 0]
-    if report_durations:
-        duration = max(report_durations)
-    else:
-        duration = int((datetime.utcnow() - comp_session.created_at).total_seconds())
+    game_type_map = {0: "unranked", 1: "ranked_1v1", 2: "ranked_2v2", 3: "clan_1v1", 4: "clan_2v2"}
+    game_type = game_type_map.get(game_type_int, "unranked")
 
-    # Determine game type string from the gametype int
-    # 0=unranked, 1=ranked_1v1, 2=ranked_2v2, 3=clan_1v1, 4=clan_2v2
-    game_type_map = {
-        0: "unranked",
-        1: "ranked_1v1",
-        2: "ranked_2v2",
-        3: "clan_1v1",
-        4: "clan_2v2",
-    }
+    winners = [p for p in players if p["result"] == 0]
+    losers = [p for p in players if p["result"] in (1, 3, 4)]
 
-    # Collect player results from reports
-    player_results: dict[int, dict] = {}  # persona_id -> {result, faction, elo}
+    def current_elo(persona_id: int) -> int:
+        stats = get_player_stats(session, persona_id, game_id=game_id)
+        if stats and game_type != "unranked":
+            return getattr(stats, f"elo_{game_type}", 1200)
+        return 1200
 
-    for report in reports:
-        persona_id = report.persona_id
-        if persona_id not in player_results:
-            # Get current ELO for this player
-            stats = get_player_stats(session, persona_id, game_id=game_id)
-            game_type = game_type_map.get(report.gametype, "unranked")
+    winner_avg_elo = sum(current_elo(p["persona_id"]) for p in winners) / len(winners) if winners else 1200
+    loser_avg_elo = sum(current_elo(p["persona_id"]) for p in losers) / len(losers) if losers else 1200
 
-            # Get current ELO based on game type
-            current_elo = 1200
-            if stats and game_type != "unranked":
-                elo_field = f"elo_{game_type}"
-                current_elo = getattr(stats, elo_field, 1200)
+    for p in players:
+        persona_id = p["persona_id"]
+        result = p["result"]
+        is_winner = result == 0
+        is_disconnect = result == 3
 
-            player_results[persona_id] = {
-                "result": report.result,
-                "faction": report.faction,
-                "gametype": report.gametype,
-                "elo": current_elo,
-            }
+        update_player_win_loss(
+            session, persona_id, game_type, result, duration, faction=p.get("faction", ""), game_id=game_id
+        )
 
-    # If we have at least 2 players, update stats
-    if len(player_results) >= 2:
-        # Separate winners and losers
-        winners = [pid for pid, data in player_results.items() if data["result"] == 0]
-        losers = [pid for pid, data in player_results.items() if data["result"] in (1, 3, 4)]
-
-        # Calculate average opponent ELO for each group
-        winner_avg_elo = sum(player_results[pid]["elo"] for pid in winners) / len(winners) if winners else 1200
-        loser_avg_elo = sum(player_results[pid]["elo"] for pid in losers) / len(losers) if losers else 1200
-
-        # Get game type from the report with highest gametype value
-        # (partial reports may have gametype=0, final report has correct value)
-        max_gametype = max(report.gametype for report in reports)
-        game_type = game_type_map.get(max_gametype, "unranked")
-
-        # Update each player
-        for persona_id, data in player_results.items():
-            result = data["result"]
-            is_winner = result == 0
-            is_disconnect = result == 3
-
-            # Update win/loss counters
-            update_player_win_loss(
-                session, persona_id, game_type, result, duration, faction=data["faction"], game_id=game_id
+        if game_type != "unranked":
+            opponent_elo = int(loser_avg_elo if is_winner else winner_avg_elo)
+            update_player_elo(
+                session, persona_id, game_type, opponent_elo, won=is_winner, disconnected=is_disconnect, game_id=game_id
             )
 
-            # Update ELO if this is a ranked game type
-            if game_type != "unranked":
-                opponent_elo = int(loser_avg_elo if is_winner else winner_avg_elo)
-                update_player_elo(
-                    session,
-                    persona_id,
-                    game_type,
-                    opponent_elo,
-                    won=is_winner,
-                    disconnected=is_disconnect,
-                    game_id=game_id,
-                )
+        award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
 
-            # Award XP and update rank for winners
-            award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
-
-        # Mark session as finalized only after stats were updated
-        comp_session.finalized = True
-        comp_session.status = "completed"
-        session.add(comp_session)
-        session.commit()
-        return True
-
-    return False
+    comp_session.finalized = True
+    comp_session.status = "completed"
+    session.add(comp_session)
+    session.commit()
+    return True
 
 
 # =============================================================================

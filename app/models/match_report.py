@@ -171,6 +171,23 @@ GAME_KEY_NAMES: dict[int, str] = {
 }
 
 
+def persona_from_roster_guid(full_id: str) -> int | None:
+    """Recover a player's persona id from their SC roster connection GUID.
+
+    The backend mints each player's connection GUID as PPPPPPPP-BEEF-CAFE-... with the persona id in the
+    leading dword, and the game round-trips that GUID verbatim into the report roster, so the leading dword
+    is the persona. Returns None for a GUID without the BEEF-CAFE marker (a genuine MAC-derived id: a player
+    that did not go through our backend, whose persona cannot be recovered).
+    """
+    try:
+        parts = full_id.split("-")
+        if len(parts) >= 3 and parts[1].lower() == "beef" and parts[2].lower() == "cafe":
+            return int(parts[0], 16)
+    except (ValueError, AttributeError):
+        pass
+    return None
+
+
 def get_faction_from_key(key: int, game_id: int = GAME_ID_RA) -> tuple[str, int]:
     """
     Extract faction and game_type from player section key.
@@ -268,6 +285,8 @@ class MatchPlayer:
     faction: str
     is_winner: bool
     team_id: int = 0
+    result: int = 0
+    persona_id: int | None = None
 
 
 @dataclass
@@ -487,9 +506,10 @@ class MatchReport:
 
             roster_entry = self.roster_section[i]
 
-            # Player GUID (connectionId) structure: 000aaaaa-XXXX-XXXX-fe00-{MAC_ADDRESS}
-            # The GUID is constructed locally from the player's network adapter MAC address.
-            # It is NOT a server persona ID — do not try to extract one from it.
+            # Player GUID = the SC connection GUID. The game round-trips it verbatim from the ccid the
+            # backend returned, so a backend-minted PPPPPPPP-BEEF-CAFE-... GUID carries the player's persona
+            # in its leading dword (see persona_from_roster_guid). A MAC-derived GUID means the player did
+            # not go through our backend and has no recoverable persona.
             full_id = str(roster_entry.player_id)
             team_id = roster_entry.team_id
 
@@ -541,6 +561,8 @@ class MatchReport:
                 faction=p.faction,
                 is_winner=(p.result == 0),
                 team_id=p.team_id,
+                result=p.result,
+                persona_id=persona_from_roster_guid(p.full_id),
             )
             for p in self.parsed_players
         ]
