@@ -5,7 +5,7 @@ import secrets
 import string
 from datetime import datetime
 
-from sqlmodel import Session, select
+from sqlmodel import Session, select, update
 
 from app.models.game_config import (
     FACTION_MAPS,
@@ -1480,7 +1480,9 @@ def finalize_match_from_report(
     persona) and carries every result, so win/loss, ELO and XP are computed from this one report at face
     value: no waiting for each client to report and no cross-report correlation. `players` is
     [{persona_id, result, faction}, ...] with result 0=win, 1=loss, 3=disconnect, 4=dsync. The
-    comp_session.finalized flag makes a re-sent report a no-op so stats are never double counted.
+    comp_session.finalized flag makes a re-sent report a no-op so stats are never double counted: the
+    session is claimed with a conditional UPDATE *before* any stats are applied, so when two submissions
+    for the same csid race, the database arbitrates and only the one that claims the row settles the match.
     """
     comp_session = get_competition_session(session, csid)
     if comp_session is None or comp_session.finalized:
@@ -1491,43 +1493,83 @@ def finalize_match_from_report(
     if len(players) < 2:
         return False
 
-    game_type_map = {0: "unranked", 1: "ranked_1v1", 2: "ranked_2v2", 3: "clan_1v1", 4: "clan_2v2"}
-    game_type = game_type_map.get(game_type_int, "unranked")
-
-    winners = [p for p in players if p["result"] == 0]
-    losers = [p for p in players if p["result"] in (1, 3, 4)]
-
-    def current_elo(persona_id: int) -> int:
-        stats = get_player_stats(session, persona_id, game_id=game_id)
-        if stats and game_type != "unranked":
-            return getattr(stats, f"elo_{game_type}", 1200)
-        return 1200
-
-    winner_avg_elo = sum(current_elo(p["persona_id"]) for p in winners) / len(winners) if winners else 1200
-    loser_avg_elo = sum(current_elo(p["persona_id"]) for p in losers) / len(losers) if losers else 1200
-
-    for p in players:
-        persona_id = p["persona_id"]
-        result = p["result"]
-        is_winner = result == 0
-        is_disconnect = result == 3
-
-        update_player_win_loss(
-            session, persona_id, game_type, result, duration, faction=p.get("faction", ""), game_id=game_id
-        )
-
-        if game_type != "unranked":
-            opponent_elo = int(loser_avg_elo if is_winner else winner_avg_elo)
-            update_player_elo(
-                session, persona_id, game_type, opponent_elo, won=is_winner, disconnected=is_disconnect, game_id=game_id
-            )
-
-        award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
-
-    comp_session.finalized = True
-    comp_session.status = "completed"
-    session.add(comp_session)
+    # Claim the session first. Only the submission whose UPDATE matches the still-unfinalized row gets to
+    # apply the stats; a concurrent or re-sent report matches nothing and bails out here.
+    previous_status = comp_session.status
+    claim = (
+        update(CompetitionSession)
+        .where(CompetitionSession.csid == csid, CompetitionSession.finalized == False)  # noqa: E712
+        .values(finalized=True, status="completed")
+    )
+    claimed_rows = session.execute(claim).rowcount
     session.commit()
+    if claimed_rows != 1:
+        logger.info("Match %s already claimed by another submission; skipping stats", csid)
+        return False
+
+    # Past this point the claim is ours. It is released only if we fail before applying anything at all -
+    # once a helper has committed stats, the claim must stand so a resubmission cannot replay them.
+    stats_applied = False
+    try:
+        game_type_map = {0: "unranked", 1: "ranked_1v1", 2: "ranked_2v2", 3: "clan_1v1", 4: "clan_2v2"}
+        game_type = game_type_map.get(game_type_int, "unranked")
+
+        winners = [p for p in players if p["result"] == 0]
+        losers = [p for p in players if p["result"] in (1, 3, 4)]
+
+        def current_elo(persona_id: int) -> int:
+            stats = get_player_stats(session, persona_id, game_id=game_id)
+            if stats and game_type != "unranked":
+                return getattr(stats, f"elo_{game_type}", 1200)
+            return 1200
+
+        winner_avg_elo = sum(current_elo(p["persona_id"]) for p in winners) / len(winners) if winners else 1200
+        loser_avg_elo = sum(current_elo(p["persona_id"]) for p in losers) / len(losers) if losers else 1200
+
+        # ELO needs a real opponent on both sides. A report with no winner (e.g. everyone desynced) or no
+        # loser would rate every player against the 1200 default, so those matches only record counters.
+        rated = game_type != "unranked" and bool(winners) and bool(losers)
+        if game_type != "unranked" and not rated:
+            logger.info("Match %s (%s) has no winner/loser split; recording counters without ELO", csid, game_type)
+
+        for p in players:
+            persona_id = p["persona_id"]
+            result = p["result"]
+            is_winner = result == 0
+            is_disconnect = result == 3
+
+            update_player_win_loss(
+                session, persona_id, game_type, result, duration, faction=p.get("faction", ""), game_id=game_id
+            )
+            stats_applied = True
+
+            if rated:
+                opponent_elo = int(loser_avg_elo if is_winner else winner_avg_elo)
+                update_player_elo(
+                    session,
+                    persona_id,
+                    game_type,
+                    opponent_elo,
+                    won=is_winner,
+                    disconnected=is_disconnect,
+                    game_id=game_id,
+                )
+
+            award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
+    except Exception:
+        if not stats_applied:
+            session.rollback()
+            session.execute(
+                update(CompetitionSession)
+                .where(CompetitionSession.csid == csid)
+                .values(finalized=False, status=previous_status)
+            )
+            session.commit()
+            logger.exception("Match %s failed before any stats were applied; claim released", csid)
+        else:
+            logger.exception("Match %s failed after stats were applied; claim kept to prevent a replay", csid)
+        raise
+
     return True
 
 

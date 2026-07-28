@@ -359,20 +359,11 @@ def handle_submit_report(
                     request_id,
                 )
 
-            # Map game type string to database gametype int
-            # Valid1v1 -> 1, Valid2v2 -> 2
-            # Clan1v1 -> 3, Clan2v2 -> 4
-            # ValidOther -> 0 (unranked/custom)
+            # The mode comes from the game section key, not from get_game_type(): that one collapses to
+            # "Disconnect"/"Dsync" as soon as any player drops, which filed ranked drops as unranked and
+            # skipped the rating penalty. Kept as a label for the logs below.
             game_type_str = report.get_game_type()
-            gametype_int = 0  # Default unranked
-            if "Clan1v1" in game_type_str:
-                gametype_int = 3  # clan_1v1
-            elif "Clan2v2" in game_type_str:
-                gametype_int = 4  # clan_2v2
-            elif "1v1" in game_type_str:
-                gametype_int = 1  # ranked_1v1
-            elif "2v2" in game_type_str:
-                gametype_int = 2  # ranked_2v2
+            gametype_int = report.get_db_game_type()
 
             report_data = {
                 "result": player_result,

@@ -144,6 +144,16 @@ GAME_TYPE_NAMES: dict[int, str] = {
     5: "clan_2v2",
 }
 
+# Wire game type offset (GAME_TYPE_NAMES above) → our storage bucket (GAME_TYPES index in game_config).
+# The two spaces differ: the wire has an extra "unknown" slot at 0, and we store "unknown" and "custom"
+# alike as unranked. Anything not listed here is unranked (0).
+GAME_TYPE_KEY_TO_DB: dict[int, int] = {
+    2: 1,  # ranked_1v1
+    3: 2,  # ranked_2v2
+    4: 3,  # clan_1v1
+    5: 4,  # clan_2v2
+}
+
 # Player section: stat base ID → name (key = base + game_type_offset)
 # Confirmed from real match reports; keys 0-14 use the faction formula instead.
 PLAYER_STAT_BASE_NAMES: dict[int, str] = {
@@ -644,6 +654,14 @@ class MatchReport:
             if base <= key <= end:
                 return key - base
         return 0  # Default to unranked
+
+    def get_db_game_type(self) -> int:
+        """The mode this match was played in, as a GAME_TYPES index (0=unranked ... 4=clan_2v2).
+
+        Reads the game section key, so it is independent of how the match ended - unlike get_game_type(),
+        which reports "Disconnect"/"Dsync" as soon as any player drops and would lose the ranked mode.
+        """
+        return GAME_TYPE_KEY_TO_DB.get(self.get_game_type_from_key(), 0)
 
     def is_clan_game(self) -> bool:
         """Check if this is a clan game based on team_count."""
