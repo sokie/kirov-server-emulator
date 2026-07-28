@@ -23,8 +23,7 @@ from app.db.crud import (
     DEFAULT_GAME_ID,
     create_competition_session,
     extract_persona_from_ccid,
-    finalize_match,
-    increment_received_reports,
+    finalize_match_from_report,
     mark_report_intent_reported,
     set_report_intention,
     submit_match_report,
@@ -263,7 +262,13 @@ def handle_set_report_intention(csid: str, ccid: str, profile_id: int) -> SetRep
 
 
 def handle_submit_report(
-    csid: str, ccid: str, profile_id: int, raw_report: bytes, request_id: str, game_id: int = DEFAULT_GAME_ID
+    csid: str,
+    ccid: str,
+    profile_id: int,
+    raw_report: bytes,
+    request_id: str,
+    game_id: int = DEFAULT_GAME_ID,
+    authoritative: bool = False,
 ) -> SubmitReportResponse:
     """
     Handle SubmitReport SOAP operation.
@@ -295,6 +300,7 @@ def handle_submit_report(
     report_data: dict = {}
     is_final_report = False
     player_full_id = ""
+    gametype_int = 0
 
     # Parse the binary report
     if raw_report:
@@ -303,6 +309,12 @@ def handle_submit_report(
 
             # Extract useful data for database storage
             player_list = report.get_player_list()
+
+            # Roster connection GUIDs: the game round-trips our minted ccid, so each slot's leading dword
+            # is the persona (with a BEEF-CAFE marker); a MAC-derived GUID would mean the player did not
+            # go through our backend. Logged per submit so attribution stays auditable in captures.
+            for _i, _r in enumerate(report.roster_section):
+                logger.info("[%s] roster[%d] connGUID=%s team=%d", request_id, _i, _r.player_id, _r.team_id)
 
             # Extract persona_id from ccid (this is reliable, we embedded it)
             ccid_persona_id = extract_persona_from_ccid(ccid) if ccid else None
@@ -347,20 +359,11 @@ def handle_submit_report(
                     request_id,
                 )
 
-            # Map game type string to database gametype int
-            # Valid1v1 -> 1, Valid2v2 -> 2
-            # Clan1v1 -> 3, Clan2v2 -> 4
-            # ValidOther -> 0 (unranked/custom)
+            # The mode comes from the game section key, not from get_game_type(): that one collapses to
+            # "Disconnect"/"Dsync" as soon as any player drops, which filed ranked drops as unranked and
+            # skipped the rating penalty. Kept as a label for the logs below.
             game_type_str = report.get_game_type()
-            gametype_int = 0  # Default unranked
-            if "Clan1v1" in game_type_str:
-                gametype_int = 3  # clan_1v1
-            elif "Clan2v2" in game_type_str:
-                gametype_int = 4  # clan_2v2
-            elif "1v1" in game_type_str:
-                gametype_int = 1  # ranked_1v1
-            elif "2v2" in game_type_str:
-                gametype_int = 2  # ranked_2v2
+            gametype_int = report.get_db_game_type()
 
             report_data = {
                 "result": player_result,
@@ -426,34 +429,41 @@ def handle_submit_report(
     logger.info("[%s] Storing report in database...", request_id)
     session = create_session()
     try:
-        # Store the match report
+        # Keep the submitter's row for audit / match history.
         submit_match_report(session, csid, ccid, profile_id, report_data, game_id=game_id)
 
         # Mark report intent as reported and update full_id
         if ccid:
             mark_report_intent_reported(session, ccid, player_full_id)
 
-        # Increment received reports counter
-        comp_session = increment_received_reports(session, csid)
-
-        # Finalize only when all expected players have reported
-        if comp_session and comp_session.received_reports >= comp_session.expected_players:
+        # Finalize from the single authoritative report. It names every player (each roster connection
+        # GUID's leading dword is the persona) and carries every result, so the whole match is settled from
+        # it at face value: no waiting for each client and no cross-report correlation. A non-authoritative
+        # (client) report is stored for audit but never drives stats; if the host that sends the
+        # authoritative report drops, the match is abandoned in-game anyway.
+        if authoritative and report is not None:
+            players = [
+                {"persona_id": p.persona_id, "result": p.result, "faction": p.faction} for p in report.get_player_list()
+            ]
+            resolved = [p["persona_id"] for p in players if p["persona_id"]]
             logger.info(
-                "[%s] All reports received (%d/%d), finalizing match ...",
+                "[%s] Authoritative report: %d players, resolved personas=%s",
                 request_id,
-                comp_session.received_reports,
-                comp_session.expected_players,
+                len(players),
+                resolved,
             )
-            if finalize_match(session, csid, game_id=game_id):
-                logger.info("[%s] Match finalized successfully with ELO updates", request_id)
+            if finalize_match_from_report(session, csid, players, gametype_int, report.get_duration(), game_id=game_id):
+                logger.info("[%s] Match finalized from authoritative report", request_id)
             else:
-                logger.warning("[%s] Match finalization returned False", request_id)
+                logger.info(
+                    "[%s] Authoritative report did not finalize (already finalized or <2 resolvable personas)",
+                    request_id,
+                )
         else:
             logger.info(
-                "[%s] Waiting for more reports (received=%d, expected=%d)",
+                "[%s] Non-authoritative report stored (authoritative=%s); not finalizing",
                 request_id,
-                comp_session.received_reports if comp_session else 0,
-                comp_session.expected_players if comp_session else 0,
+                authoritative,
             )
 
         logger.info("[%s] === SUBMIT REPORT END === Success", request_id)
@@ -465,7 +475,7 @@ def handle_submit_report(
         session.close()
 
 
-def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, int, bytes, int]:
+def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, int, bytes, int, bool]:
     """
     Extract data from SubmitReport request.
 
@@ -587,7 +597,7 @@ def extract_submit_report_data(body: bytes, request_id: str) -> tuple[str, str, 
         len(raw_report),
     )
 
-    return csid, ccid, profile_id, raw_report, game_id
+    return csid, ccid, profile_id, raw_report, game_id, authoritative == "1"
 
 
 @competition_router.post("/competitionservice/competitionservice.asmx")
@@ -625,10 +635,12 @@ async def competition_handler(request: Request) -> Response:
         if "SubmitReport" in soap_action:
             logger.info("[%s] Handling SubmitReport (binary data expected)", request_id)
             logger.debug("[%s] Request body (first 500 bytes): %s", request_id, body[:500])
-            csid, ccid, profile_id, raw_report, game_id = extract_submit_report_data(body, request_id)
+            csid, ccid, profile_id, raw_report, game_id, authoritative = extract_submit_report_data(body, request_id)
             if not game_id:
                 game_id = DEFAULT_GAME_ID
-            response_model = handle_submit_report(csid, ccid, profile_id, raw_report, request_id, game_id=game_id)
+            response_model = handle_submit_report(
+                csid, ccid, profile_id, raw_report, request_id, game_id=game_id, authoritative=authoritative
+            )
             response_xml = wrap_soap_envelope(response_model)
         else:
             # For other operations, parse as pure XML

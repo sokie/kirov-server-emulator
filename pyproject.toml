@@ -8,6 +8,10 @@ requires-python = ">=3.12"
 target-version = "py312"
 line-length = 120
 
+# Docs embed hand-aligned code examples (annotated with ^^^ markers under one-liners) that the
+# formatter would wrap and break; keep ruff out of them.
+extend-exclude = ["docs"]
+
 [tool.ruff.lint]
 select = [
     "E",      # pycodestyle errors

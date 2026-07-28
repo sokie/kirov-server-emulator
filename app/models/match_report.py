@@ -144,6 +144,16 @@ GAME_TYPE_NAMES: dict[int, str] = {
     5: "clan_2v2",
 }
 
+# Wire game type offset (GAME_TYPE_NAMES above) → our storage bucket (GAME_TYPES index in game_config).
+# The two spaces differ: the wire has an extra "unknown" slot at 0, and we store "unknown" and "custom"
+# alike as unranked. Anything not listed here is unranked (0).
+GAME_TYPE_KEY_TO_DB: dict[int, int] = {
+    2: 1,  # ranked_1v1
+    3: 2,  # ranked_2v2
+    4: 3,  # clan_1v1
+    5: 4,  # clan_2v2
+}
+
 # Player section: stat base ID → name (key = base + game_type_offset)
 # Confirmed from real match reports; keys 0-14 use the faction formula instead.
 PLAYER_STAT_BASE_NAMES: dict[int, str] = {
@@ -169,6 +179,23 @@ GAME_KEY_NAMES: dict[int, str] = {
     65: "unknown_65",
     # Keys 72-77: game_type flag (key = 72 + game_type_offset, value is flag byte)
 }
+
+
+def persona_from_roster_guid(full_id: str) -> int | None:
+    """Recover a player's persona id from their SC roster connection GUID.
+
+    The backend mints each player's connection GUID as PPPPPPPP-BEEF-CAFE-... with the persona id in the
+    leading dword, and the game round-trips that GUID verbatim into the report roster, so the leading dword
+    is the persona. Returns None for a GUID without the BEEF-CAFE marker (a genuine MAC-derived id: a player
+    that did not go through our backend, whose persona cannot be recovered).
+    """
+    try:
+        parts = full_id.split("-")
+        if len(parts) >= 3 and parts[1].lower() == "beef" and parts[2].lower() == "cafe":
+            return int(parts[0], 16)
+    except (ValueError, AttributeError):
+        pass
+    return None
 
 
 def get_faction_from_key(key: int, game_id: int = GAME_ID_RA) -> tuple[str, int]:
@@ -268,6 +295,8 @@ class MatchPlayer:
     faction: str
     is_winner: bool
     team_id: int = 0
+    result: int = 0
+    persona_id: int | None = None
 
 
 @dataclass
@@ -487,9 +516,10 @@ class MatchReport:
 
             roster_entry = self.roster_section[i]
 
-            # Player GUID (connectionId) structure: 000aaaaa-XXXX-XXXX-fe00-{MAC_ADDRESS}
-            # The GUID is constructed locally from the player's network adapter MAC address.
-            # It is NOT a server persona ID — do not try to extract one from it.
+            # Player GUID = the SC connection GUID. The game round-trips it verbatim from the ccid the
+            # backend returned, so a backend-minted PPPPPPPP-BEEF-CAFE-... GUID carries the player's persona
+            # in its leading dword (see persona_from_roster_guid). A MAC-derived GUID means the player did
+            # not go through our backend and has no recoverable persona.
             full_id = str(roster_entry.player_id)
             team_id = roster_entry.team_id
 
@@ -541,6 +571,8 @@ class MatchReport:
                 faction=p.faction,
                 is_winner=(p.result == 0),
                 team_id=p.team_id,
+                result=p.result,
+                persona_id=persona_from_roster_guid(p.full_id),
             )
             for p in self.parsed_players
         ]
@@ -622,6 +654,14 @@ class MatchReport:
             if base <= key <= end:
                 return key - base
         return 0  # Default to unranked
+
+    def get_db_game_type(self) -> int:
+        """The mode this match was played in, as a GAME_TYPES index (0=unranked ... 4=clan_2v2).
+
+        Reads the game section key, so it is independent of how the match ended - unlike get_game_type(),
+        which reports "Disconnect"/"Dsync" as soon as any player drops and would lose the ranked mode.
+        """
+        return GAME_TYPE_KEY_TO_DB.get(self.get_game_type_from_key(), 0)
 
     def is_clan_game(self) -> bool:
         """Check if this is a clan game based on team_count."""

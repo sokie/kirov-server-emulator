@@ -17,6 +17,7 @@ import sys
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+import pytest
 from sqlmodel import SQLModel
 
 from app.db.crud import create_new_user, get_personas_for_user
@@ -68,6 +69,7 @@ def parse_fesl_response(data: bytes) -> tuple:
     }, payload_dict
 
 
+@pytest.mark.asyncio
 async def test_fesl_auth_flow():
     """Test the complete FESL authentication flow."""
 
