@@ -22,6 +22,12 @@ class LoggingSettings(BaseModel):
     """Logging configuration."""
 
     level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    file: str | None = Field(
+        default="logs/kirov-server.log",
+        description="Log file path, relative to the runtime directory; null disables file logging",
+    )
+    max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, description="Maximum log file size before rotation")
+    backup_count: int = Field(default=5, ge=0, description="Number of rotated log files to retain")
 
 
 class FeslSettings(BaseModel):

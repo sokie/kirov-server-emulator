@@ -29,22 +29,32 @@ from app.soap.competition_service import competition_router
 from app.soap.sake_service import sake_router
 from app.soap.service import soap_router
 from app.util.logging_helper import setup_logging
-from app.util.paths import get_base_path
+from app.util.paths import get_base_path, get_runtime_path
 from app.web.routes import router as web_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print("INFO:     Application startup...")
+    log_level = getattr(logging, app_config.logging.level.upper(), logging.INFO)
+    log_file = app_config.logging.file
+    if log_file is not None and not os.path.isabs(log_file):
+        log_file = os.path.join(get_runtime_path(), log_file)
+    resolved_log_file = setup_logging(
+        level=log_level,
+        log_file=log_file,
+        max_bytes=app_config.logging.max_bytes,
+        backup_count=app_config.logging.backup_count,
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Application startup (version %s)", __version__)
+    if resolved_log_file is not None:
+        logger.info("File logging enabled: %s", resolved_log_file)
 
     # Initialize database
-    print("INFO:     Initializing database...")
+    logger.info("Initializing database...")
     create_db_and_tables()
-    print("INFO:     Database initialized.")
-
-    log_level = getattr(logging, app_config.logging.level.upper(), logging.INFO)
-    setup_logging(level=log_level)
+    logger.info("Database initialized.")
 
     session_manager = SessionManager()
 
