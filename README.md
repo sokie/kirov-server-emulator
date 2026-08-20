@@ -66,8 +66,8 @@ For Red Alert 3, CNC3 and Kane's Wrath you can use the [CnC Game Proxy](https://
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/ra3_backend_server.git
-cd ra3_backend_server
+git clone https://github.com/sokie/kirov-server-emulator.git
+cd kirov-server-emulator
 ```
 
 2. Create a virtual environment:
