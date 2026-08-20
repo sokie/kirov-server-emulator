@@ -94,7 +94,9 @@ Then edit `config.json` and set your per-game keys. Each supported game requires
     "gamekeys": {
       "cnc3pc": "YOUR_CNC3_GAME_KEY",
       "cnc3ep1pc": "YOUR_KW_GAME_KEY",
-      "cncra3pc": "YOUR_RA3_GAME_KEY"
+      "cncra3pc": "YOUR_RA3_GAME_KEY",
+      "ccgenerals": "YOUR_GENERALS_GAME_KEY",
+      "ccgenzh": "YOUR_ZEROHOUR_GAME_KEY"
     }
   }
 }
