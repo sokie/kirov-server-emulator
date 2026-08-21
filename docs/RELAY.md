@@ -18,6 +18,14 @@ Games retry NAT negotiation up to 5 times on connection failure. The server uses
 
 Most players connect directly. Relay is only used when truly needed.
 
+CNC3 and Kane's Wrath negotiate through peerchat instead of the GameSpy NATNEG
+service. Before `NATHOST`, the server uses the stock `REQ/ IP` and `SL/`
+messages to give every human slot a shared baseline IP. It then rewrites each
+pair's first `PORT` exchange to the real peer addresses. If that pair reports
+`CONNFAILED`, its next `NEGO` round receives dedicated relay ports instead.
+Pairs are identified from `PN/` node numbers, so fallback works independently
+for every edge of a multiplayer game's full connection mesh.
+
 ## Architecture
 
 ```text
@@ -65,7 +73,8 @@ Host                    Server                    Guest
 ```json
 {
   "relay": {
-    "host": "203.0.113.10",
+    "host": "0.0.0.0",
+    "advertised_host": "203.0.113.10",
     "port_start": 50000,
     "port_end": 59999,
     "session_timeout": 120,
@@ -77,10 +86,11 @@ Host                    Server                    Guest
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `host` | `0.0.0.0` | **Must be your public IP** for clients to reach relay |
+| `host` | `0.0.0.0` | Local address on which the relay sockets listen |
+| `advertised_host` | `null` | IPv4 address sent to clients; inferred from peerchat when omitted |
 | `port_start` | `50000` | Start of UDP port range |
 | `port_end` | `59999` | End of UDP port range (10,000 ports = 5,000 pairs) |
-| `session_timeout` | `120` | Seconds of inactivity before relay route cleanup |
+| `session_timeout` | `120` | Seconds one endpoint may be silent before relay route cleanup |
 | `pair_ttl` | `60` | Seconds before connection attempt tracking expires |
 | `enabled` | `true` | Enable/disable relay |
 

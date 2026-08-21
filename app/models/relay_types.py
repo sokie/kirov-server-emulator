@@ -45,6 +45,10 @@ class RelayRoute:
     # Client endpoints (where to forward traffic)
     client_a: RelayEndpoint | None = None  # Client A's actual address
     client_b: RelayEndpoint | None = None  # Client B's actual address
+    expected_ip_a: str | None = None
+    expected_ip_b: str | None = None
+    client_a_last_activity: float | None = None
+    client_b_last_activity: float | None = None
 
     # Activity tracking
     created_at: float = field(default_factory=time.time)
@@ -54,13 +58,34 @@ class RelayRoute:
     packets_forwarded: int = 0
     bytes_forwarded: int = 0
 
-    def update_activity(self):
+    def update_activity(self, side: str):
         """Update last activity timestamp."""
-        self.last_activity = time.time()
+        now = time.time()
+        self.last_activity = now
+        if side == "a":
+            self.client_a_last_activity = now
+        else:
+            self.client_b_last_activity = now
+
+    def reset_endpoints(self):
+        """Allow a new negotiation to register fresh UDP endpoints."""
+        now = time.time()
+        self.client_a = None
+        self.client_b = None
+        self.client_a_last_activity = None
+        self.client_b_last_activity = None
+        self.created_at = now
+        self.last_activity = now
+        self.packets_forwarded = 0
+        self.bytes_forwarded = 0
 
     def is_stale(self, timeout_seconds: float) -> bool:
         """Check if this route has been inactive for too long."""
-        return time.time() - self.last_activity > timeout_seconds
+        now = time.time()
+        if now - self.created_at > timeout_seconds and not self.is_ready():
+            return True
+        activity = (self.client_a_last_activity, self.client_b_last_activity)
+        return any(last is not None and now - last > timeout_seconds for last in activity)
 
     def is_ready(self) -> bool:
         """Check if both clients have been registered."""

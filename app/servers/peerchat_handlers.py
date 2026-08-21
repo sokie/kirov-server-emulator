@@ -10,6 +10,7 @@ from app.config.app_settings import app_config
 from app.models.fesl_types import GAMESPY_GAME_KEY_MAP
 from app.models.irc_types import GameSpyCommand, IRCCommand, IRCMessage, IRCNumeric
 from app.models.peerchat_state import irc_channels, irc_clients, irc_clients_lock, join_channel, part_channel
+from app.servers.peerchat_relay import peerchat_relay
 from app.util.logging_helper import get_logger
 from app.util.peerchat_crypt import PeerchatCipherFactory
 
@@ -233,6 +234,7 @@ class IRCFactory:
         message.params[0]
         message.params[1]
         peerchat_game_name = message.params[2]
+        client.game_name = peerchat_game_name
 
         # Look up the gamekey from config using the peerchat game name
         config_key = GAMESPY_GAME_KEY_MAP.get(peerchat_game_name)
@@ -428,6 +430,11 @@ class IRCFactory:
         target = message.params[0]
         text = message.params[1]
 
+        direct_targets = (
+            [nick.strip() for nick in target.split(",") if nick.strip()] if not target.startswith("#") else []
+        )
+        await peerchat_relay.observe(client, direct_targets, text)
+
         if target.startswith("#"):
             # Channel message - broadcast to all members
 
@@ -439,6 +446,29 @@ class IRCFactory:
                 await client.send_numeric(IRCNumeric.ERR_CANNOTSENDTOCHAN, target, "Cannot send to channel")
                 return
 
+            with irc_clients_lock:
+                channel = irc_channels[target]
+                ordered_nicknames = channel.join_order + sorted(channel.users.difference(channel.join_order))
+                channel_clients = {
+                    nickname: irc_clients[nickname] for nickname in ordered_nicknames if nickname in irc_clients
+                }
+            peerchat_relay.remember_player_numbers(client, target, channel_clients, text)
+            prepared = peerchat_relay.prepare_slot_list(client, target, channel_clients, text)
+            if prepared is not None:
+                for request_prefix, request_text in prepared.host_requests:
+                    await client.send_message(
+                        IRCMessage(
+                            command="UTM",
+                            params=[client.user.nickname or target, request_text],
+                            prefix=request_prefix,
+                        )
+                    )
+                for nickname, target_text in prepared.messages.items():
+                    await channel_clients[nickname].send_message(
+                        IRCMessage(command="UTM", params=[target, target_text], prefix=client.user.get_prefix())
+                    )
+                return
+
             # Build UTM message with sender prefix
             utm_message = IRCMessage(command="UTM", params=[target, text], prefix=client.user.get_prefix())
             await client.broadcast_to_channel(target, utm_message, exclude_self=True)
@@ -446,7 +476,7 @@ class IRCFactory:
             # Direct message to one or more users (comma-separated)
 
             # Split comma-separated targets
-            targets = [t.strip() for t in target.split(",") if t.strip()]
+            targets = direct_targets
 
             for target_nick in targets:
                 with irc_clients_lock:
@@ -459,7 +489,10 @@ class IRCFactory:
                     target_client = irc_clients[target_nick]
 
                 # Build message with individual target nick (not the comma list)
-                utm_message = IRCMessage(command="UTM", params=[target_nick, text], prefix=client.user.get_prefix())
+                target_text = peerchat_relay.rewrite_for_target(client, target_nick, text)
+                utm_message = IRCMessage(
+                    command="UTM", params=[target_nick, target_text], prefix=client.user.get_prefix()
+                )
                 try:
                     await target_client.send_message(utm_message)
                 except Exception as e:

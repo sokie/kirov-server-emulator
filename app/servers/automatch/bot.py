@@ -59,6 +59,8 @@ class AutoMatchBot:
             if channel_name in irc_channels:
                 channel = irc_channels[channel_name]
                 channel.users.discard(self.factory.nickname)
+                if self.factory.nickname in channel.join_order:
+                    channel.join_order.remove(self.factory.nickname)
                 channel.operators.discard(self.factory.nickname)
                 if self.factory.nickname in channel.user_stats:
                     del channel.user_stats[self.factory.nickname]

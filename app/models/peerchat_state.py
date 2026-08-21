@@ -38,6 +38,8 @@ async def join_channel(client, channel_name: str):
 
     # Add user to channel
     channel.users.add(client.user.nickname)
+    if client.user.nickname not in channel.join_order:
+        channel.join_order.append(client.user.nickname)
     client.user.channels.add(channel_name)
 
     # First user becomes operator
@@ -68,6 +70,8 @@ async def part_channel(client, channel_name: str, reason: str = ""):
 
     # Remove user
     channel.users.discard(client.user.nickname)
+    if client.user.nickname in channel.join_order:
+        channel.join_order.remove(client.user.nickname)
     channel.operators.discard(client.user.nickname)
     client.user.channels.discard(channel_name)
 

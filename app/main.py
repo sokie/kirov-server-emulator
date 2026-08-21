@@ -18,6 +18,7 @@ from app.servers.fesl_server import start_fesl_server
 from app.servers.gamestats_server import start_gamestats_server
 from app.servers.gp_server import start_gp_server
 from app.servers.natneg_server import start_natneg_server
+from app.servers.peerchat_relay import peerchat_relay
 from app.servers.peerchat_server import start_irc_server
 from app.servers.query_master_tcp import start_master_server
 from app.servers.query_master_udp import start_heartbeat_server
@@ -94,6 +95,10 @@ async def lifespan(app: FastAPI):
             port_start=relay_port_start,
             port_end=relay_port_end,
             session_timeout=relay_timeout,
+        )
+        peerchat_relay.configure(
+            relay_server,
+            advertised_host=app_config.relay.advertised_host,
         )
         print(f"INFO:     Relay server is ready (port range {relay_port_start}-{relay_port_end})")
 

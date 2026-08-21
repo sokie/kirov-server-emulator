@@ -7,6 +7,7 @@ is forwarded to the client associated with the other port.
 """
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 
 from app.models.relay_types import RelayEndpoint, RelayRoute
@@ -14,6 +15,8 @@ from app.servers.port_pool import PortPool
 from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
+
+RELAY_REBIND_DELAY_SECONDS = 10.0
 
 
 class RelayPortProtocol(asyncio.DatagramProtocol):
@@ -60,52 +63,13 @@ class RelayPortProtocol(asyncio.DatagramProtocol):
         # Determine which client slot this port corresponds to and validate/register
         client_endpoint = RelayEndpoint(client_ip, client_port)
         if self.port == route.port_a:
-            if route.client_a is None:
-                # Initial registration
-                route.client_a = client_endpoint
-                logger.info(
-                    "Relay port %d: registered client A at %s:%d",
-                    self.port,
-                    client_ip,
-                    client_port,
-                )
-            elif route.client_a != client_endpoint:
-                # Packet from unauthorized endpoint - drop it
-                logger.warning(
-                    "Relay port %d: dropping packet from unauthorized endpoint %s:%d (expected %s:%d)",
-                    self.port,
-                    client_ip,
-                    client_port,
-                    route.client_a.ip,
-                    route.client_a.port,
-                )
+            if not self._accept_endpoint(route, "a", client_endpoint):
                 return
             peer_endpoint = route.client_b
         else:  # port_b
-            if route.client_b is None:
-                # Initial registration
-                route.client_b = client_endpoint
-                logger.info(
-                    "Relay port %d: registered client B at %s:%d",
-                    self.port,
-                    client_ip,
-                    client_port,
-                )
-            elif route.client_b != client_endpoint:
-                # Packet from unauthorized endpoint - drop it
-                logger.warning(
-                    "Relay port %d: dropping packet from unauthorized endpoint %s:%d (expected %s:%d)",
-                    self.port,
-                    client_ip,
-                    client_port,
-                    route.client_b.ip,
-                    route.client_b.port,
-                )
+            if not self._accept_endpoint(route, "b", client_endpoint):
                 return
             peer_endpoint = route.client_a
-
-        # Update activity (only for valid packets from registered endpoints)
-        route.update_activity()
 
         # Forward to peer if known
         if peer_endpoint is not None:
@@ -129,6 +93,56 @@ class RelayPortProtocol(asyncio.DatagramProtocol):
                 "Relay port %d: dropping packet, peer not yet registered",
                 self.port,
             )
+
+    def _accept_endpoint(self, route: RelayRoute, side: str, endpoint: RelayEndpoint) -> bool:
+        current = route.client_a if side == "a" else route.client_b
+        expected_ip = route.expected_ip_a if side == "a" else route.expected_ip_b
+        last_activity = route.client_a_last_activity if side == "a" else route.client_b_last_activity
+
+        if expected_ip is not None and endpoint.ip != expected_ip:
+            logger.warning(
+                "Relay port %d: dropping packet from unexpected IP %s (expected %s)",
+                self.port,
+                endpoint.ip,
+                expected_ip,
+            )
+            return False
+
+        if current is None:
+            setattr(route, f"client_{side}", endpoint)
+            logger.info(
+                "Relay port %d: registered client %s at %s:%d",
+                self.port,
+                side.upper(),
+                endpoint.ip,
+                endpoint.port,
+            )
+        elif current != endpoint:
+            inactive_for = time.time() - (last_activity or route.created_at)
+            if current.ip != endpoint.ip or inactive_for < RELAY_REBIND_DELAY_SECONDS:
+                logger.warning(
+                    "Relay port %d: dropping packet from unauthorized endpoint %s:%d (expected %s:%d)",
+                    self.port,
+                    endpoint.ip,
+                    endpoint.port,
+                    current.ip,
+                    current.port,
+                )
+                return False
+            setattr(route, f"client_{side}", endpoint)
+            logger.info(
+                "Relay port %d: rebound client %s from %s:%d to %s:%d after %.1fs",
+                self.port,
+                side.upper(),
+                current.ip,
+                current.port,
+                endpoint.ip,
+                endpoint.port,
+                inactive_for,
+            )
+
+        route.update_activity(side)
+        return True
 
     def connection_lost(self, exc: Exception | None):
         """Called when the connection is closed."""
