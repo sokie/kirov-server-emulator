@@ -283,7 +283,7 @@ async def tw_get_player_ladder_ratings(gp: str = ""):
     return Response(content=content, media_type="text/html")
 
 
-@clan_router.get("/CC3Services/GetPlayerRankIcon.aspx")
+@clan_router.get("/cc3services/GetPlayerRankIcon.aspx")
 async def tw_get_player_rank_icon(gp: str = "", pid: int = 0, ro: int = 0, size: str = ""):
     """Returns the TW rank icon for a player as a PNG image."""
     image_data = _resolve_rank_icon(GAME_ID_TW, pid=pid, gp=gp, ro=ro, size=size)
