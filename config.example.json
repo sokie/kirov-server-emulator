@@ -26,6 +26,7 @@
   },
   "relay": {
     "host": "0.0.0.0",
+    "advertised_host": null,
     "port_start": 50000,
     "port_end": 50999,
     "session_timeout": 120,

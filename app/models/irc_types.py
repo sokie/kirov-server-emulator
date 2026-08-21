@@ -89,6 +89,7 @@ class IRCChannel:
     topic: str | None = None
     modes: str = ""
     users: set[str] = field(default_factory=set)  # Set of nicknames
+    join_order: list[str] = field(default_factory=list)
     operators: set[str] = field(default_factory=set)  # Set of operator nicknames
     user_stats: dict[str, dict[str, str]] = field(default_factory=dict)  # GameSpy user stats
 
