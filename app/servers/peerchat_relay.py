@@ -406,7 +406,7 @@ class PeerchatRelayCoordinator:
         )
         if command is None:
             return None
-        if command == "PORT" and len(parts) < 4:
+        if command == "PORT" and len(parts) < 5:
             return None
         suffix = token[len(command) :]
         if not suffix.isdigit():
@@ -449,7 +449,7 @@ class PeerchatRelayCoordinator:
             fields = slots[slot].split(",")
             slot_ip = fields[1].upper() if len(fields) >= 3 else ""
             matches = [name for name in remaining if cls._ip_hex(clients[name].addr[0]) == slot_ip]
-            nickname = matches[0] if len(matches) == 1 else remaining[0] if remaining else None
+            nickname = matches[0] if len(matches) == 1 else None
             if nickname is not None:
                 result[slot] = nickname
                 remaining.remove(nickname)

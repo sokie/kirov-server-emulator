@@ -190,6 +190,21 @@ class TestPeerchatRelay:
     def test_malformed_port_message_is_not_parsed(self):
         """A truncated PORT message should not reach rewriting."""
         assert PeerchatRelayCoordinator._parse_nat("NAT/ PORT0 CK") is None
+        assert PeerchatRelayCoordinator._parse_nat("NAT/ PORT0 11718 COOKIE") is None
+
+    def test_unmatched_slot_does_not_use_arbitrary_channel_member(self):
+        """An unmatched slot must not be assigned to a spectator or unverified client."""
+        coordinator = PeerchatRelayCoordinator()
+        coordinator.configure(make_relay_server())
+        host = make_client("John", TEST_IP_JOHN)
+        spectator = make_client("Alice", TEST_IP_ALICE)
+        guest = make_client("Doe", TEST_IP_DOE)
+        clients = {"John": host, "Alice": spectator, "Doe": guest}
+        slot_list = "SL/ M=0;S=H,C0A8010A,10000,TT,:H,C0A80163,10001,FT,:X:X:X:X:X:X:;"
+
+        prepared = coordinator.prepare_slot_list(host, TEST_CHANNEL, clients, slot_list)
+
+        assert prepared is None
 
     def test_relay_allows_same_ip_port_rebind_after_silence(self):
         """An authorized client may rebind its port after being silent."""
@@ -243,3 +258,9 @@ class TestPeerchatRelay:
                 assert relay_server.advertised_host == expected_host
             finally:
                 await relay_server.stop()
+
+    @pytest.mark.asyncio
+    async def test_wildcard_relay_requires_advertised_host(self):
+        """A wildcard listener cannot be advertised to game clients."""
+        with pytest.raises(ValueError, match="advertised_host"):
+            await RelayServer(host="0.0.0.0").start()

@@ -7,6 +7,7 @@ is forwarded to the client associated with the other port.
 """
 
 import asyncio
+import ipaddress
 import time
 from dataclasses import dataclass, field
 
@@ -184,7 +185,16 @@ class RelayServer:
 
     async def start(self):
         """Start the relay server and cleanup task."""
-        if self.advertised_host is None:
+        if self.host == "0.0.0.0":
+            if self.advertised_host is None:
+                raise ValueError("relay.advertised_host is required when relay.host is 0.0.0.0")
+            try:
+                advertised_ip = ipaddress.IPv4Address(self.advertised_host)
+            except ipaddress.AddressValueError as exc:
+                raise ValueError("relay.advertised_host must be an IPv4 address") from exc
+            if advertised_ip.is_unspecified:
+                raise ValueError("relay.advertised_host must be reachable by game clients")
+        elif self.advertised_host is None:
             self.advertised_host = self.host
         logger.info(
             "Relay server starting (host=%s, advertised_host=%s, ports=%d-%d, timeout=%ds)",
