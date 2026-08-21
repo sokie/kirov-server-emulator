@@ -87,7 +87,7 @@ Host                    Server                    Guest
 | Option | Default | Description |
 |--------|---------|-------------|
 | `host` | `0.0.0.0` | Local address on which the relay sockets listen |
-| `advertised_host` | `null` | IPv4 address sent to clients; inferred from peerchat when omitted |
+| `advertised_host` | `null` | IPv4 address sent to clients; defaults to `host` when omitted |
 | `port_start` | `50000` | Start of UDP port range |
 | `port_end` | `59999` | End of UDP port range (10,000 ports = 5,000 pairs) |
 | `session_timeout` | `120` | Seconds one endpoint may be silent before relay route cleanup |

@@ -11,8 +11,7 @@ pytest_plugins = ("pytest_asyncio",)
 
 from app.models.relay_types import RelayEndpoint, RelayRoute
 from app.servers.peerchat_relay import PeerchatRelayCoordinator
-from app.servers.relay_server import RelayPortProtocol
-
+from app.servers.relay_server import RelayPortProtocol, RelayServer
 
 # =============================================================================
 # Test Data Constants (placeholder/fake data)
@@ -43,6 +42,7 @@ def make_client(nickname: str, ip: str):
 def make_relay_server(*routes: RelayRoute):
     """Create a relay server mock backed by the supplied routes."""
     relay_server = Mock()
+    relay_server.advertised_host = TEST_RELAY_IP
     relay_server.allocate_route = AsyncMock(side_effect=routes)
     relay_server.get_route_by_port.side_effect = lambda port: next(
         (route for route in routes if port in (route.port_a, route.port_b)), None
@@ -59,7 +59,7 @@ class TestPeerchatRelay:
         route = RelayRoute(50000, 50001)
         relay_server = make_relay_server(route)
         coordinator = PeerchatRelayCoordinator()
-        coordinator.configure(relay_server, TEST_RELAY_IP)
+        coordinator.configure(relay_server)
         host = make_client("John", TEST_IP_JOHN)
         guest = make_client("Doe", TEST_IP_DOE)
         clients = {"John": host, "Doe": guest}
@@ -104,7 +104,7 @@ class TestPeerchatRelay:
         route_bc = RelayRoute(50002, 50003)
         relay_server = make_relay_server(route_ab, route_bc)
         coordinator = PeerchatRelayCoordinator()
-        coordinator.configure(relay_server, TEST_RELAY_IP)
+        coordinator.configure(relay_server)
         host = make_client("John", TEST_IP_JOHN)
         guest_a = make_client("Doe", TEST_IP_DOE)
         guest_b = make_client("Alice", TEST_IP_ALICE)
@@ -148,7 +148,7 @@ class TestPeerchatRelay:
         route = RelayRoute(50000, 50001)
         relay_server = make_relay_server(route)
         coordinator = PeerchatRelayCoordinator()
-        coordinator.configure(relay_server, TEST_RELAY_IP)
+        coordinator.configure(relay_server)
         host = make_client("John", TEST_IP_JOHN)
         guest = make_client("Doe", TEST_IP_JOHN)
         clients = {"John": host, "Doe": guest}
@@ -165,7 +165,7 @@ class TestPeerchatRelay:
     def test_other_games_are_not_modified(self):
         """Peerchat relay preparation should not modify other games."""
         coordinator = PeerchatRelayCoordinator()
-        coordinator.configure(Mock(), TEST_RELAY_IP)
+        coordinator.configure(make_relay_server())
         host = make_client("John", TEST_IP_JOHN)
         guest = make_client("Doe", TEST_IP_DOE)
         host.game_name = "redalert3pc"
@@ -174,6 +174,22 @@ class TestPeerchatRelay:
         prepared = coordinator.prepare_slot_list(host, TEST_CHANNEL, {"John": host, "Doe": guest}, slot_list)
 
         assert prepared is None
+
+    def test_non_slot_list_utm_is_not_modified(self):
+        """Only SL/ messages should be prepared as CNC3 slot lists."""
+        coordinator = PeerchatRelayCoordinator()
+        coordinator.configure(make_relay_server())
+        host = make_client("John", TEST_IP_JOHN)
+        guest = make_client("Doe", TEST_IP_DOE)
+        text = "GM/ opts=foo;S=H,C0A8010A,1,x,:H,C0A80114,2,y,:;more=1;"
+
+        prepared = coordinator.prepare_slot_list(host, TEST_CHANNEL, {"John": host, "Doe": guest}, text)
+
+        assert prepared is None
+
+    def test_malformed_port_message_is_not_parsed(self):
+        """A truncated PORT message should not reach rewriting."""
+        assert PeerchatRelayCoordinator._parse_nat("NAT/ PORT0 CK") is None
 
     def test_relay_allows_same_ip_port_rebind_after_silence(self):
         """An authorized client may rebind its port after being silent."""
@@ -201,3 +217,29 @@ class TestPeerchatRelay:
         route.client_b_last_activity = time.time()
 
         assert route.is_stale(120)
+
+    def test_unready_route_expires_from_last_activity(self):
+        """A partially registered route should expire only after going quiet."""
+        route = RelayRoute(50000, 50001)
+        route.created_at = 1
+        route.last_activity = time.time()
+
+        assert not route.is_stale(120)
+
+        route.last_activity = 1
+        assert route.is_stale(120)
+
+    @pytest.mark.asyncio
+    async def test_relay_server_resolves_advertised_host_once(self):
+        """The relay should expose one address to NATNEG and PeerChat."""
+        servers = (
+            (RelayServer(host=TEST_IP_JOHN), TEST_IP_JOHN),
+            (RelayServer(host="0.0.0.0", advertised_host=TEST_RELAY_IP), TEST_RELAY_IP),
+        )
+
+        for relay_server, expected_host in servers:
+            await relay_server.start()
+            try:
+                assert relay_server.advertised_host == expected_host
+            finally:
+                await relay_server.stop()

@@ -51,7 +51,6 @@ class PeerchatRelayCoordinator:
 
     def __init__(self):
         self.relay_server: RelayServer | None = None
-        self.advertised_host: str | None = None
         self.lobbies: dict[str, PeerchatLobby] = {}
         self.channel_nodes: dict[str, dict[int, str]] = {}
         self.negotiations: dict[tuple[str, PlayerPair], PeerchatNegotiation] = {}
@@ -64,13 +63,8 @@ class PeerchatRelayCoordinator:
         self.player_ips: dict[str, str] = {}
         self._route_lock = asyncio.Lock()
 
-    def configure(
-        self,
-        relay_server: "RelayServer | None",
-        advertised_host: str | None = None,
-    ):
+    def configure(self, relay_server: "RelayServer | None"):
         self.relay_server = relay_server
-        self.advertised_host = advertised_host
         self.lobbies.clear()
         self.channel_nodes.clear()
         self.negotiations.clear()
@@ -116,7 +110,7 @@ class PeerchatRelayCoordinator:
         text: str,
     ) -> SlotPreparation | None:
         """Give every stock client a shared slot IP before NAT starts."""
-        if self.relay_server is None or not self._is_cnc3(host):
+        if self.relay_server is None or not self._is_cnc3(host) or not text.startswith("SL/ "):
             return None
 
         self._prune_state()
@@ -169,7 +163,7 @@ class PeerchatRelayCoordinator:
             clients=clients,
         )
         prepared_text = prefix + ":".join(prepared_slots) + suffix
-        messages = {nickname: prepared_text for nickname in slot_players.values()}
+        messages = dict.fromkeys(slot_players.values(), prepared_text)
         if host_requests:
             logger.info(
                 "Preparing CNC3 slot IPs through %d stock REQ/ IP update(s)",
@@ -256,7 +250,7 @@ class PeerchatRelayCoordinator:
 
         route = self._active_route(pair)
         relay_port = self._port_for(pair, target)
-        relay_ip = self._relay_ip_hex(client)
+        relay_ip = self._relay_ip_hex()
         if route is None or relay_port is None or relay_ip is None:
             logger.warning("Cannot determine relay endpoint for %s in negotiation %s", target, cookie)
             return text
@@ -375,8 +369,10 @@ class PeerchatRelayCoordinator:
         for pair in list(self.pair_routes):
             self._active_route(pair)
 
-    def _relay_ip_hex(self, client: "IRCClient") -> str | None:
-        relay_host = self.advertised_host or client.writer.get_extra_info("sockname")[0]
+    def _relay_ip_hex(self) -> str | None:
+        if self.relay_server is None:
+            return None
+        relay_host = self.relay_server.advertised_host
         relay_ip = self._ip_hex(relay_host)
         if relay_ip is None:
             logger.error("Relay advertised_host must be an IPv4 address, got %r", relay_host)
@@ -409,6 +405,8 @@ class PeerchatRelayCoordinator:
             None,
         )
         if command is None:
+            return None
+        if command == "PORT" and len(parts) < 4:
             return None
         suffix = token[len(command) :]
         if not suffix.isdigit():

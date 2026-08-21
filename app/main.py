@@ -92,14 +92,12 @@ async def lifespan(app: FastAPI):
         print(f"INFO:     Starting Relay server on {relay_host}:{relay_port_start}-{relay_port_end}...")
         relay_server = await start_relay_server(
             host=relay_host,
+            advertised_host=app_config.relay.advertised_host,
             port_start=relay_port_start,
             port_end=relay_port_end,
             session_timeout=relay_timeout,
         )
-        peerchat_relay.configure(
-            relay_server,
-            advertised_host=app_config.relay.advertised_host,
-        )
+        peerchat_relay.configure(relay_server)
         print(f"INFO:     Relay server is ready (port range {relay_port_start}-{relay_port_end})")
 
     # Start NAT Negotiation server

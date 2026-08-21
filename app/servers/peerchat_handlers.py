@@ -463,10 +463,15 @@ class IRCFactory:
                             prefix=request_prefix,
                         )
                     )
+                # The host echo is deliberate: every player must receive its prepared slot list.
                 for nickname, target_text in prepared.messages.items():
                     await channel_clients[nickname].send_message(
                         IRCMessage(command="UTM", params=[target, target_text], prefix=client.user.get_prefix())
                     )
+                original_message = IRCMessage(command="UTM", params=[target, text], prefix=client.user.get_prefix())
+                for nickname, channel_client in channel_clients.items():
+                    if nickname not in prepared.messages:
+                        await channel_client.send_message(original_message)
                 return
 
             # Build UTM message with sender prefix

@@ -165,6 +165,7 @@ class RelayServer:
     host: str = "0.0.0.0"
     port_pool: PortPool = field(default_factory=PortPool)
     session_timeout: float = 120.0  # Seconds of inactivity before cleanup
+    advertised_host: str | None = None
 
     # Active routes by port pair key (min_port, max_port)
     _routes: dict[tuple[int, int], RelayRoute] = field(default_factory=dict)
@@ -183,9 +184,12 @@ class RelayServer:
 
     async def start(self):
         """Start the relay server and cleanup task."""
+        if self.advertised_host is None:
+            self.advertised_host = self.host
         logger.info(
-            "Relay server starting (host=%s, ports=%d-%d, timeout=%ds)",
+            "Relay server starting (host=%s, advertised_host=%s, ports=%d-%d, timeout=%ds)",
             self.host,
+            self.advertised_host,
             self.port_pool.port_start,
             self.port_pool.port_end,
             int(self.session_timeout),
@@ -350,6 +354,7 @@ async def start_relay_server(
     port_start: int = 50000,
     port_end: int = 59999,
     session_timeout: float = 120.0,
+    advertised_host: str | None = None,
 ) -> RelayServer:
     """
     Start the relay server.
@@ -359,6 +364,7 @@ async def start_relay_server(
         port_start: Start of port range for relay.
         port_end: End of port range for relay.
         session_timeout: Seconds of inactivity before route cleanup.
+        advertised_host: Host advertised to relay clients. Defaults to host.
 
     Returns:
         The started RelayServer instance.
@@ -366,6 +372,7 @@ async def start_relay_server(
     port_pool = PortPool(port_start=port_start, port_end=port_end)
     server = RelayServer(
         host=host,
+        advertised_host=advertised_host,
         port_pool=port_pool,
         session_timeout=session_timeout,
     )

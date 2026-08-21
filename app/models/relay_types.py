@@ -82,10 +82,13 @@ class RelayRoute:
     def is_stale(self, timeout_seconds: float) -> bool:
         """Check if this route has been inactive for too long."""
         now = time.time()
-        if now - self.created_at > timeout_seconds and not self.is_ready():
-            return True
-        activity = (self.client_a_last_activity, self.client_b_last_activity)
-        return any(last is not None and now - last > timeout_seconds for last in activity)
+        if not self.is_ready():
+            return now - self.last_activity > timeout_seconds
+        return any(
+            now - last > timeout_seconds
+            for last in (self.client_a_last_activity, self.client_b_last_activity)
+            if last is not None
+        )
 
     def is_ready(self) -> bool:
         """Check if both clients have been registered."""

@@ -62,7 +62,7 @@ class RelaySettings(BaseModel):
     host: str = Field(default="0.0.0.0")
     advertised_host: str | None = Field(
         default=None,
-        description="IPv4 address advertised to clients; inferred from the peerchat socket when omitted",
+        description="IPv4 address advertised to clients; defaults to host when omitted",
     )
     port_start: int = Field(default=50000, gt=1024, lt=65536)  # Start of port range
     port_end: int = Field(default=59999, gt=1024, lt=65536)  # End of port range
