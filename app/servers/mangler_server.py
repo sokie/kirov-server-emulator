@@ -34,6 +34,9 @@ def build_mangler_response(data: bytes, addr: tuple[str, int]) -> bytes | None:
     if magic not in (CNC3_MAGIC, GENERALS_MAGIC):
         return None
 
+    if data[16] != REQUEST_COMMAND:
+        return None
+
     expected_checksum = struct.unpack_from("!I", data)[0]
     if mangler_checksum(data[4:]) != expected_checksum:
         return None

@@ -26,13 +26,14 @@ def make_request(
     magic: int = CNC3_MAGIC,
     packet_id: int = 0x7F00,
     original_port: int = TEST_CLIENT_PORT,
+    command: int = REQUEST_COMMAND,
     blitz: bool = False,
 ) -> bytes:
     packet = bytearray(b"\x44" * 20)
     struct.pack_into("!H", packet, 4, magic)
     struct.pack_into("!H", packet, 6, packet_id)
     struct.pack_into("!H", packet, 10, original_port)
-    packet[16] = REQUEST_COMMAND
+    packet[16] = command
     packet[17] = int(blitz)
     struct.pack_into("!I", packet, 0, mangler_checksum(packet[4:]))
     return bytes(packet)
@@ -73,6 +74,7 @@ def test_cnc3_wire_packet_matches_known_response():
         b"too short",
         make_request()[:16] + b"\x00\x00\x00\x00",
         make_request(magic=0xFFFF),
+        make_request(command=RESPONSE_COMMAND),
     ],
 )
 def test_malformed_request_is_rejected(packet: bytes):
