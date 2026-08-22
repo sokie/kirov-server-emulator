@@ -47,6 +47,15 @@ class NatNegSettings(BaseModel):
     enabled: bool = Field(default=True)
 
 
+class ManglerSettings(BaseModel):
+    """SAGE NAT classification and port-prediction service settings."""
+
+    host: str = Field(default="0.0.0.0")
+    port: int = Field(default=4321, gt=1024, lt=65533)
+    blitz_enabled: bool = Field(default=True)
+    enabled: bool = Field(default=True)
+
+
 class MasterServerSettings(BaseModel):
     """GameSpy Master Server settings for server/room list queries."""
 
@@ -104,6 +113,7 @@ class AppSettings(BaseSettings):
     fesl: FeslSettings = Field(default_factory=FeslSettings)
     gp: GpSettings = Field(default_factory=GpSettings)
     natneg: NatNegSettings = Field(default_factory=NatNegSettings)
+    mangler: ManglerSettings = Field(default_factory=ManglerSettings)
     master: MasterServerSettings = Field(default_factory=MasterServerSettings)
     relay: RelaySettings = Field(default_factory=RelaySettings)
     gamestats: GameStatsSettings = Field(default_factory=GameStatsSettings)

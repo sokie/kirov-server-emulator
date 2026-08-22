@@ -18,6 +18,12 @@
     "session_timeout": 30,
     "enabled": true
   },
+  "mangler": {
+    "host": "0.0.0.0",
+    "port": 4321,
+    "blitz_enabled": true,
+    "enabled": true
+  },
   "master": {
     "host": "0.0.0.0",
     "port": 28910,
