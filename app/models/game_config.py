@@ -103,7 +103,7 @@ SAGE_LEVEL_THRESHOLDS = [
     11310,
 ]
 
-# XP awarded per win: index 0=unranked(1), 1=ranked_1v1(2), 2=ranked_2v2(2), 3=clan(5)
+# Sake ScoringMultipliers record 1: UnrankedLosses, UnrankedWins, RankedLosses, RankedWins
 SAGE_SCORING_MULTIPLIERS = [1, 2, 2, 5]
 
 # Per-game faction maps: display_name → storage_key

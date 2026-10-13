@@ -1,189 +1,191 @@
-# Match Report Binary Format and SOAP Endpoints
+# Match Reports, Careers and Sake (Red Alert 3)
 
-This document describes the binary match report format used by Red Alert 3 and the SOAP endpoints for the Competition service.
+This document describes how Red Alert 3 reports a match, how the server turns reports into careers,
+and the Sake tables the game reads. Every value here was read from `RA3_1.13.game`; the addresses are
+for that build. Kane's Wrath and Tiberium Wars keep their own handling and are not covered.
 
-## Competition Service SOAP Endpoints
+## When the game sends a report
 
-The Competition service handles match session tracking and report submission.
+- Only in an online game (game mode 4). LAN, skirmish, single-player campaign and co-op campaign
+  (game modes 1, 2, 5-8) send no report.
+- Only when at least two humans are in the game, and the game ran for a minimum time.
+- Every human client that is still in the game sends its own report, with its own player first. AI
+  players are not in the roster.
+- A report is authoritative unless its own player left before the end. Only an authoritative report
+  lists the other players. A report that is not authoritative lists only its own player.
+- The server settles the match from the first authoritative report and ignores the others (one
+  settlement per `csid`).
+- The game creates one kind of report only (`scCreateReport` has one caller, developer version 5).
 
-**Endpoint:** `/competitionservice/competitionservice.asmx`
+## Competition service
 
-### CreateSession
+Endpoint: `/competitionservice/competitionservice.asmx`, namespace `http://gamespy.net/competition/`.
 
-Creates a new match session. Called by the match host when starting a ranked game.
+| Call | Sent by | Request | Reply |
+|---|---|---|---|
+| `CreateSession` | the host, at match start | certificate, proof, `gameid` 2128 | `result` 0, `csid`, `ccid` |
+| `SetReportIntention` | every player, twice | certificate, `csid`, `ccid`, `gameid`, `authoritative` | `result` 0, `csid`, `ccid` |
+| `SubmitReport` | every player still in the game | certificate, `csid`, `ccid`, `gameid`, `authoritative`, report | `result` 0 |
 
-**Request:**
-```xml
-<CreateSession xmlns="http://gamespy.net/competition/">
-  <certificate>
-    <profileid>12345</profileid>
-    <userid>67890</userid>
-    ...
-  </certificate>
-</CreateSession>
-```
+`SetReportIntention`:
 
-**Response:**
-```xml
-<CreateSessionResponse xmlns="http://gamespy.net/competition/">
-  <csid>abc123...</csid>
-  <ccid>xyz789...</ccid>
-</CreateSessionResponse>
-```
+- The game clears its connection id, then calls `SetReportIntention` with `authoritative` 1 and an
+  empty `ccid`, then again with `authoritative` 0 and the `ccid` from the first reply.
+- The SDK keeps the `ccid` of each reply and sends the last one with `SubmitReport`. The game keeps
+  the first one and gives it to the other players, so it is the player's roster GUID in every report.
+- So the server returns the same `ccid` when a player sends a `ccid` it already holds for that `csid`.
+- The server mints each `ccid` as `PPPPPPPP-BEEF-CAFE-XXXX-XXXXXXXXXXXX` with the persona id in the first
+  group, so each roster GUID names its player.
 
-- `csid`: Competition Session ID - unique identifier for the match
-- `ccid`: Competition Channel ID - identifier for the host player
+`SubmitReport` is a DIME message (`Content-Type: application/dime`): a record with the SOAP envelope,
+then a record with ID `report` and type `application/bin` that holds the report bytes.
 
-### SetReportIntention
+## Report layout
 
-Signals that a player intends to submit a match report. Called by each player at the end of a match.
+All numbers are big-endian.
 
-**Request:**
-```xml
-<SetReportIntention xmlns="http://gamespy.net/competition/">
-  <csid>abc123...</csid>
-  <ccid>xyz789...</ccid>
-  <certificate>
-    <profileid>12345</profileid>
-    ...
-  </certificate>
-</SetReportIntention>
-```
+| Offset | Size | Field |
+|---|---|---|
+| 0x00 | 4 | protocol version (2) |
+| 0x04 | 4 | developer version (5) |
+| 0x08 | 16 | MD5 of the whole report, computed with these 16 bytes set to zero |
+| 0x18 | 4 | game status, always 0 (complete) |
+| 0x1C | 4 | flags, bit 0 = authoritative |
+| 0x20 | 2 | player count |
+| 0x22 | 2 | team count |
+| 0x24 | 2 | game key count |
+| 0x26 | 2 | player key count, all players together |
+| 0x28 | 2 | team key count |
+| 0x2A | 2 | reserved |
+| 0x2C | 24 | section lengths: roster, auth, results, game, player, team |
 
-**Response:**
-```xml
-<SetReportIntentionResponse xmlns="http://gamespy.net/competition/">
-  <csid>abc123...</csid>
-  <ccid>player_ccid...</ccid>
-</SetReportIntentionResponse>
-```
+| Section | Content |
+|---|---|
+| roster | per player: connection GUID (16), team (4) |
+| auth | per player: 16 bytes, all zero in RA3 |
+| results | per player, then per team: result (4) |
+| game | key/value pairs |
+| player | per player: key count (2), then key/value pairs |
+| team | not used by RA3 (team results are in the results section) |
 
-The server generates a unique `ccid` for each player who sets their report intention.
+A key/value pair is key (2), type (2), value. Types: 0 int32, 1 int16, 2 byte, 3 string (1-byte
+length, then UTF-8, no terminator).
 
-### SubmitReport
+Results: 0 win, 1 loss, 3 disconnect, 4 desync. The game never sends 2 (draw).
 
-Submits the match report binary data.
+- The local player: 4 on a desync; 3 if it left the game; 1 if the game did not end normally or it
+  was not victorious; 0 if it won.
+- Another human: 4 on a desync; 1 or 3 if it left, by the time it left; 0 if victorious, else 1.
+- Teams (clan modes only, authoritative reports only): a team gets 0 if any member won, else the first
+  of 1, 3, 4 that a member has.
 
-**Request:** Mixed XML + Binary
-- XML SOAP envelope with `csid`, `ccid`, and `certificate`
-- Marker: `application/bin\0`
-- Raw binary report data
+### Mode index
 
-**Response:**
-```xml
-<SubmitReportResponse xmlns="http://gamespy.net/competition/">
-  <SubmitReportResult>1</SubmitReportResult>
-</SubmitReportResponse>
-```
+The game writes a mode index `gt` = lobby type - 2.
 
-## Binary Match Report Format
+| Lobby type | gt | Mode | Sake suffix |
+|---|---|---|---|
+| 3 | 1 | unranked (custom) | `UNRANKED` |
+| 4 | 2 | ranked 1v1 | `RANKED1V1` |
+| 5 | 3 | ranked 2v2 | `RANKED2V2` |
+| 6 | 4 | clan 1v1 | `CLAN1V1` |
+| 7 | 5 | clan 2v2 | `CLAN2V2` |
 
-The match report is a binary structure sent by each player after a match ends.
+Because `gt` runs from 1 to 5, `key % 5` does not give the mode: for clan 2v2 it gives 0, and the
+bases from 77 up are not multiples of 5. Read `gt` from the game section, then subtract it.
 
-### Header Structure (44 bytes)
+### Game keys
 
-| Offset | Size | Field | Description |
-|--------|------|-------|-------------|
-| 0x00 | 4 | protocol_version | Protocol version (big-endian uint32) |
-| 0x04 | 4 | developer_version | Developer version (big-endian uint32) |
-| 0x08 | 16 | checksum | MD5 checksum of report data |
-| 0x18 | 4 | game_status | Game status flags (big-endian uint32) |
-| 0x1C | 4 | flags | Additional flags (big-endian uint32) |
-| 0x20 | 2 | player_count | Number of players (big-endian uint16) |
-| 0x22 | 2 | team_count | Number of teams (big-endian uint16) |
-| 0x24 | 2 | game_key_count | Number of game section keys (big-endian uint16) |
-| 0x26 | 2 | player_key_count | Number of player section keys (big-endian uint16) |
-| 0x28 | 2 | team_key_count | Number of team section keys (big-endian uint16) |
-| 0x2A | 2 | padding | Padding bytes |
+Written in this order: mode flag, 61, 63, 64, 65, 62, 67, 68, 69, 70, 71, 66.
 
-### Section Length Table (24 bytes)
+| Key | Type | Value | Sent |
+|---|---|---|---|
+| 72 + gt | byte | 1, the mode flag | always |
+| 61 | string | map name | always |
+| 62 | int32 | match length in seconds | when the game ended normally |
+| 63 | string | game version, "1.13" | always |
+| 64 | byte | 1 when the map is in the map cache and its record byte +0x37 is 0 | always |
+| 65 | byte | 1 when the lobby has a MatchID | always |
+| 66 | string | map display name | when not empty |
+| 67 | string | the lobby MatchID, the same value the NewsTicker search filters on | with 65 |
+| 68 | string | a second lobby string (game-info vtable +0x68) | with 65 |
+| 69 | int32 | value +0x5C of an AI slot | with 65, when above 0 |
+| 70 | int32 | MultiplayerSettings +0x84 | when above 0 |
+| 71 | int32 | MultiplayerSettings +0x88 | with 70 |
 
-Following the header, six 4-byte section lengths (big-endian int32):
+### Player keys
 
-| Section | Description |
-|---------|-------------|
-| roster_section_length | Length of roster data |
-| auth_section_length | Length of auth data |
-| result_section_length | Length of result data |
-| game_section_length | Length of game section |
-| player_section_length | Length of player section |
-| team_section_length | Length of team section |
+The local player comes first, then the other humans. Values are this match's score keeper counts.
+The game runs in lockstep, so every client sends the same counts.
 
-### Roster Section
+| Key | Type | Value | Career key |
+|---|---|---|---|
+| side * 5 + gt (1-15) | int16 | 1; side 0 Allied, 1 Soviet, 2 Japan | faction |
+| 15 + gt | int32 | match length, local player only | - |
+| 72 | int32 | a value of the local player, clan modes only | - |
+| 20 + gt | int32 | structures built | `structures_built` |
+| 25 + gt | int32 | structures lost | `structures_lost` |
+| 30 + gt | int32 | structures destroyed | `structures_destroyed` |
+| 35 + gt | int32 | structures captured | `structures_captured` |
+| 40 + gt | int32 | units built | `units_built` |
+| 45 + gt | int32 | units lost | `units_lost` |
+| 50 + gt | int32 | units killed | `units_killed` |
+| 55 + gt | int32 | seconds of a timed score keeper state (not read from Sake) | `timed_state_seconds` |
+| 77 + gt | int32 | value of units lost | `units_lost_value` |
+| 82 + gt | int32 | value of units killed | `units_killed_value` |
+| 87 + gt | int32 | units lost to friendly fire | `units_killed_allied` |
+| 92 + gt | int32 | special abilities used | `units_activated` |
+| 97 + gt | int32 | powers activated | `powers_activated` |
+| 102 + gt | int32 | structures infiltrated | `structures_infiltrated` |
 
-Contains player GUIDs and team assignments. Each entry is 20 bytes:
+The report carries no career totals. Wins, losses and streaks come from the results.
 
-| Size | Field | Description |
-|------|-------|-------------|
-| 16 | player_id | Player UUID/GUID |
-| 4 | team_id | Team ID (big-endian int32) |
+## Careers
 
-**Player ID Format:**
-The player's persona ID is encoded in the last 8 hex characters of the UUID.
-Example: `xxxxxxxx-xxxx-xxxx-xxxx-xxxx00001234` -> persona_id = `0x1234` = 4660
+- Each settled match is stored in `ra3_match` (csid, mode, map, MatchID, length, players with their
+  result, faction and counts) and then folded onto each player's career.
+- The fold is the one the client applies to its own `Stats_<mode>.ini` files
+  (`Stats_UpdateLocalCareer`, 0x00636D40):
+  - `total_matches` +1, `total_time_played` + match length.
+  - A win: `wins` +1, `current_loss_streak` = 0, `current_win_streak` +1, `longest_win_streak` = max.
+  - Any other result: `losses` +1, `current_win_streak` = 0, `current_loss_streak` +1,
+    `longest_loss_streak` = max.
+  - Result 3 adds `disconnects`, result 4 adds `desyncs`.
+  - The report counts add up.
+  - Matches, wins, losses, time and streaks are also kept per faction.
+- Derived columns are computed when read: `WinLossRatio` = wins / max(losses, 1),
+  `UnitKillDeathRatio` = units killed / max(units lost, 1), `AverageGameLength` = time played / matches.
+- Score and rank: after a win or a loss, Score grows by a `ScoringMultipliers` value. The column is
+  picked by (won, ranked), and every mode but unranked counts as ranked. Rank is the highest level
+  whose `Levels` score the player has. The client predicts the same after each match. A player who
+  left or desynced gets no score.
+- `scripts/ra3_stats_tool.py rebuild` clears every RA3 career, score and rank and folds `ra3_match`
+  again. ELO is not touched.
+- The full stat list, with the stats the client keeps only for itself, is in
+  [`ra3_stat_catalog.csv`](ra3_stat_catalog.csv).
 
-### Auth Section
+## Sake tables
 
-Raw authentication data (currently not parsed).
+Endpoint: `/SakeStorageServer/StorageServer.asmx`. The game calls `GetMyRecords`, `SearchForRecords`,
+`GetSpecificRecords` and `CreateRecord` (custom maps only). It never writes stats to Sake.
 
-### Result Section
+| Table | Call | Request | Reply |
+|---|---|---|---|
+| `PlayerStats_v5` | GetMyRecords | 190 career columns | one value per column, in order |
+| `PlayerStats_v5` | GetMyRecords | `Score`, `Rank` | the player's score and rank |
+| `PlayerStats_v5` | SearchForRecords | `ownerid=N`, sort `recordid`, `Rank`, `ownerid` | another player's rank |
+| `Levels` | SearchForRecords | `Level>0`, sort `Level`, max 1000, `Score` | the first score of each rank |
+| `ScoringMultipliers` | GetSpecificRecords | record 1: `UnrankedLosses`, `UnrankedWins`, `RankedLosses`, `RankedWins` | shorts 1, 2, 2, 5 |
+| `NewsTicker` | SearchForRecords | `MatchID = '<id>' or MatchID = '-1'`, sort `TickerType desc` | ticker lines |
+| `custom_maps` | SearchForRecords, CreateRecord | `mapCRC=<crc>` | map sharing |
 
-Contains match results for each player. Each player has 4 bytes, with the result code at offset 3.
-
-**Result Codes:**
-| Code | Meaning |
-|------|---------|
-| 0 | Win |
-| 1 | Loss |
-| 3 | Disconnect |
-| 4 | Desync |
-
-### Game Section
-
-Key-value pairs with game metadata.
-
-**Data Value Format:**
-| Size | Field | Description |
-|------|-------|-------------|
-| 2 | key | Key ID (big-endian uint16) |
-| 2 | value_type | Type (0=INT32, 1=INT16, 2=BYTE, 3=STRING) |
-| varies | value | Value based on type |
-
-**Known Game Section Keys:**
-| Key | Type | Description |
-|-----|------|-------------|
-| 61 | STRING | Map path (e.g., "data/maps/official/...") |
-| 67 | STRING | Replay GUID |
-
-### Player Section
-
-Contains per-player data as key-value pairs. Each player entry starts with a key count (uint16).
-
-**Faction Detection (FACTION_KEY_MAP):**
-
-The game uses specific keys to indicate faction selection:
-
-| Key | Faction |
-|-----|---------|
-| 1 | Allied |
-| 6 | Soviet |
-| 11 | Empire |
-
-Additional keys (+1, +2 from base) indicate AutoMatch games.
-
-### Team Section
-
-Contains per-team data as key-value pairs (similar format to player section).
-
-## Report Types
-
-**Partial Report:** Contains only the submitting player's data (player_count = 1).
-
-**Final Report:** Contains all players' data (player_count > 1). Used for match finalization and ELO calculation.
-
-## Duration Calculation
-
-Match duration is not stored in the binary report. It is calculated server-side as:
-```
-duration = report_submission_time - competition_session.created_at
-```
+- The 190 columns are `<Stat>_<MODE>` for 26 stats and, for `TotalMatches`, `CareerLosses`,
+  `CareerWins` and `WinLossRatio`, also `<Stat>_<ALLIED|SOVIET|JAPAN>_<MODE>`. The game maps each
+  column to {lobby type, faction, stat id} with the table at 0x00C1D4D0 and stores only int (type 2)
+  and float (type 3) values; the ratios are floats.
+- `PlayerStats_v5` has one record per persona; a player without matches reads zeroes and rank 1.
+- Searches follow the SDK: `filter` and `targetRecordFilter` (comparisons, `and`, `or`, `not`, `in`,
+  `like`, `is null`), a multi-column `sort` with `desc`, `offset` and `max`, `surrounding` around the
+  target, `ownerids`, and `row` as the position.
+- The game has reply handlers for `RatingMatch` and `RatingPlayer`, but no build from 1.0 to 1.13
+  sends those searches.

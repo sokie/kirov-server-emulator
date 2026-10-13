@@ -100,15 +100,20 @@ For each game type (unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2):
 ## Match Finalization Flow
 
 1. **CreateSession**: Host creates match session, receives `csid` and `ccid`
-2. **SetReportIntention**: Each player signals intent to submit report, receives unique `ccid`
+2. **SetReportIntention**: Each player signals intent to submit report and receives a `ccid`; a `ccid` the
+   player sends again for the same session is returned unchanged
 3. **SubmitReport**: Each player submits their match report
-4. **Finalization**: When final report is received:
-   - Calculate match duration from session timestamps
+4. **Finalization**: When the first authoritative report is received:
+   - Read the match duration from the report
    - Extract winners/losers from report data
    - Calculate average opponent ELO for each team
    - Update ELO for all players
    - Update win/loss/disconnect counters
    - Mark session as finalized
+
+Red Alert 3 also stores the match in `ra3_match` and folds every reported count onto the career, and
+its score and rank follow the game's `ScoringMultipliers` and `Levels`. See
+[`STATS_AND_SOAP_FORMAT.md`](STATS_AND_SOAP_FORMAT.md).
 
 ## GetPlayerLadderRatings Response Format
 

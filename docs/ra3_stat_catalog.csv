@@ -1,0 +1,39 @@
+stat_id,career_key,sake_column,sake_type,fold,report_key,label
+0x00,current_win_streak,CurrentWinStreak_<MODE>,int,streak,,Current win streak
+0x01,current_loss_streak,CurrentLossStreak_<MODE>,int,streak,,Current loss streak
+0x02,longest_win_streak,LongestWinStreak_<MODE>,int,longest,,Longest win streak
+0x03,longest_loss_streak,LongestLossStreak_<MODE>,int,longest,,Longest loss streak
+0x04,total_matches,TotalMatches_<MODE>  (+ _ALLIED/_SOVIET/_JAPAN),int,count,,Matches played
+0x05,losses,CareerLosses_<MODE>  (+ _ALLIED/_SOVIET/_JAPAN),int,count,,Losses (any result but a win)
+0x06,wins,CareerWins_<MODE>  (+ _ALLIED/_SOVIET/_JAPAN),int,count,,Wins
+0x07,win_loss_ratio,WinLossRatio_<MODE>  (+ _ALLIED/_SOVIET/_JAPAN),float,derived,,"Wins / max(losses, 1)"
+0x08,avg_game_length,AverageGameLength_<MODE>,int,derived,,Time played / matches
+0x09,total_time_played,TotalTimePlayed_<MODE>,int,sum,,Seconds played
+0x0A,structures_built,CareerStructuresCreated_<MODE>,int,sum,20 + mode,Structures built
+0x0B,structures_lost,CareerStructuresLost_<MODE>,int,sum,25 + mode,Structures lost
+0x0C,structures_destroyed,CareerStructuresDestroyed_<MODE>,int,sum,30 + mode,Structures destroyed
+0x0D,structures_captured,CareerStructuresCaptured_<MODE>,int,sum,35 + mode,Structures captured
+0x0E,,,,client only,,count from score keeper list +0x4F4
+0x0F,,,,client only,,"stat 0x0D / max(stat 0x0E, 1)"
+0x10,,,,client only,,score keeper +0xE4
+0x11,,,,client only,,score keeper +0xE0
+0x12,,,,client only,,count from score keeper list (FUN_00868D80)
+0x13,units_built,CareerUnitsCreated_<MODE>,int,sum,40 + mode,Units built
+0x14,units_lost,CareerUnitsLost_<MODE>,int,sum,45 + mode,Units lost
+0x15,units_killed,CareerUnitsKilled_<MODE>,int,sum,50 + mode,Units killed
+0x16,unit_kill_death_ratio,UnitKillDeathRatio_<MODE>,float,derived,,"Kills / max(lost, 1)"
+0x17,,,,client only,,stat 0x19 per minute played
+0x18,timed_state_seconds,,,sum,55 + mode,Seconds of a timed score keeper state
+0x19,,,,client only,,score keeper +0x04
+0x1A,,,,client only,,score keeper +0x08
+0x1B,,,,client only,,score keeper +0x100
+0x1C,,,,client only,,score keeper +0x140 (float)
+0x1D,units_lost_value,CareerUnitsLostValue_<MODE>,int,sum,77 + mode,Value of units lost
+0x1E,units_killed_value,CareerUnitsKilledValue_<MODE>,int,sum,82 + mode,Value of units killed
+0x1F,units_killed_allied,CareerNumberUnitsKilledAllied_<MODE>,int,sum,87 + mode,Units lost to friendly fire
+0x20,units_activated,CareerNumActivatedUnits_<MODE>,int,sum,92 + mode,Special abilities used
+0x21,powers_activated,CareerNumActivatedPowers_<MODE>,int,sum,97 + mode,Powers activated
+0x22,structures_infiltrated,CareerNumStructuresInfiltrated_<MODE>,int,sum,102 + mode,Structures infiltrated
+0x23,,,,client only,,games without a game-info object (campaign container only)
+0x24,disconnects,Disconnects_<MODE>,int,count,,Matches left before the end
+0x25,desyncs,Desyncs_<MODE>,int,count,,Matches that desynced
