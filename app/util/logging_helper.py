@@ -6,6 +6,8 @@ Provides centralized logging configuration and helper functions.
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 
 def format_hex(data: bytes) -> str:
@@ -32,13 +34,25 @@ def get_logger(name: str, level: int | None = None) -> logging.Logger:
     return logger
 
 
-def setup_logging(level: int = logging.INFO, debug_modules: list[str] | None = None) -> None:
+def setup_logging(
+    level: int = logging.INFO,
+    debug_modules: list[str] | None = None,
+    log_file: str | Path | None = None,
+    max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 5,
+) -> Path | None:
     """
     Configure root logging for the application.
 
     Args:
         level: Default log level for the application
         debug_modules: List of module names to set to DEBUG level
+        log_file: Optional path for a rotating UTF-8 log file
+        max_bytes: Maximum file size before rotation
+        backup_count: Number of rotated files to retain
+
+    Returns:
+        The resolved log path when file logging is enabled, otherwise None
     """
     # Create formatter
     formatter = logging.Formatter(fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -55,10 +69,34 @@ def setup_logging(level: int = logging.INFO, debug_modules: list[str] | None = N
     root_logger.handlers.clear()
     root_logger.addHandler(console_handler)
 
+    resolved_log_file = None
+    if log_file is not None:
+        resolved_log_file = Path(log_file).resolve()
+        resolved_log_file.parent.mkdir(parents=True, exist_ok=True)
+
+        file_handler = RotatingFileHandler(
+            resolved_log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+    # Uvicorn configures separate handlers by default. Route those records through
+    # the root logger so startup errors and HTTP requests reach the same log file.
+    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uvicorn_logger = logging.getLogger(logger_name)
+        uvicorn_logger.handlers.clear()
+        uvicorn_logger.propagate = True
+        uvicorn_logger.setLevel(level)
+
     # Set debug level for specific modules if requested
     if debug_modules:
         for module in debug_modules:
             logging.getLogger(module).setLevel(logging.DEBUG)
+
+    return resolved_log_file
 
 
 # Module-level loggers for each component
