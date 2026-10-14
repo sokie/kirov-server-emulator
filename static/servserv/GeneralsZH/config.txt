@@ -68,10 +68,9 @@ Whiteout
 </QMMaps>
 
 <Manglers>
-  mangler1.generals.ea.com:4321
-  mangler2.generals.ea.com:4321
-  mangler3.generals.ea.com:4321
-  mangler4.generals.ea.com:4321
+  127.0.0.1:4321
+  127.0.0.2:4321
+  127.0.0.3:4321
 </Manglers>
 
 <PingServers>
