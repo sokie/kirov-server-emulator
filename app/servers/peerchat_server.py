@@ -36,6 +36,7 @@ class IRCClient:
         self.send_cipher = None  # Server-to-client cipher
         self.recv_cipher = None  # Client-to-server cipher
         self.encryption_enabled = False
+        self.game_name: str | None = None
 
         # Connection state
         self.connected = True

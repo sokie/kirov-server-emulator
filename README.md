@@ -121,7 +121,7 @@ This starts:
 | Peerchat IRC | 6667 | TCP | Lobby and chat |
 | GP Server | 29900 | TCP | Buddy system and presence |
 | NAT Negotiation | 27901 | UDP | P2P hole punching |
-| NAT Relay | 50000-59999 | UDP | Relay fallback when direct P2P fails (`relay.host` must be your public IP) |
+| NAT Relay | 50000-59999 | UDP | Relay fallback when direct P2P fails (`relay.advertised_host` must be reachable) |
 | Master Server | 28910 | TCP | Room/game list queries |
 | Heartbeat Server | 27900 | UDP | Game session registration |
 | GameStats | 29920 | TCP | Game statistics reporting |

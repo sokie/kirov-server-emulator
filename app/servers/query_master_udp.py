@@ -360,7 +360,9 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
                 except (IndexError, Exception):
                     pass
 
-            if player:
+            # Closed games report all available slots. Empty slots still contain
+            # numeric defaults, so only keep records with a player identity.
+            if any(player.get(field, "").strip() for field in ("player", "name")):
                 players.append(player)
 
         return players
