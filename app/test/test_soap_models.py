@@ -21,6 +21,7 @@ from app.models.game_config import (
     SAGE_LEVEL_THRESHOLDS,
     SAGE_SCORING_MULTIPLIERS,
 )
+from app.models.ra3_stats import SAKE_COLUMNS
 from app.soap.envelope import extract_soap_body, get_element_text, wrap_soap_envelope
 from app.soap.models.auth import LoginRemoteAuthResponse, LoginResponseCode
 from app.soap.models.common import RecordValue
@@ -435,25 +436,27 @@ class TestSakeServiceIntegration:
         # Owner ID echoed back
         assert "<intValue><value>12345</value></intValue>" in xml
 
-    def test_get_my_records_player_stats_ra_positional(self):
+    def test_get_my_records_player_stats_ra_by_field(self):
         """
-        Test GetMyRecords returns 190-element RA3 positional career stats
-        when more than 10 fields are requested.
+        Test GetMyRecords answers the 190 RA3 PlayerStats_v5 columns one value per field, in order.
         """
         login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
-
-        # 20 fields (>10) triggers positional stats mode
-        requested_fields = [f"field_{i}" for i in range(20)]
+        requested_fields = list(SAKE_COLUMNS)
 
         response = handle_get_my_records(
-            login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_RA
+            login_ticket,
+            profile_id=67890,
+            requested_fields=requested_fields,
+            game_id=GAME_ID_RA,
+            table_id="PlayerStats_v5",
         )
         xml = wrap_soap_envelope(response)
 
         assert "GetMyRecordsResponse" in xml
         assert "<GetMyRecordsResult>Success</GetMyRecordsResult>" in xml
-        # RA3 returns 190 positional elements
         assert xml.count("<RecordValue>") == 190
+        # WinLossRatio (20 columns) and UnitKillDeathRatio (5) are floats
+        assert xml.count("<floatValue>") == 25
 
     def test_get_my_records_player_stats_kw_positional(self):
         """

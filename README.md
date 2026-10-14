@@ -138,6 +138,14 @@ See [Web Portal Documentation](docs/ui/WEB_PORTAL.md) for detailed information a
 python -m pytest app/test/ -v
 ```
 
+Red Alert 3 careers can be read and rebuilt with the server stopped:
+
+```bash
+python scripts/ra3_stats_tool.py show <persona>     # career, score and rank
+python scripts/ra3_stats_tool.py history <persona>  # the matches behind it
+python scripts/ra3_stats_tool.py import             # load saved reports from Report/ra3, then rebuild
+```
+
 ## Documentation
 
 Detailed protocol documentation is available in the `docs/` directory:
@@ -150,6 +158,9 @@ Detailed protocol documentation is available in the `docs/` directory:
 | [NATNEG.md](docs/NATNEG.md) | NAT negotiation protocol for establishing peer-to-peer connections |
 | [RELAY.md](docs/RELAY.md) | UDP relay fallback when direct P2P fails |
 | [MASTER_SERVER.md](docs/MASTER_SERVER.md) | Master server for game discovery and session registration |
+| [STATS_AND_SOAP_FORMAT.md](docs/STATS_AND_SOAP_FORMAT.md) | Red Alert 3 match reports, careers and Sake tables |
+| [ra3_stat_catalog.csv](docs/ra3_stat_catalog.csv) | Every Red Alert 3 stat: career key, Sake column, fold rule and report key |
+| [ELO_AND_RANKINGS.md](docs/ELO_AND_RANKINGS.md) | ELO ladders and match finalization |
 
 ## Architecture Overview
 

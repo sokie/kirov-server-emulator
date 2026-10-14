@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlmodel import Session, select, update
 
+from app.db import ra3_career
 from app.models.game_config import (
     FACTION_MAPS,
     GAME_ID_KW,
@@ -1089,7 +1090,7 @@ def update_player_elo(
     game_id: int = DEFAULT_GAME_ID,
 ) -> PlayerStats:
     """
-    Update a player's ELO rating after a match.
+    Update a player's ELO rating after a match. The caller commits.
 
     Args:
         session: Database session.
@@ -1106,8 +1107,6 @@ def update_player_elo(
     if stats is None:
         stats = PlayerStats(persona_id=persona_id, game_id=game_id)
         session.add(stats)
-        session.commit()
-        session.refresh(stats)
 
     # Map game type to field names
     elo_field = f"elo_{game_type}"
@@ -1133,8 +1132,7 @@ def update_player_elo(
     stats.updated_at = datetime.utcnow()
 
     session.add(stats)
-    session.commit()
-    session.refresh(stats)
+    session.flush()
     return stats
 
 
@@ -1346,7 +1344,8 @@ def set_report_intention(
     """
     Signals that a player intends to submit a match report.
 
-    Creates a PlayerReportIntent record and generates a new ccid for this player.
+    Creates a PlayerReportIntent record and generates a new ccid for this player, or returns the
+    player's intent when the request carries a ccid already issued to them for this session.
 
     Args:
         session: Database session.
@@ -1361,6 +1360,14 @@ def set_report_intention(
     comp_session = get_competition_session(session, csid)
     if comp_session is None:
         return None
+
+    # The client puts the first ccid in the roster and submits with the last one, so a resent ccid must not change.
+    if ccid:
+        held = session.exec(
+            select(PlayerReportIntent).where(PlayerReportIntent.csid == csid, PlayerReportIntent.ccid == ccid)
+        ).first()
+        if held is not None and held.persona_id == persona_id:
+            return held
 
     # Generate a unique ccid for this player with embedded persona_id
     player_ccid = generate_ccid(persona_id)
@@ -1473,21 +1480,22 @@ def finalize_match_from_report(
     game_type_int: int,
     duration: int,
     game_id: int = DEFAULT_GAME_ID,
+    map_name: str = "",
+    match_id: str = "",
+    report_md5: str = "",
 ) -> bool:
-    """Finalize a match from a single authoritative report.
+    """Settles a match from one authoritative report, once per csid.
 
-    The authoritative report already names every player (each roster connection GUID's leading dword is the
-    persona) and carries every result, so win/loss, ELO and XP are computed from this one report at face
-    value: no waiting for each client to report and no cross-report correlation. `players` is
-    [{persona_id, result, faction}, ...] with result 0=win, 1=loss, 3=disconnect, 4=dsync. The
-    comp_session.finalized flag makes a re-sent report a no-op so stats are never double counted: the
-    session is claimed with a conditional UPDATE *before* any stats are applied, so when two submissions
-    for the same csid race, the database arbitrates and only the one that claims the row settles the match.
+    `players` is [{persona_id, result, faction}, ...] with result 0 win, 1 loss, 3 disconnect, 4 desync.
+    The session is claimed with a conditional UPDATE before any stats are applied, so a resent or
+    concurrent report for the same csid changes nothing. RA3 applies the match in one transaction: a
+    failure rolls it all back and releases the claim.
     """
     comp_session = get_competition_session(session, csid)
     if comp_session is None or comp_session.finalized:
         return False
 
+    roster = players
     # Only players that authenticated through our backend carry a recoverable persona.
     players = [p for p in players if p.get("persona_id")]
     if len(players) < 2:
@@ -1507,8 +1515,8 @@ def finalize_match_from_report(
         logger.info("Match %s already claimed by another submission; skipping stats", csid)
         return False
 
-    # Past this point the claim is ours. It is released only if we fail before applying anything at all -
-    # once a helper has committed stats, the claim must stand so a resubmission cannot replay them.
+    # Past this point the claim is ours. The KW/TW helpers commit as they go, so once they have applied
+    # stats the claim must stand to stop a resubmission from replaying them.
     stats_applied = False
     try:
         game_type_map = {0: "unranked", 1: "ranked_1v1", 2: "ranked_2v2", 3: "clan_1v1", 4: "clan_2v2"}
@@ -1532,16 +1540,30 @@ def finalize_match_from_report(
         if game_type != "unranked" and not rated:
             logger.info("Match %s (%s) has no winner/loser split; recording counters without ELO", csid, game_type)
 
+        if game_id == GAME_ID_RA:
+            ra3_players = [
+                {
+                    "persona_id": p.get("persona_id"),
+                    "full_id": p.get("full_id", ""),
+                    "faction": FACTION_MAPS[GAME_ID_RA].get(p.get("faction", ""), ""),
+                    "result": p["result"],
+                    "counts": p.get("counts", {}),
+                }
+                for p in roster
+            ]
+            ra3_career.record_match(session, csid, game_type, duration, ra3_players, map_name, match_id, report_md5)
+
         for p in players:
             persona_id = p["persona_id"]
             result = p["result"]
             is_winner = result == 0
             is_disconnect = result == 3
 
-            update_player_win_loss(
-                session, persona_id, game_type, result, duration, faction=p.get("faction", ""), game_id=game_id
-            )
-            stats_applied = True
+            if game_id != GAME_ID_RA:
+                update_player_win_loss(
+                    session, persona_id, game_type, result, duration, faction=p.get("faction", ""), game_id=game_id
+                )
+                stats_applied = True
 
             if rated:
                 opponent_elo = int(loser_avg_elo if is_winner else winner_avg_elo)
@@ -1555,7 +1577,9 @@ def finalize_match_from_report(
                     game_id=game_id,
                 )
 
-            award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
+            if game_id != GAME_ID_RA:
+                award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
+        session.commit()
     except Exception:
         if not stats_applied:
             session.rollback()

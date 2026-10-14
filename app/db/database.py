@@ -42,6 +42,7 @@ def create_db_and_tables():
         PlayerLevel,
         PlayerReportIntent,
         PlayerStats,
+        Ra3Match,
         User,
         WebSession,
     )

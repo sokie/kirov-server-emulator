@@ -412,6 +412,25 @@ class MatchReport(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class Ra3Match(SQLModel, table=True):
+    """
+    Red Alert 3 match history: one row per finished match. Careers are rebuilt from these rows.
+    """
+
+    __tablename__ = "ra3_match"
+
+    id: int | None = Field(default=None, primary_key=True)
+    csid: str = Field(unique=True, index=True)
+    report_md5: str = Field(default="")  # checksum of the report the match was taken from
+    mode: str = Field(default="unranked")  # unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2
+    map_name: str = Field(default="")
+    match_id: str = Field(default="")  # lobby MatchID, game key 67
+    duration: int = Field(default=0)  # seconds
+    # [{"persona_id", "full_id", "faction", "result", "counts": {stat key: value}}]
+    players: list = Field(default_factory=list, sa_type=JSON)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class PlayerReportIntent(SQLModel, table=True):
     """Tracks player report intentions for match correlation."""
 

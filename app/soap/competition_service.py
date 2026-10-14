@@ -140,6 +140,7 @@ def save_match_report(
             ]
 
             # Build per-player stats with friendly key names
+            gt = report.get_game_type_from_key()
             players_json = []
             for i, p in enumerate(player_list):
                 player_dict: dict = {
@@ -151,7 +152,7 @@ def save_match_report(
                 if i < len(report.player_section):
                     stats = {}
                     for k, v in sorted(report.player_section[i].items()):
-                        name = get_player_key_name(k, game_id=report.game_id)
+                        name = get_player_key_name(k, game_id=report.game_id, gt=gt)
                         stats[name] = {"key": k, "type": v.value_type.name, "value": v.value}
                     player_dict["stats"] = stats
                 players_json.append(player_dict)
@@ -173,7 +174,11 @@ def save_match_report(
                 "player_count": report.player_count,
                 "team_count": report.team_count,
                 "map_path": report.get_map_path(),
-                "replay_guid": report.get_replay_guid(),
+                **(
+                    {"match_id": report.get_match_id(), "mode": report.get_ra3_mode()}
+                    if report.is_ra3
+                    else {"replay_guid": report.get_replay_guid()}
+                ),
                 "duration": report.get_duration(),
                 "game_type": report.get_game_type(),
                 "game_type_key": report.get_game_type_from_key(),
@@ -436,15 +441,16 @@ def handle_submit_report(
         if ccid:
             mark_report_intent_reported(session, ccid, player_full_id)
 
-        # Finalize from the single authoritative report. It names every player (each roster connection
-        # GUID's leading dword is the persona) and carries every result, so the whole match is settled from
-        # it at face value: no waiting for each client and no cross-report correlation. A non-authoritative
-        # (client) report is stored for audit but never drives stats; if the host that sends the
-        # authoritative report drops, the match is abandoned in-game anyway.
+        # The first authoritative report settles the match. RA3 lists the other players only in an
+        # authoritative report.
         if authoritative and report is not None:
             players = [
-                {"persona_id": p.persona_id, "result": p.result, "faction": p.faction} for p in report.get_player_list()
+                {"persona_id": p.persona_id, "result": p.result, "faction": p.faction, "full_id": p.full_id}
+                for p in report.get_player_list()
             ]
+            if report.is_ra3:
+                for i, p in enumerate(players):
+                    p["counts"] = report.get_ra3_counts(i)
             resolved = [p["persona_id"] for p in players if p["persona_id"]]
             logger.info(
                 "[%s] Authoritative report: %d players, resolved personas=%s",
@@ -452,7 +458,17 @@ def handle_submit_report(
                 len(players),
                 resolved,
             )
-            if finalize_match_from_report(session, csid, players, gametype_int, report.get_duration(), game_id=game_id):
+            if finalize_match_from_report(
+                session,
+                csid,
+                players,
+                gametype_int,
+                report.get_duration(),
+                game_id=game_id,
+                map_name=report.get_map_path(),
+                match_id=report.get_match_id() if report.is_ra3 else "",
+                report_md5=report.checksum.hex(),
+            ):
                 logger.info("[%s] Match finalized from authoritative report", request_id)
             else:
                 logger.info(
