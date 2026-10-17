@@ -7,9 +7,8 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 
+from app.db.career_profile import career_profile
 from app.db.crud import (
-    GAME_ID_KW,
-    GAME_ID_TW,
     get_all_clans,
     get_all_generals_stats,
     get_clan_by_id,
@@ -18,16 +17,14 @@ from app.db.crud import (
     get_clan_members,
     get_generals_leaderboard,
     get_generals_player_profile,
-    get_kw_player_profile,
     get_leaderboard,
     get_persona_by_id,
     get_persona_clan,
     get_persona_clan_membership,
     get_personas_for_user,
-    get_ra3_player_profile,
-    get_tw_player_profile,
 )
 from app.db.database import get_session
+from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
 from app.models.models import User
 from app.models.peerchat_state import irc_clients
 from app.servers.sessions import GameSessionRegistry
@@ -316,9 +313,9 @@ async def player_profile_page(
         return RedirectResponse(url="/leaderboard", status_code=302)
 
     generals = get_generals_player_profile(session, persona_id)
-    ra3 = get_ra3_player_profile(session, persona_id)
-    kw = get_kw_player_profile(session, persona_id)
-    tw = get_tw_player_profile(session, persona_id)
+    ra3 = career_profile(session, persona_id, GAME_ID_RA)
+    kw = career_profile(session, persona_id, GAME_ID_KW)
+    tw = career_profile(session, persona_id, GAME_ID_TW)
 
     return templates.TemplateResponse(
         "player_profile.html",

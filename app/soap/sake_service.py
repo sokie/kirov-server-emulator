@@ -4,9 +4,10 @@ Sake Storage Server - SOAP service for game statistics and configuration.
 Endpoint: /SakeStorageServer/StorageServer.asmx
 
 This service handles:
-- GetMyRecords: Returns player's career stats (RA3 by field name, KW/TW positional layout)
+- GetMyRecords: Returns player's career stats by field name
 - GetSpecificRecords: Returns table data (ScoringMultipliers, TickerMgmt)
-- SearchForRecords: Search tables (Levels, NewsTicker, PlayerStats, RatingPlayer, custom_maps)
+- SearchForRecords: Search tables (Levels, NewsTicker, PlayerStats, RatingMatch, RatingPlayer, custom_maps)
+- CreateRecord: Keeps the RatingMatch and RatingPlayer records Tiberium Wars and Kane's Wrath create
 
 Supports RA3 (game ID 2128), Kane's Wrath (1814), and Tiberium Wars (1422).
 """
@@ -15,19 +16,12 @@ import base64
 import xml.etree.ElementTree as ET
 
 from fastapi import APIRouter, Request, Response
-from sqlmodel import select
+from sqlmodel import Session
 
-from app.db.crud import get_player_level, get_player_stats, get_stats_value
 from app.db.database import create_session
-from app.models.game_config import (
-    GAME_ID_KW,
-    GAME_ID_RA,
-    GAME_ID_TW,
-    SAGE_LEVEL_THRESHOLDS,
-    SAGE_SCORING_MULTIPLIERS,
-)
-from app.models.models import Persona, PlayerStats
-from app.soap import ra3_sake
+from app.models import cnc3_stats
+from app.models.game_config import GAME_ID_RA
+from app.soap import cnc3_sake, ra3_sake, sake_records
 from app.soap.envelope import (
     create_soap_fault,
     extract_soap_body,
@@ -35,14 +29,15 @@ from app.soap.envelope import (
     get_operation_name,
     wrap_soap_envelope,
 )
-from app.soap.models.common import RecordValue
 from app.soap.models.sake import (
+    CreateRecordResponse,
     GetMyRecordsResponse,
     GetSpecificRecordsResponse,
     SAKEResultCode,
     SearchForRecordsResponse,
 )
 from app.soap.sake_filter import FilterError
+from app.soap.sake_records import Record
 from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
@@ -52,13 +47,45 @@ sake_router = APIRouter()
 # Namespace definitions
 SAKE_NS = "http://gamespy.net/sake"
 
-# News ticker messages shown in-game
+# Seed records every game reads, answered by field name like the records games create.
 NEWS_TICKER_MESSAGES = [
     "Welcome to Kirov server! Enjoy your games.",
 ]
-
-# Custom maps static data
-CUSTOM_MAPS_DATA = [8389, -972957748, 66624219, 0, 0, 0, 66624239, 0, 66624260]
+SEED_RECORDS: dict[str, list[Record]] = {
+    "newsticker": [
+        {
+            "recordid": ("intValue", i + 1),
+            "tickertext": ("unicodeStringValue", message),
+            "imagefileid": ("intValue", 0),
+            "tickertype": ("shortValue", 1),
+            "matchid": ("asciiStringValue", "-1"),
+        }
+        for i, message in enumerate(NEWS_TICKER_MESSAGES)
+    ],
+    "tickermgmt": [
+        {
+            "recordid": ("intValue", 1),
+            "displayrateinsec": ("floatValue", 30.0),
+            "maxitemstodownload": ("shortValue", 10),
+            "adpercentage": ("floatValue", 50.0),
+            "cmpercentage": ("floatValue", 25.0),
+            "bgpercentage": ("floatValue", 25.0),
+        }
+    ],
+    "custom_maps": [
+        {
+            "recordid": ("intValue", 8389),
+            "mapcrc": ("intValue", -972957748),
+            "mappreviewfileid": ("intValue", 66624219),
+            "mapinifileid": ("intValue", 0),
+            "stringfilefileid": ("intValue", 0),
+            "readmefileid": ("intValue", 0),
+            "mapartfileid": ("intValue", 66624239),
+            "mappicfileid": ("intValue", 0),
+            "mapfileid": ("intValue", 66624260),
+        }
+    ],
+}
 
 
 def parse_login_ticket(login_ticket: str) -> tuple[int, int]:
@@ -116,184 +143,29 @@ def _int_text(text: str, default: int) -> int:
         return default
 
 
-# =============================================================================
-# Game-specific career stats builders
-# =============================================================================
-
-
-GAME_MODES = ["unranked", "ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
-
-
-def _get_mode_values(stats: PlayerStats | None, stat_key: str) -> list:
-    """Get values for all 5 game modes from a PlayerStats JSON stats dict."""
-    if stats is None:
-        return [0, 0, 0, 0, 0]
-    s = stats.stats or {}
-    return [s.get(mode, {}).get(stat_key, 0) for mode in GAME_MODES]
-
-
-def _build_kw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
-    """
-    Build 420-element KW career stats array.
-
-    """
-    wins = _get_mode_values(stats, "wins")
-    losses = _get_mode_values(stats, "losses")
-    disconnects = _get_mode_values(stats, "disconnects")
-    desyncs = _get_mode_values(stats, "desyncs")
-    avg_gl = _get_mode_values(stats, "avg_game_length")
-    win_ratio = _get_mode_values(stats, "win_ratio")
-
-    total_matches = [w + loss + d + ds for w, loss, d, ds in zip(wins, losses, disconnects, desyncs)]
-    total_all_online = sum(total_matches)
-
-    records: list[RecordValue] = []
-
-    # [0-23] 24 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 24)
-
-    # [24-29] TotalMatches per mode + total
-    for tm in total_matches:
-        records.append(RecordValue.from_int(tm))
-    records.append(RecordValue.from_int(total_all_online))
-
-    # [30-101] 72 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 72)
-
-    # [102-107] Career Losses per mode + total
-    for val in losses:
-        records.append(RecordValue.from_int(val))
-    records.append(RecordValue.from_int(sum(losses)))
-
-    # [108-179] 72 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 72)
-
-    # [180-185] Career Wins per mode + total
-    for val in wins:
-        records.append(RecordValue.from_int(val))
-    records.append(RecordValue.from_int(sum(wins)))
-
-    # [186-257] 72 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 72)
-
-    # [258-263] Win/Loss Ratio per mode + total (float)
-    for val in win_ratio:
-        records.append(RecordValue.from_float(float(val)))
-    records.append(RecordValue.from_float(float(sum(win_ratio))))
-
-    # [264-335] 72 float(0) padding
-    records.extend([RecordValue.from_float(0.0)] * 72)
-
-    # [336-341] Average Game Length per mode + average
-    for val in avg_gl:
-        records.append(RecordValue.from_int(val))
-    # Average of non-zero avg game lengths (or first value like reference)
-    non_zero = [a for a in avg_gl if a > 0]
-    avg_of_avg = sum(non_zero) // len(non_zero) if non_zero else 0
-    records.append(RecordValue.from_int(avg_of_avg))
-
-    # [342-347] Total time played per mode + total
-    time_played = _get_mode_values(stats, "total_time_played")
-    for val in time_played:
-        records.append(RecordValue.from_int(val))
-    records.append(RecordValue.from_int(sum(time_played)))
-
-    # [348-389] 42 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 42)
-
-    # [390-395] 6 float(0) - Unit KDR (not tracked)
-    records.extend([RecordValue.from_float(0.0)] * 6)
-
-    # [396-401] 6 int(0) - CareerInputCommands (not tracked)
-    records.extend([RecordValue.from_int(0)] * 6)
-
-    # [402-407] 6 int(0) - Avg CareerInputCommands (not tracked)
-    records.extend([RecordValue.from_int(0)] * 6)
-
-    # [408-413] Disconnects per mode + total
-    for val in disconnects:
-        records.append(RecordValue.from_int(val))
-    records.append(RecordValue.from_int(sum(disconnects)))
-
-    # [414-419] Desyncs per mode + total
-    for val in desyncs:
-        records.append(RecordValue.from_int(val))
-    records.append(RecordValue.from_int(sum(desyncs)))
-
-    return records
-
-
-def _build_tw_career_stats(stats: PlayerStats | None) -> list[RecordValue]:
-    """
-    Build 160-element TW career stats array.
-
-    """
-    wins = _get_mode_values(stats, "wins")
-    losses = _get_mode_values(stats, "losses")
-    disconnects = _get_mode_values(stats, "disconnects")
-    desyncs = _get_mode_values(stats, "desyncs")
-    avg_gl = _get_mode_values(stats, "avg_game_length")
-    win_ratio = _get_mode_values(stats, "win_ratio")
-
-    total_matches = [w + loss + d + ds for w, loss, d, ds in zip(wins, losses, disconnects, desyncs)]
-
-    records: list[RecordValue] = []
-
-    # [0-19] 20 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 20)
-
-    # [20-24] TotalMatches per mode
-    for tm in total_matches:
-        records.append(RecordValue.from_int(tm))
-
-    # [25-39] 15 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 15)
-
-    # [40-44] Career Losses per mode
-    for val in losses:
-        records.append(RecordValue.from_int(val))
-
-    # [45-59] 15 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 15)
-
-    # [60-64] Career Wins per mode
-    for val in wins:
-        records.append(RecordValue.from_int(val))
-
-    # [65-79] 15 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 15)
-
-    # [80-84] Win/Loss Ratio per mode (float)
-    for val in win_ratio:
-        records.append(RecordValue.from_float(float(val)))
-
-    # [85-99] 15 float(0) padding
-    records.extend([RecordValue.from_float(0.0)] * 15)
-
-    # [100-104] Average Game Length per mode
-    for val in avg_gl:
-        records.append(RecordValue.from_int(val))
-
-    # [105-144] 40 int(0) padding
-    records.extend([RecordValue.from_int(0)] * 40)
-
-    # [145-149] 5 float(0) padding
-    records.extend([RecordValue.from_float(0.0)] * 5)
-
-    # [150-154] Disconnects per mode
-    for val in disconnects:
-        records.append(RecordValue.from_int(val))
-
-    # [155-159] Desyncs per mode
-    for val in desyncs:
-        records.append(RecordValue.from_int(val))
-
-    return records
+def get_record_fields(operation: ET.Element) -> list[tuple[str, str, str]]:
+    """(name, Sake value type, text) for every RecordField under the request's values."""
+    fields = []
+    for child in operation:
+        if child.tag.split("}")[-1] != "values":
+            continue
+        for record_field in child:
+            name = get_element_text(record_field, "name")
+            value = next((e for e in record_field if e.tag.split("}")[-1] == "value"), None)
+            typed = value[0] if value is not None and len(value) else None
+            if name and typed is not None:
+                fields.append((name, typed.tag.split("}")[-1], get_element_text(typed, "value")))
+    return fields
 
 
 # =============================================================================
 # SOAP operation handlers
 # =============================================================================
+
+
+def _records(session: Session, game_id: int, table: str) -> list[Record]:
+    """The seed records of a table, then the ones the game created."""
+    return SEED_RECORDS.get(table.lower(), []) + sake_records.stored_records(session, game_id, table)
 
 
 def handle_get_my_records(
@@ -303,60 +175,32 @@ def handle_get_my_records(
     game_id: int = GAME_ID_RA,
     table_id: str = "",
 ) -> GetMyRecordsResponse:
-    """
-    Handle GetMyRecords SOAP operation.
-
-    RA3: every field is answered by name.
-    KW/TW small requests (<=10 fields): returns field-based values (score, rank).
-    KW/TW large requests (>10 fields): returns game-specific positional career stats.
-    """
+    """Handle GetMyRecords SOAP operation: the player's stats record, every field by name."""
     user_id, ticket_profile_id = parse_login_ticket(login_ticket)
     if user_id == 0 or ticket_profile_id == 0:
         logger.warning("Sake GetMyRecords: Invalid login ticket")
         return GetMyRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
 
     profile_id = ticket_profile_id
-
-    logger.debug(
-        "Sake GetMyRecords: profileId=%s, game_id=%s, num_fields=%d",
-        profile_id,
-        game_id,
-        len(requested_fields),
-    )
-
+    logger.debug("Sake GetMyRecords: profileId=%s, game_id=%s, fields=%d", profile_id, game_id, len(requested_fields))
     if not requested_fields:
         return GetMyRecordsResponse.success_empty()
 
+    game = cnc3_stats.GAMES.get(game_id)
     session = create_session()
     try:
         if game_id == GAME_ID_RA:
-            ra3_records = ra3_sake.get_my_records(session, profile_id, table_id or "PlayerStats_v5", requested_fields)
-            if ra3_records is not None:
-                return GetMyRecordsResponse.success(ra3_records)
-
-        # Large request = full positional career stats
-        if len(requested_fields) > 10 and game_id in (GAME_ID_KW, GAME_ID_TW):
-            stats = get_player_stats(session, profile_id, game_id=game_id)
-
-            if game_id == GAME_ID_KW:
-                records = _build_kw_career_stats(stats)
-            else:
-                records = _build_tw_career_stats(stats)
-
-            return GetMyRecordsResponse.success(records)
-
-        # Small request = field-name based
-        stats = get_player_stats(session, profile_id, game_id=game_id)
-        level = get_player_level(session, profile_id, game_id=game_id)
-
-        records = []
-        for field in requested_fields:
-            value = get_stats_value(stats, level, field)
-            records.append(RecordValue.from_int(value))
-
-        return GetMyRecordsResponse.success(records)
+            records = ra3_sake.get_my_records(session, profile_id, table_id or "PlayerStats_v5", requested_fields)
+        elif game is not None:
+            records = cnc3_sake.get_my_records(session, game, profile_id, table_id or game.sake_table, requested_fields)
+        else:
+            records = None
     finally:
         session.close()
+    if records is None:
+        logger.info("Sake GetMyRecords: no stats table %r for game %s", table_id, game_id)
+        return GetMyRecordsResponse.success_empty()
+    return GetMyRecordsResponse.success(records)
 
 
 def handle_get_specific_records(
@@ -366,51 +210,31 @@ def handle_get_specific_records(
     requested_fields: list[str] | None = None,
     record_ids: list[int] | None = None,
 ) -> GetSpecificRecordsResponse:
-    """
-    Handle GetSpecificRecords SOAP operation.
-
-    Returns table data like ScoringMultipliers and TickerMgmt.
-    """
+    """Handle GetSpecificRecords SOAP operation: the asked records, every field by name."""
     user_id, profile_id = parse_login_ticket(login_ticket)
     if user_id == 0 or profile_id == 0:
         logger.warning("Sake GetSpecificRecords: Invalid login ticket")
         return GetSpecificRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
 
     logger.debug("Sake GetSpecificRecords: tableid=%s, game_id=%s", table_id, game_id)
-
-    if game_id == GAME_ID_RA and requested_fields:
-        ra3_rows = ra3_sake.get_specific_records(table_id, record_ids or [], requested_fields)
-        if ra3_rows is not None:
-            return GetSpecificRecordsResponse.success(ra3_rows[0] if ra3_rows else [])
-
-    records = []
-
-    if "ScoringMultipliers" in str(table_id) or table_id == "1":
-        for mult in SAGE_SCORING_MULTIPLIERS:
-            records.append(RecordValue.from_short(mult))
-
-    elif "UnrankedLosses" in str(table_id):
-        records = [
-            RecordValue.from_short(0),
-            RecordValue.from_short(0),
-            RecordValue.from_short(0),
-            RecordValue.from_short(0),
-        ]
-
-    elif "TickerMgmt" in str(table_id):
-        # Ticker management config: float(30), short(10), float(50), float(25), float(25)
-        records = [
-            RecordValue.from_float(30.0),
-            RecordValue.from_short(10),
-            RecordValue.from_float(50.0),
-            RecordValue.from_float(25.0),
-            RecordValue.from_float(25.0),
-        ]
-
-    if records:
-        return GetSpecificRecordsResponse.success(records)
-    else:
+    fields = requested_fields or []
+    ids = record_ids or []
+    if not fields:
         return GetSpecificRecordsResponse.success_empty()
+
+    if game_id == GAME_ID_RA:
+        rows = ra3_sake.get_specific_records(table_id, ids, fields)
+    elif game_id in cnc3_stats.GAMES:
+        rows = cnc3_sake.get_specific_records(table_id, ids, fields)
+    else:
+        rows = None
+    if rows is None:
+        session = create_session()
+        try:
+            rows = sake_records.specific_records(_records(session, game_id, table_id), ids, fields)
+        finally:
+            session.close()
+    return GetSpecificRecordsResponse.success(rows[0]) if rows else GetSpecificRecordsResponse.success_empty()
 
 
 def handle_search_for_records(
@@ -420,11 +244,9 @@ def handle_search_for_records(
     game_id: int = GAME_ID_RA,
     search: dict | None = None,
 ) -> SearchForRecordsResponse:
-    """
-    Handle SearchForRecords SOAP operation.
+    """Handle SearchForRecords SOAP operation. Every table is answered by field name.
 
-    Handles searches for Levels, NewsTicker, PlayerStats, RatingPlayer, and custom_maps.
-    RA3 PlayerStats_v5 and Levels searches use `search`, the request's search parameters.
+    `search` holds the request's fields, sort, offset, max, surrounding, ownerids and targetRecordFilter.
     """
     user_id, profile_id = parse_login_ticket(login_ticket)
     if user_id == 0 or profile_id == 0:
@@ -432,107 +254,51 @@ def handle_search_for_records(
         return SearchForRecordsResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
 
     logger.debug("Sake SearchForRecords: tableid=%s, filter=%s, game_id=%s", table_id, filter_str, game_id)
-
-    if game_id == GAME_ID_RA and search is not None and ra3_sake.handles(table_id):
-        session = create_session()
-        try:
-            rows = ra3_sake.search(
-                session,
-                table_id,
-                search.get("fields", []),
-                filter_text=filter_str,
-                sort=search.get("sort", ""),
-                offset=search.get("offset", 0),
-                max_rows=search.get("max", 1),
-                surrounding=search.get("surrounding", 0),
-                owner_ids=search.get("ownerids", []),
-                target_filter=search.get("targetRecordFilter", ""),
-            )
-        except FilterError as e:
-            logger.warning("Sake SearchForRecords: unreadable filter %r (%s); returning no records", filter_str, e)
-            rows = []
-        finally:
-            session.close()
-        if rows is not None:
-            return SearchForRecordsResponse.success(rows) if rows else SearchForRecordsResponse.success_empty()
-
-    record_lists: list[list[RecordValue]] = []
-
-    # Handle Levels table - return XP thresholds
-    if "Levels" in str(table_id) or "levels" in str(filter_str).lower():
-        for threshold in SAGE_LEVEL_THRESHOLDS:
-            record_lists.append([RecordValue.from_int(threshold)])
-
-    # Handle PlayerStats - leaderboard or ownerid lookup
-    elif "PlayerStats" in str(table_id) or "playerstats" in str(filter_str).lower():
-        if "ownerid=" in filter_str.lower():
-            filter_lower = filter_str.lower()
-            owner_id_start = filter_lower.find("ownerid=") + len("ownerid=")
-            owner_id_str = ""
-            for char in filter_str[owner_id_start:]:
-                if char.isdigit():
-                    owner_id_str += char
-                else:
-                    break
-            owner_id = int(owner_id_str) if owner_id_str else 0
-
-            record_lists.append(
-                [
-                    RecordValue.from_int(57),
-                    RecordValue.from_int(owner_id),
-                ]
-            )
+    search = search or {}
+    fields = search.get("fields", [])
+    params = {
+        "filter_text": filter_str,
+        "sort": search.get("sort", ""),
+        "offset": search.get("offset", 0),
+        "max_rows": search.get("max", 1),
+        "surrounding": search.get("surrounding", 0),
+        "owner_ids": search.get("ownerids", []),
+        "target_filter": search.get("targetRecordFilter", ""),
+    }
+    game = cnc3_stats.GAMES.get(game_id)
+    session = create_session()
+    try:
+        if game_id == GAME_ID_RA and ra3_sake.handles(table_id):
+            rows = ra3_sake.search(session, table_id, fields, **params)
+        elif game is not None and cnc3_sake.handles(game, table_id):
+            rows = cnc3_sake.search(session, game, table_id, fields, **params)
         else:
-            session = create_session()
-            try:
-                stmt = select(Persona).limit(100)
-                personas = session.exec(stmt).all()
+            rows = sake_records.search_records(_records(session, game_id, table_id), fields, **params)
+    except FilterError as e:
+        logger.warning("Sake SearchForRecords: unreadable filter %r (%s); returning no records", filter_str, e)
+        rows = []
+    finally:
+        session.close()
+    return SearchForRecordsResponse.success(rows) if rows else SearchForRecordsResponse.success_empty()
 
-                for persona in personas:
-                    level = get_player_level(session, persona.id, game_id=game_id)
-                    rank = level.rank if level else 1
-                    score = level.score if level else 0
 
-                    record_lists.append(
-                        [
-                            RecordValue.from_int(persona.id),
-                            RecordValue.from_int(rank),
-                            RecordValue.from_int(score),
-                        ]
-                    )
-            finally:
-                session.close()
+def handle_create_record(
+    table_id: str, login_ticket: str, game_id: int, values: list[tuple[str, str, str]]
+) -> CreateRecordResponse:
+    """Handle CreateRecord SOAP operation: keeps the record and returns its id."""
+    user_id, profile_id = parse_login_ticket(login_ticket)
+    if user_id == 0 or profile_id == 0:
+        logger.warning("Sake CreateRecord: Invalid login ticket")
+        return CreateRecordResponse.error(SAKEResultCode.LOGIN_TICKET_INVALID)
 
-    # Handle NewsTicker - return news messages
-    elif "NewsTicker" in str(table_id) or "ticker" in str(filter_str).lower():
-        for msg in NEWS_TICKER_MESSAGES:
-            record_lists.append(
-                [
-                    RecordValue.from_unicode_string(msg),
-                    RecordValue.from_int(0),
-                    RecordValue.from_short(1),
-                ]
-            )
-
-    # Handle RatingPlayer - return player rating data
-    elif "RatingPlayer" in str(table_id):
-        record_lists.append(
-            [
-                RecordValue.from_ascii_string(""),
-                RecordValue.from_int(profile_id),
-                RecordValue.from_int(0),
-                RecordValue.from_int(0),
-            ]
-        )
-
-    # Handle custom_maps - return static map data
-    elif "custom_maps" in str(table_id) or "maps" in str(filter_str).lower():
-        record_lists.append([RecordValue.from_int(v) for v in CUSTOM_MAPS_DATA])
-
-    if record_lists:
-        return SearchForRecordsResponse.success(record_lists)
-    else:
-        return SearchForRecordsResponse.success_empty()
+    session = create_session()
+    try:
+        record_id = sake_records.create_record(session, game_id, profile_id, table_id, values)
+        session.commit()
+    finally:
+        session.close()
+    logger.info("Sake CreateRecord: %s record %d from persona %d (game %s)", table_id, record_id, profile_id, game_id)
+    return CreateRecordResponse.success(record_id)
 
 
 @sake_router.post("/SakeStorageServer/StorageServer.asmx")
@@ -598,9 +364,18 @@ async def sake_storage_handler(request: Request) -> Response:
             response_model = handle_search_for_records(table_id, filter_str, login_ticket, game_id, search=search)
             response_xml = wrap_soap_envelope(response_model)
 
-        else:
-            response_model = GetMyRecordsResponse(result="Success")
+        elif "CreateRecord" in soap_action or operation_name == "CreateRecord":
+            response_model = handle_create_record(
+                get_element_text(operation, "tableid"),
+                get_element_text(operation, "loginTicket"),
+                game_id,
+                get_record_fields(operation),
+            )
             response_xml = wrap_soap_envelope(response_model)
+
+        else:
+            # The games send no UpdateRecord, DeleteRecord, RateRecord or GetRecordLimit.
+            raise ValueError(f"Unsupported Sake operation {operation_name}")
 
         logger.debug("Sake: Response=%s", response_xml[:500])
 

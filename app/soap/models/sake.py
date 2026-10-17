@@ -179,3 +179,21 @@ class SearchForRecordsResponse(BaseXmlModel, tag="SearchForRecordsResponse", nsm
     def error(cls, code: str = SAKEResultCode.UNKNOWN) -> "SearchForRecordsResponse":
         """Create an error response with a specific error code."""
         return cls(result=code)
+
+
+# --- CreateRecord ---
+
+
+class CreateRecordResponse(BaseXmlModel, tag="CreateRecordResponse", nsmap={"": SAKE_NS}):
+    """Response model for CreateRecord operation: the id of the new record."""
+
+    result: str = element(tag="CreateRecordResult")
+    record_id: int | None = element(tag="recordid", default=None)
+
+    @classmethod
+    def success(cls, record_id: int) -> "CreateRecordResponse":
+        return cls(result="Success", record_id=record_id)
+
+    @classmethod
+    def error(cls, code: str = SAKEResultCode.UNKNOWN) -> "CreateRecordResponse":
+        return cls(result=code)

@@ -412,22 +412,38 @@ class MatchReport(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class Ra3Match(SQLModel, table=True):
+class MatchHistory(SQLModel, table=True):
     """
-    Red Alert 3 match history: one row per finished match. Careers are rebuilt from these rows.
+    Match history of Red Alert 3, Tiberium Wars and Kane's Wrath: one row per finished match. Careers are
+    rebuilt from these rows.
     """
 
-    __tablename__ = "ra3_match"
+    __tablename__ = "match_history"
 
     id: int | None = Field(default=None, primary_key=True)
+    game_id: int = Field(index=True)
     csid: str = Field(unique=True, index=True)
     report_md5: str = Field(default="")  # checksum of the report the match was taken from
     mode: str = Field(default="unranked")  # unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2
     map_name: str = Field(default="")
-    match_id: str = Field(default="")  # lobby MatchID, game key 67
+    match_id: str = Field(default="")  # lobby MatchID
     duration: int = Field(default=0)  # seconds
     # [{"persona_id", "full_id", "faction", "result", "counts": {stat key: value}}]
     players: list = Field(default_factory=list, sa_type=JSON)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SakeRecord(SQLModel, table=True):
+    """A record a game created with Sake CreateRecord, such as a RatingPlayer rating."""
+
+    __tablename__ = "sake_record"
+
+    id: int | None = Field(default=None, primary_key=True)  # Sake recordid
+    game_id: int = Field(index=True)
+    table_id: str = Field(index=True)  # lower case
+    owner_id: int = Field(index=True)
+    # {field name: {"type": RecordValue type, "value": value}}
+    values: dict = Field(default_factory=dict, sa_type=JSON)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
