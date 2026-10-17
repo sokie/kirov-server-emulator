@@ -174,11 +174,8 @@ def save_match_report(
                 "player_count": report.player_count,
                 "team_count": report.team_count,
                 "map_path": report.get_map_path(),
-                **(
-                    {"match_id": report.get_match_id(), "mode": report.get_ra3_mode()}
-                    if report.is_ra3
-                    else {"replay_guid": report.get_replay_guid()}
-                ),
+                "match_id": report.get_match_id(),
+                "mode": report.get_ra3_mode() if report.is_ra3 else report.get_cnc3_mode(),
                 "duration": report.get_duration(),
                 "game_type": report.get_game_type(),
                 "game_type_key": report.get_game_type_from_key(),
@@ -395,11 +392,11 @@ def handle_submit_report(
                 len(player_list),
             )
             logger.info(
-                "[%s] Game info - game_type=%s, map=%s, replay_guid=%s, is_auto_match=%s",
+                "[%s] Game info - game_type=%s, map=%s, match_id=%s, is_auto_match=%s",
                 request_id,
                 game_type_str,
                 report.get_map_path(),
-                report.get_replay_guid(),
+                report.get_match_id(),
                 report.is_auto_match,
             )
             logger.info(
@@ -441,16 +438,16 @@ def handle_submit_report(
         if ccid:
             mark_report_intent_reported(session, ccid, player_full_id)
 
-        # The first authoritative report settles the match. RA3 lists the other players only in an
-        # authoritative report.
+        # The first authoritative report that names two players settles the match. RA3 and Tiberium Wars list
+        # the other players only in an authoritative report. Kane's Wrath marks every report authoritative and
+        # lists the other players only when the match ended normally.
         if authoritative and report is not None:
             players = [
                 {"persona_id": p.persona_id, "result": p.result, "faction": p.faction, "full_id": p.full_id}
                 for p in report.get_player_list()
             ]
-            if report.is_ra3:
-                for i, p in enumerate(players):
-                    p["counts"] = report.get_ra3_counts(i)
+            for i, p in enumerate(players):
+                p["counts"] = report.get_ra3_counts(i) if report.is_ra3 else report.get_cnc3_counts(i)
             resolved = [p["persona_id"] for p in players if p["persona_id"]]
             logger.info(
                 "[%s] Authoritative report: %d players, resolved personas=%s",
@@ -466,7 +463,7 @@ def handle_submit_report(
                 report.get_duration(),
                 game_id=game_id,
                 map_name=report.get_map_path(),
-                match_id=report.get_match_id() if report.is_ra3 else "",
+                match_id=report.get_match_id(),
                 report_md5=report.checksum.hex(),
             ):
                 logger.info("[%s] Match finalized from authoritative report", request_id)

@@ -25,7 +25,7 @@ from app.db.crud import (
 )
 from app.models.game_config import GAME_ID_RA, SAGE_LEVEL_THRESHOLDS
 from app.models.match_report import Faction, MatchReport, get_player_key_name
-from app.models.models import CompetitionSession, Persona, Ra3Match
+from app.models.models import CompetitionSession, MatchHistory, Persona
 from app.models.ra3_stats import (
     GT_TO_MODE,
     REPORT_STATS,
@@ -206,7 +206,7 @@ class TestMatchHistory:
         assert (loser["losses"], loser["factions"]["allied"]["losses"]) == (1, 1)
         assert get_player_level(db, 1, GAME_ID_RA).score == 2
         assert get_player_level(db, 2, GAME_ID_RA).score == 1
-        assert len(db.exec(select(Ra3Match)).all()) == 1
+        assert len(db.exec(select(MatchHistory)).all()) == 1
 
         before = {pid: get_player_stats(db, pid, GAME_ID_RA).stats for pid in (1, 2)}
         assert ra3_career.rebuild_careers(db) == 1
@@ -216,7 +216,7 @@ class TestMatchHistory:
 
     def _assert_nothing_applied(self, db, csid):
         db.expire_all()
-        assert db.exec(select(Ra3Match)).all() == []
+        assert db.exec(select(MatchHistory)).all() == []
         assert get_player_stats(db, 1, GAME_ID_RA) is None
         assert get_player_level(db, 1, GAME_ID_RA) is None
         claim = db.exec(select(CompetitionSession).where(CompetitionSession.csid == csid)).one()

@@ -1,0 +1,34 @@
+stat_id,career_key,sake_column,sake_type,fold,report_key,label
+0x00,current_win_streak,CurrentWinStreak_<MODE>,int,streak,,Current win streak
+0x01,current_loss_streak,CurrentLossStreak_<MODE>,int,streak,,Current loss streak
+0x02,longest_win_streak,LongestWinStreak_<MODE>,int,longest,,Longest win streak
+0x03,longest_loss_streak,LongestLossStreak_<MODE>,int,longest,,Longest loss streak
+0x04,total_matches,TotalMatches_<MODE>  (+ _GDI/_NOD/_ALIEN),int,count,,Matches played
+0x05,losses,CareerLosses_<MODE>  (+ _GDI/_NOD/_ALIEN),int,count,,Losses (any result but a win)
+0x06,wins,CareerWins_<MODE>  (+ _GDI/_NOD/_ALIEN),int,count,,Wins
+0x07,win_loss_ratio,WinLossRatio_<MODE>  (+ _GDI/_NOD/_ALIEN),float,derived,,"Wins / max(losses, 1)"
+0x08,avg_game_length,AverageGameLength_<MODE>,float,derived,,Time played / matches
+0x09,total_time_played,TotalTimePlayed_<MODE>,int,sum,,Seconds played
+0x0A,structures_built,CareerStructuresCreated_<MODE>,int,sum,20 + mode,Structures built
+0x0B,structures_lost,CareerStructuresLost_<MODE>,int,sum,25 + mode,Structures lost
+0x0C,structures_destroyed,CareerStructuresDestroyed_<MODE>,int,sum,30 + mode,Structures destroyed
+0x0D,structures_captured,CareerStructuresCaptured_<MODE>,int,sum,35 + mode,Structures captured
+0x0E,,,,client only,,structures captured by the enemy
+0x0F,,,,client only,,"stat 0x0D / max(stat 0x0E, 1)"
+0x10,,,,client only,,"superweapons built (score keeper +0xE0, Kane's Wrath +0x110)"
+0x11,,,,client only,,"superweapons fired (score keeper +0xE4, Kane's Wrath +0x114)"
+0x12,,,,client only,,bridges destroyed
+0x13,,,,client only,,structures sold
+0x14,units_built,CareerUnitsCreated_<MODE>,int,sum,40 + mode,Units built
+0x15,units_lost,CareerUnitsLost_<MODE>,int,sum,45 + mode,Units lost
+0x16,units_killed,CareerUnitsKilled_<MODE>,int,sum,50 + mode,Units killed
+0x17,unit_kill_death_ratio,UnitKillDeathRatio_<MODE>,float,derived,,"Kills / max(lost, 1)"
+0x18,,,,client only,,resources gathered per minute
+0x19,,,,client only,,times power was lost
+0x1A,,,,client only,,resources gathered
+0x1B,,,,client only,,resources spent
+0x1C,,,,client only,,times the formation preview was used
+0x1D,,,,client only,,campaign missions played (campaign container only)
+0x1E,,,,client only,,votes skipped
+0x1F,disconnects,Disconnects_<MODE>,int,count,,Matches left before the end
+0x20,desyncs,Desyncs_<MODE>,int,count,,Matches that desynced

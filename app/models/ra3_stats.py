@@ -10,6 +10,7 @@ from app.models.game_config import SAGE_SCORING_MULTIPLIERS
 GT_TO_MODE: dict[int, str] = {1: "unranked", 2: "ranked_1v1", 3: "ranked_2v2", 4: "clan_1v1", 5: "clan_2v2"}
 MODE_TO_GT: dict[str, int] = {mode: gt for gt, mode in GT_TO_MODE.items()}
 MODES: tuple[str, ...] = tuple(GT_TO_MODE.values())
+ALL_ONLINE = "all_online"  # every match together, whatever its mode
 SAKE_MODE: dict[str, str] = {
     "unranked": "UNRANKED",
     "ranked_1v1": "RANKED1V1",
@@ -52,7 +53,7 @@ GAME_KEYS: dict[int, str] = {
     66: "map_display_name",
     67: "match_id",
     68: "match_name",
-    69: "ai_slot_value",
+    69: "commentator_profile_id",
     70: "settings_value_84",
     71: "settings_value_88",
 }

@@ -1,5 +1,5 @@
 """
-Loads the saved RA3 reports (Report/ra3/*.bin and their .json) into the ra3_match history.
+Loads the saved RA3 reports (Report/ra3/*.bin and their .json) into the match history.
 """
 
 import glob
@@ -39,7 +39,7 @@ def _saved_reports(report_dir: str) -> dict[str, list[tuple[str, str, MatchRepor
 
 
 def import_saved_reports(session: Session, report_dir: str) -> tuple[int, int]:
-    """Adds one ra3_match per saved csid that is not in the history yet, from its first authoritative
+    """Adds one match_history row per saved csid that is not in the history yet, from its first authoritative
     report. Does not fold, so run rebuild_careers afterwards. Returns (added, skipped).
 
     A roster GUID the server did not mint gets the persona of the client that lists it first.

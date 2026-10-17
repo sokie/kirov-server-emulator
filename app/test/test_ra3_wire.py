@@ -19,15 +19,15 @@ import app.soap.competition_service as competition_service
 from app.db import ra3_career
 from app.db.crud import get_player_stats
 from app.models.game_config import GAME_ID_RA, SAGE_LEVEL_THRESHOLDS
-from app.models.models import Persona, Ra3Match
+from app.models.models import MatchHistory, Persona
 from app.models.ra3_stats import SAKE_COLUMNS
 from app.soap.competition_service import competition_handler
 from app.soap.sake_service import sake_storage_handler
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures", "ra3")
 
-# DIME record header before the report bytes: ID "report", type "application/bin".
-REPORT_RECORD = b"\x10\x00\x00\x00\x06\x00\x0f\x00\x00\x01\xc4report\x00\x00application/bin\x00"
+# DIME record header before the report bytes: last record, ID "report", type "application/bin".
+REPORT_RECORD = b"\x0a\x10\x00\x00\x00\x06\x00\x0f\x00\x00\x01\xc4report\x00\x00application/bin\x00"
 
 
 def _fixture(name: str) -> bytes:
@@ -155,7 +155,7 @@ class TestCompetitionRequests:
         reply = _post(competition_handler, "http://gamespy.net/competition/SubmitReport", body)
         assert _text(reply, "result") == "0"
 
-        match = db.exec(select(Ra3Match).where(Ra3Match.csid == csid)).one()
+        match = db.exec(select(MatchHistory).where(MatchHistory.csid == csid)).one()
         assert (match.mode, match.duration, match.map_name) == ("unranked", 167, "Battlebase Beta (2)")
         db.expire_all()
         assert get_player_stats(db, 1, GAME_ID_RA).stats["unranked"]["wins"] == 1

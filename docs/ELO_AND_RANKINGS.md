@@ -1,6 +1,7 @@
 # ELO Rating System and Rankings
 
-This document describes the ELO rating system and ladder rankings implementation for the Red Alert 3 server emulator.
+This document describes the ELO rating system and ladder rankings for Red Alert 3, Tiberium Wars and Kane's
+Wrath. The three games use the same rules; each game keeps its own ratings.
 
 ## ELO Rating System
 
@@ -68,20 +69,33 @@ The server tracks separate ELO ratings for different game modes:
 Each ladder has:
 - Separate ELO rating
 - Separate game count (for K-factor calculation)
-- Separate win/loss/disconnect/desync counters
+- Separate career counters (see below)
+
+A match changes ELO only in a ranked or clan mode, and only when the report has both a winner and a loser.
+Each player is rated against the average ELO of the other side.
 
 ## Player Statistics Tracking
 
-### Per-Game-Type Stats
+### Careers
 
-For each game type (unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2):
+Every settled match is folded onto the career of each player, for its mode (unranked, ranked_1v1,
+ranked_2v2, clan_1v1, clan_2v2) and for `all_online` (every match together, in order):
 
-- **Wins**: Total wins
-- **Losses**: Total losses
-- **Disconnects**: Total disconnects
-- **Desyncs**: Total desync occurrences
-- **Average Game Length**: Running average in seconds
-- **Win Ratio**: Calculated as `(wins / (wins + losses)) * 100`
+- **Matches**, **wins** and **losses**: any result but a win is a loss.
+- **Disconnects** (result 3) and **desyncs** (result 4).
+- **Current and longest win and loss streaks**.
+- **Time played** and **average game length** (time played / matches).
+- **Win ratio**: `wins / (wins + losses) * 100`.
+- **Every count the report carries**, such as structures built and units killed.
+- The same results per faction, and in Kane's Wrath per parent faction.
+
+The full stat lists and the fold rules are in [`STATS_AND_SOAP_FORMAT.md`](STATS_AND_SOAP_FORMAT.md).
+
+### Score and Rank
+
+After a win or a loss, Score grows by the game's `ScoringMultipliers` value for (won, ranked): unranked
+loss 1, win 2; ranked or clan loss 2, win 5. Rank is the highest of the 87 levels whose first score the
+player has. A disconnect or a desync adds no score.
 
 ### ELO Fields (Ranked modes only)
 
@@ -103,16 +117,15 @@ For each game type (unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2):
 2. **SetReportIntention**: Each player signals intent to submit report and receives a `ccid`; a `ccid` the
    player sends again for the same session is returned unchanged
 3. **SubmitReport**: Each player submits their match report
-4. **Finalization**: When the first authoritative report is received:
-   - Read the match duration from the report
-   - Extract winners/losers from report data
-   - Calculate average opponent ELO for each team
-   - Update ELO for all players
-   - Update win/loss/disconnect counters
-   - Mark session as finalized
+4. **Finalization**: The first authoritative report that names at least two players settles the match:
+   - Claim the session, so a resent or concurrent report changes nothing
+   - Store the match in `match_history`
+   - Fold the match onto every player's career, score and rank
+   - Update ELO for all players in a rated match
+   - Commit all of it in one transaction; a failure undoes all of it and releases the claim
 
-Red Alert 3 also stores the match in `ra3_match` and folds every reported count onto the career, and
-its score and rank follow the game's `ScoringMultipliers` and `Levels`. See
+Kane's Wrath marks every report authoritative, but only the reports of a match that ended normally name
+every player, so a leaver's own report does not settle the match. See
 [`STATS_AND_SOAP_FORMAT.md`](STATS_AND_SOAP_FORMAT.md).
 
 ## GetPlayerLadderRatings Response Format
@@ -154,52 +167,69 @@ statID,value,rank,elo,statID,value,rank,elo,...
 ```sql
 player_stats (
     id INTEGER PRIMARY KEY,
-    persona_id INTEGER UNIQUE,
+    persona_id INTEGER,
+    game_id INTEGER DEFAULT 2128,           -- 2128 RA3, 1422 TW, 1814 KW; UNIQUE (persona_id, game_id)
 
-    -- Wins per game type
-    wins_unranked INTEGER DEFAULT 0,
-    wins_ranked_1v1 INTEGER DEFAULT 0,
-    wins_ranked_2v2 INTEGER DEFAULT 0,
-    wins_clan_1v1 INTEGER DEFAULT 0,
-    wins_clan_2v2 INTEGER DEFAULT 0,
-
-    -- Losses per game type
-    losses_unranked INTEGER DEFAULT 0,
-    losses_ranked_1v1 INTEGER DEFAULT 0,
-    losses_ranked_2v2 INTEGER DEFAULT 0,
-    losses_clan_1v1 INTEGER DEFAULT 0,
-    losses_clan_2v2 INTEGER DEFAULT 0,
-
-    -- Disconnects per game type
-    disconnects_unranked INTEGER DEFAULT 0,
-    disconnects_ranked_1v1 INTEGER DEFAULT 0,
-    disconnects_ranked_2v2 INTEGER DEFAULT 0,
-    disconnects_clan_1v1 INTEGER DEFAULT 0,
-    disconnects_clan_2v2 INTEGER DEFAULT 0,
-
-    -- Desyncs per game type
-    desyncs_unranked INTEGER DEFAULT 0,
-    desyncs_ranked_1v1 INTEGER DEFAULT 0,
-    desyncs_ranked_2v2 INTEGER DEFAULT 0,
-    desyncs_clan_1v1 INTEGER DEFAULT 0,
-    desyncs_clan_2v2 INTEGER DEFAULT 0,
-
-    -- ELO ratings
+    -- ELO ratings and game counts, real columns for the leaderboard ORDER BY
     elo_ranked_1v1 INTEGER DEFAULT 1200,
     elo_ranked_2v2 INTEGER DEFAULT 1200,
     elo_clan_1v1 INTEGER DEFAULT 1200,
     elo_clan_2v2 INTEGER DEFAULT 1200,
-
-    -- Game counts for K-factor
     games_ranked_1v1 INTEGER DEFAULT 0,
     games_ranked_2v2 INTEGER DEFAULT 0,
     games_clan_1v1 INTEGER DEFAULT 0,
     games_clan_2v2 INTEGER DEFAULT 0,
-
-    -- Other fields
     total_matches_online INTEGER DEFAULT 0,
+
+    -- The career: {mode or "all_online": {stat: value, "factions": {...}, "parents": {...}}}
+    stats JSON,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
+)
+```
+
+### PlayerLevel Table
+
+```sql
+player_level (
+    id INTEGER PRIMARY KEY,
+    persona_id INTEGER,
+    game_id INTEGER DEFAULT 2128,           -- UNIQUE (persona_id, game_id)
+    rank INTEGER DEFAULT 1,                 -- 1-87
+    score INTEGER DEFAULT 0
+)
+```
+
+### MatchHistory Table
+
+```sql
+match_history (
+    id INTEGER PRIMARY KEY,
+    game_id INTEGER,                        -- 2128 RA3, 1422 TW, 1814 KW
+    csid TEXT UNIQUE,
+    report_md5 TEXT,
+    mode TEXT,                              -- unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2
+    map_name TEXT,
+    match_id TEXT,                          -- lobby MatchID
+    duration INTEGER,                       -- seconds
+    players JSON,                           -- [{persona_id, full_id, faction, result, counts}]
+    created_at TIMESTAMP
+)
+```
+
+Careers are rebuilt from this table with `scripts/ra3_stats_tool.py rebuild` and
+`scripts/cnc3_stats_tool.py <tw|kw> rebuild`.
+
+### SakeRecord Table
+
+```sql
+sake_record (                               -- records the games create with Sake CreateRecord
+    id INTEGER PRIMARY KEY,                 -- the Sake recordid
+    game_id INTEGER,
+    table_id TEXT,                          -- lower case, such as ratingplayer
+    owner_id INTEGER,
+    values JSON,                            -- {field: {"type": Sake value type, "value": value}}
+    created_at TIMESTAMP
 )
 ```
 

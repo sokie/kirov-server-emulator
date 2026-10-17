@@ -11,9 +11,10 @@ import base64
 
 import pytest
 from sqlalchemy import create_engine as _sa_create_engine
-from sqlmodel import SQLModel
+from sqlmodel import Session, SQLModel
 
 import app.db.database as _db_module
+from app.models import cnc3_stats
 from app.models.game_config import (
     GAME_ID_KW,
     GAME_ID_RA,
@@ -21,6 +22,7 @@ from app.models.game_config import (
     SAGE_LEVEL_THRESHOLDS,
     SAGE_SCORING_MULTIPLIERS,
 )
+from app.models.models import Persona
 from app.models.ra3_stats import SAKE_COLUMNS
 from app.soap.envelope import extract_soap_body, get_element_text, wrap_soap_envelope
 from app.soap.models.auth import LoginRemoteAuthResponse, LoginResponseCode
@@ -35,6 +37,8 @@ from app.soap.models.sake import (
     SAKEResultCode,
 )
 from app.soap.sake_service import (
+    get_requested_fields,
+    handle_create_record,
     handle_get_my_records,
     handle_get_specific_records,
     handle_search_for_records,
@@ -47,6 +51,17 @@ VALID_LOGIN_TICKET = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
 
 class TestSakeService:
     """Tests for Sake Storage Service response generation."""
+
+    @pytest.fixture(autouse=True)
+    def setup_database(self):
+        """Set up a fresh in-memory database for each test."""
+        test_engine = _sa_create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+        SQLModel.metadata.create_all(test_engine)
+        _orig = _db_module.engine
+        _db_module.engine = test_engine
+        yield
+        _db_module.engine = _orig
+        test_engine.dispose()
 
     def test_get_my_records_response_with_score_and_rank(self):
         """Test GetMyRecordsResponse serializes correctly with score and rank values."""
@@ -65,15 +80,19 @@ class TestSakeService:
         assert "soap:Body" in xml
 
     def test_get_specific_records_scoring_multipliers(self):
-        """Test GetSpecificRecords returns ScoringMultipliers as short values."""
-        response = handle_get_specific_records("ScoringMultipliers", VALID_LOGIN_TICKET)
+        """Test GetSpecificRecords answers ScoringMultipliers record 1 by field name, as shorts."""
+        fields = ["UnrankedLosses", "UnrankedWins", "RankedLosses", "RankedWins"]
+        response = handle_get_specific_records(
+            "ScoringMultipliers", VALID_LOGIN_TICKET, requested_fields=fields, record_ids=[1]
+        )
         xml = wrap_soap_envelope(response)
 
         assert "GetSpecificRecordsResponse" in xml
         assert "<GetSpecificRecordsResult>Success</GetSpecificRecordsResult>" in xml
-        # Verify all 4 multipliers are present as shortValue
-        for mult in SAGE_SCORING_MULTIPLIERS:
-            assert f"<shortValue><value>{mult}</value></shortValue>" in xml
+        values = "".join(
+            f"<RecordValue><shortValue><value>{m}</value></shortValue></RecordValue>" for m in SAGE_SCORING_MULTIPLIERS
+        )
+        assert values in xml
 
     def test_get_specific_records_unknown_table_returns_empty(self):
         """Test GetSpecificRecords returns empty values for unknown tables."""
@@ -93,19 +112,10 @@ class TestSakeService:
         assert "GetSpecificRecordsResponse" in xml
         assert f"<GetSpecificRecordsResult>{SAKEResultCode.LOGIN_TICKET_INVALID}</GetSpecificRecordsResult>" in xml
 
-    def test_get_specific_records_unranked_losses(self):
-        """Test GetSpecificRecords returns defaults for UnrankedLosses table."""
-        response = handle_get_specific_records("UnrankedLosses", VALID_LOGIN_TICKET)
-        xml = wrap_soap_envelope(response)
-
-        assert "GetSpecificRecordsResponse" in xml
-        assert "<GetSpecificRecordsResult>Success</GetSpecificRecordsResult>" in xml
-        # All default to 0
-        assert xml.count("<shortValue><value>0</value></shortValue>") == 4
-
     def test_search_for_records_levels_filter(self):
         """Test SearchForRecords returns XP thresholds for Levels table."""
-        response = handle_search_for_records("Levels", "", VALID_LOGIN_TICKET)
+        search = {"fields": ["Score"], "sort": "Level", "max": 1000}
+        response = handle_search_for_records("Levels", "Level>0", VALID_LOGIN_TICKET, search=search)
         xml = wrap_soap_envelope(response)
 
         assert "SearchForRecordsResponse" in xml
@@ -118,48 +128,85 @@ class TestSakeService:
         assert xml.count("<ArrayOfRecordValue>") == len(SAGE_LEVEL_THRESHOLDS)
 
     def test_search_for_records_news_ticker_returns_messages(self):
-        """Test SearchForRecords returns news messages for NewsTicker table."""
-        response = handle_search_for_records("NewsTicker", "", VALID_LOGIN_TICKET)
+        """Test SearchForRecords answers the game's NewsTicker search by field name."""
+        search = {"fields": ["TickerText", "ImageFileID", "TickerType"], "sort": "TickerType desc", "max": 10}
+        response = handle_search_for_records(
+            "NewsTicker", "MatchID = '-1' and ImageFileID = 0", VALID_LOGIN_TICKET, search=search
+        )
         xml = wrap_soap_envelope(response)
 
         assert "SearchForRecordsResponse" in xml
         assert "<SearchForRecordsResult>Success</SearchForRecordsResult>" in xml
-        # Should have at least one ArrayOfRecordValue with unicode string, int, short
         assert xml.count("<ArrayOfRecordValue>") >= 1
         assert "<unicodeStringValue>" in xml
+        assert "<intValue><value>0</value></intValue><" in xml
         assert "<shortValue><value>1</value></shortValue>" in xml
 
     def test_search_for_records_rating_player(self):
-        """Test SearchForRecords returns player rating data for RatingPlayer table."""
-        response = handle_search_for_records("RatingPlayer", "", VALID_LOGIN_TICKET)
+        """Test a RatingPlayer record the game creates comes back from its search."""
+        values = [
+            ("matchguid", "asciiStringValue", "guid-1"),
+            ("pid", "intValue", "2"),
+            ("skrating", "intValue", "4"),
+            ("ssrating", "intValue", "5"),
+        ]
+        created = handle_create_record("RatingPlayer", VALID_LOGIN_TICKET, GAME_ID_TW, values)
+        assert created.result == "Success" and created.record_id > 0
+
+        search = {"fields": ["matchguid", "pid", "skrating", "ssrating"], "sort": "rate_datetime desc", "max": 1}
+        response = handle_search_for_records(
+            "RatingPlayer", "pid=2 and ownerid=67890", VALID_LOGIN_TICKET, GAME_ID_TW, search=search
+        )
         xml = wrap_soap_envelope(response)
 
-        assert "SearchForRecordsResponse" in xml
         assert "<SearchForRecordsResult>Success</SearchForRecordsResult>" in xml
         assert xml.count("<ArrayOfRecordValue>") == 1
-        assert "<asciiStringValue>" in xml
-        # Profile ID from test ticket is 67890
-        assert "<intValue><value>67890</value></intValue>" in xml
+        assert "<asciiStringValue><value>guid-1</value></asciiStringValue>" in xml
+        assert "<intValue><value>4</value></intValue>" in xml
+        assert "<intValue><value>5</value></intValue>" in xml
+
+        other = handle_search_for_records(
+            "RatingPlayer", "pid=3 and ownerid=67890", VALID_LOGIN_TICKET, GAME_ID_TW, search=search
+        )
+        assert wrap_soap_envelope(other).count("<RecordValue>") == 0
 
     def test_search_for_records_custom_maps(self):
-        """Test SearchForRecords returns map data for custom_maps table."""
-        response = handle_search_for_records("custom_maps", "", VALID_LOGIN_TICKET)
+        """Test SearchForRecords finds the custom map record by its mapCRC."""
+        fields = [
+            "recordid",
+            "mapCRC",
+            "mapPreviewFileID",
+            "mapiniFileID",
+            "stringfileFileID",
+            "readmeFileID",
+            "mapArtFileID",
+            "mapPicFileID",
+            "mapFileID",
+        ]
+        search = {"fields": fields, "sort": "recordid", "max": 1}
+        response = handle_search_for_records("custom_maps", "mapCRC=-972957748", VALID_LOGIN_TICKET, search=search)
         xml = wrap_soap_envelope(response)
 
         assert "SearchForRecordsResponse" in xml
         assert "<SearchForRecordsResult>Success</SearchForRecordsResult>" in xml
         assert xml.count("<ArrayOfRecordValue>") == 1
-        # 9 int values
         assert xml.count("<RecordValue>") == 9
         assert "<intValue><value>8389</value></intValue>" in xml
 
+        other = handle_search_for_records("custom_maps", "mapCRC=1", VALID_LOGIN_TICKET, search=search)
+        assert wrap_soap_envelope(other).count("<RecordValue>") == 0
+
     def test_get_specific_records_ticker_mgmt(self):
-        """Test GetSpecificRecords returns TickerMgmt config values."""
-        response = handle_get_specific_records("TickerMgmt", VALID_LOGIN_TICKET)
+        """Test GetSpecificRecords answers TickerMgmt record 1 by field name."""
+        fields = ["DisplayRateInSec", "MaxItemsToDownload", "AdPercentage", "CMPercentage", "BGPercentage"]
+        response = handle_get_specific_records(
+            "TickerMgmt", VALID_LOGIN_TICKET, requested_fields=fields, record_ids=[1]
+        )
         xml = wrap_soap_envelope(response)
 
         assert "GetSpecificRecordsResponse" in xml
         assert "<GetSpecificRecordsResult>Success</GetSpecificRecordsResult>" in xml
+        assert xml.count("<RecordValue>") == 5
         assert "<floatValue><value>30" in xml
         assert "<shortValue><value>10</value></shortValue>" in xml
         assert "<floatValue><value>50" in xml
@@ -419,9 +466,13 @@ class TestSakeServiceIntegration:
         assert table_id == "PlayerStats_v5"
         assert filter_str == "ownerid=12345"
 
-        # Call the handler with parsed values
+        with Session(_db_module.engine) as db:
+            db.add(Persona(id=12345, user_id=1, name="owner"))
+            db.commit()
+
         login_ticket = get_element_text(operation, "loginTicket")
-        response = handle_search_for_records(table_id, filter_str, login_ticket)
+        search = {"fields": get_requested_fields(operation), "sort": "recordid", "max": 1}
+        response = handle_search_for_records(table_id, filter_str, login_ticket, search=search)
         xml = wrap_soap_envelope(response)
 
         # Verify response structure
@@ -430,11 +481,10 @@ class TestSakeServiceIntegration:
         assert "soap:Envelope" in xml
         assert "soap:Body" in xml
 
+        # Rank 1 for a player with no score, then the owner id.
         assert xml.count("<ArrayOfRecordValue>") == 1
         assert xml.count("<RecordValue>") == 2
-        assert "<intValue><value>57</value></intValue>" in xml
-        # Owner ID echoed back
-        assert "<intValue><value>12345</value></intValue>" in xml
+        assert "<intValue><value>1</value></intValue></RecordValue><RecordValue><intValue><value>12345</value>" in xml
 
     def test_get_my_records_player_stats_ra_by_field(self):
         """
@@ -458,39 +508,43 @@ class TestSakeServiceIntegration:
         # WinLossRatio (20 columns) and UnitKillDeathRatio (5) are floats
         assert xml.count("<floatValue>") == 25
 
-    def test_get_my_records_player_stats_kw_positional(self):
-        """
-        Test GetMyRecords returns 420-element KW positional career stats.
-        """
+    def test_get_my_records_player_stats_kw_by_field(self):
+        """Test GetMyRecords answers every Kane's Wrath PlayerStats_v100 column by name."""
         login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
-        requested_fields = [f"field_{i}" for i in range(20)]
+        requested_fields = list(cnc3_stats.SAKE_COLUMNS[GAME_ID_KW])
 
         response = handle_get_my_records(
-            login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_KW
+            login_ticket,
+            profile_id=67890,
+            requested_fields=requested_fields,
+            game_id=GAME_ID_KW,
+            table_id="PlayerStats_v100",
         )
         xml = wrap_soap_envelope(response)
 
-        assert "GetMyRecordsResponse" in xml
         assert "<GetMyRecordsResult>Success</GetMyRecordsResult>" in xml
-        # KW returns 420 positional elements
         assert xml.count("<RecordValue>") == 420
+        # WinLossRatio (78 columns), AverageGameLength, UnitKillDeathRatio and AverageCareerInputCommands (6 each)
+        assert xml.count("<floatValue>") == 96
 
-    def test_get_my_records_player_stats_tw_positional(self):
-        """
-        Test GetMyRecords returns 160-element TW positional career stats.
-        """
+    def test_get_my_records_player_stats_tw_by_field(self):
+        """Test GetMyRecords answers every Tiberium Wars PlayerStats_v5 column by name."""
         login_ticket = base64.b64encode(b"12345|67890|testtoken").decode("utf-8")
-        requested_fields = [f"field_{i}" for i in range(20)]
+        requested_fields = list(cnc3_stats.SAKE_COLUMNS[GAME_ID_TW])
 
         response = handle_get_my_records(
-            login_ticket, profile_id=67890, requested_fields=requested_fields, game_id=GAME_ID_TW
+            login_ticket,
+            profile_id=67890,
+            requested_fields=requested_fields,
+            game_id=GAME_ID_TW,
+            table_id="PlayerStats_v5",
         )
         xml = wrap_soap_envelope(response)
 
-        assert "GetMyRecordsResponse" in xml
         assert "<GetMyRecordsResult>Success</GetMyRecordsResult>" in xml
-        # TW returns 160 positional elements
         assert xml.count("<RecordValue>") == 160
+        # WinLossRatio (20 columns), AverageGameLength and UnitKillDeathRatio (5 each)
+        assert xml.count("<floatValue>") == 30
 
     def test_get_my_records_small_request_uses_field_names(self):
         """
@@ -553,9 +607,9 @@ class TestSakeServiceIntegration:
         # XML parser automatically decodes &gt; to >
         assert filter_str == "Level>0"
 
-        # Call the handler with parsed values
         login_ticket = get_element_text(operation, "loginTicket")
-        response = handle_search_for_records(table_id, filter_str, login_ticket)
+        search = {"fields": get_requested_fields(operation), "sort": "Level", "max": 1000}
+        response = handle_search_for_records(table_id, filter_str, login_ticket, search=search)
         xml = wrap_soap_envelope(response)
 
         # Verify response structure

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
 
-from app.models import ra3_stats
+from app.models import cnc3_stats, ra3_stats
 from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
 
 
@@ -63,9 +63,7 @@ FACTION_ENUM_MAP: dict[int, str] = {
     2: Faction.EMPIRE,
 }
 
-# KW faction enum (developer_version=100)
-# 12 entries: 3 groups of 3 playable factions separated by Observer/Commentator
-# Confirmed from match reports: GDI=1, ZOCOM=2, SteelTalons=3, MoK=7, Scrin=9, Reaper17=10
+# Kane's Wrath report side -> faction. The game sends no player side 0, 4 or 8.
 KW_FACTION_ENUM_MAP: dict[int, str] = {
     0: "Random",
     # GDI group
@@ -90,59 +88,10 @@ TW_FACTION_ENUM_MAP: dict[int, str] = {
     2: "Scrin",
 }
 
-KW_FACTION_KEY_MAX = 59  # 12 factions * 5 game_types - 1
-
-# KW game section keys (from disassembled binary format)
-KW_GAME_KEY_NAMES: dict[int, str] = {
-    106: "map_name",  # 0x6A - string, matchData+0x38
-    107: "game_duration",  # 0x6B - int32, matchData+0x3C
-    108: "game_version",  # 0x6C - string, matchData+0x40 (e.g. "1.3")
-    109: "is_ranked",  # 0x6D - byte, matchData+0x44
-    110: "teams_enabled",  # 0x6E - byte, matchData+0x4C
-    111: "host_name",  # 0x6F - string, matchData+0x48
-    112: "clan_name",  # 0x70 - string, matchData+0x50
-    113: "clan_tag",  # 0x71 - string, matchData+0x54
-    114: "clan_value",  # 0x72 - int32, matchData+0x58
-    115: "extra_data_1",  # 0x73 - int32, matchData+0x60
-    116: "extra_data_2",  # 0x74 - int32, matchData+0x64
-    # Keys 117-122 are game_type_flag keys (117 + game_type)
-}
-
-# KW per-player stat base IDs (from disassembled binary format)
-# Key = stat_base + game_type (0=unknown, 1=custom, 2=ranked_1v1, etc.)
-KW_PLAYER_STAT_BASE_NAMES: dict[int, str] = {
-    60: "duration_seconds",  # base+0x3C — only written for the local (submitting) player
-    65: "career_wins",  # base+0x41
-    70: "career_losses",  # base+0x46
-    75: "current_win_streak",  # base+0x4B
-    80: "current_loss_streak",  # base+0x50
-    85: "longest_win_streak",  # base+0x55
-    90: "longest_loss_streak",  # base+0x5A
-    95: "disconnects",  # base+0x5F
-}
-
-# Map subfactions to parent faction for stats storage
-KW_PARENT_FACTION: dict[str, str] = {
-    "GDI": "GDI",
-    "Steel Talons": "GDI",
-    "ZOCOM": "GDI",
-    "Nod": "Nod",
-    "Black Hand": "Nod",
-    "Marked of Kane": "Nod",
-    "Scrin": "Scrin",
-    "Reaper-17": "Scrin",
-    "Traveler-59": "Scrin",
-}
-
-# Game type names by offset (key = base + game_type_offset)
-# Offset = lobby_game_type_id - 2 (lobby IDs: 3=custom, 4=ranked_1v1, 5=ranked_2v2, 6=clan_1v1, 7=clan_2v2)
-GAME_TYPE_NAMES: dict[int, str] = {
-    0: "unknown",
-    1: "custom",
-    2: "ranked_1v1",
-    3: "ranked_2v2",
-    4: "clan_1v1",
-    5: "clan_2v2",
+SIDE_FACTION_MAPS: dict[int, dict[int, str]] = {
+    GAME_ID_RA: FACTION_ENUM_MAP,
+    GAME_ID_KW: KW_FACTION_ENUM_MAP,
+    GAME_ID_TW: TW_FACTION_ENUM_MAP,
 }
 
 # Wire game type offset (GAME_TYPE_NAMES above) → our storage bucket (GAME_TYPES index in game_config).
@@ -153,31 +102,6 @@ GAME_TYPE_KEY_TO_DB: dict[int, int] = {
     3: 2,  # ranked_2v2
     4: 3,  # clan_1v1
     5: 4,  # clan_2v2
-}
-
-# TW player section: stat base ID → name (key = base + game_type_offset). Keys 0-14 are side keys.
-PLAYER_STAT_BASE_NAMES: dict[int, str] = {
-    15: "duration_seconds",  # only written for the local (submitting) player
-    20: "career_wins",
-    25: "career_losses",
-    30: "current_win_streak",
-    35: "current_loss_streak",
-    40: "longest_win_streak",
-    45: "longest_loss_streak",
-    50: "disconnects",
-    55: "desyncs",
-    # Bases 60-70: gap (not seen in reports yet)
-    # Bases 75+: seen as all-zero for clan_1v1, unmapped pending non-zero data
-}
-
-# TW game section: key → name
-GAME_KEY_NAMES: dict[int, str] = {
-    61: "map_path",
-    62: "duration_seconds",
-    63: "version",
-    64: "unknown_64",
-    65: "unknown_65",
-    # Keys 72-77: game_type flag (key = 72 + game_type_offset, value is flag byte)
 }
 
 
@@ -198,97 +122,36 @@ def persona_from_roster_guid(full_id: str) -> int | None:
     return None
 
 
+def _cnc3_game(game_id: int) -> cnc3_stats.Cnc3Game:
+    game = cnc3_stats.GAMES.get(game_id)
+    if game is None:
+        raise ValueError(f"Unsupported game_id: {game_id}")
+    return game
+
+
 def get_faction_from_key(key: int, game_id: int = GAME_ID_RA) -> tuple[str, int]:
-    """
-    Extract faction and game_type from player section key.
-
-    Formula: key = faction_enum * 5 + game_type
-    Where:
-        - faction_enum varies by game (RA3: Allied/Soviet/Empire, TW: GDI/Nod/Scrin, KW: 12 subfactions)
-        - game_type: 0=unknown, 1=custom, 2=ranked_1v1, 3=ranked_2v2, 4=clan_1v1
-
-    Args:
-        key: The player section key containing faction info.
-        game_id: Game ID to select the correct faction map.
-
-    Returns:
-        Tuple of (faction_name, game_type_int).
-    """
+    """(faction name, gt) for a player side key: side * 5 + gt, with gt 1..5. (Unknown, 0) for any other key."""
     if game_id == GAME_ID_RA:
         side_gt = ra3_stats.side_from_key(key)
-        if side_gt is None:
-            return Faction.UNKNOWN, 0
-        return FACTION_ENUM_MAP.get(side_gt[0], Faction.UNKNOWN), side_gt[1]
-    if game_id == GAME_ID_KW:
-        faction_map = KW_FACTION_ENUM_MAP
-    elif game_id == GAME_ID_TW:
-        faction_map = TW_FACTION_ENUM_MAP
     else:
-        raise ValueError(f"Unsupported game_id: {game_id}")
-    game_type = key % 5
-    faction_enum = key // 5
-    faction = faction_map.get(faction_enum, Faction.UNKNOWN)
-    return faction, game_type
+        side_gt = cnc3_stats.side_from_key(_cnc3_game(game_id), key)
+    if side_gt is None:
+        return Faction.UNKNOWN, 0
+    return SIDE_FACTION_MAPS[game_id].get(side_gt[0], Faction.UNKNOWN), side_gt[1]
 
 
 def get_player_key_name(key: int, game_id: int = GAME_ID_RA, gt: int = 0) -> str:
-    """
-    Get a human-readable name for a player section key.
-
-    Keys 0-14 (TW) or 0-59 (KW) are faction indicators (faction_enum * 5 + game_type).
-    Keys after that are stats using formula: key = stat_base + game_type_offset.
-    RA3 needs the report's mode index (gt).
-    """
+    """Names a player-section key of a report whose mode index is gt."""
     if game_id == GAME_ID_RA:
         return ra3_stats.player_key_name(key, gt)
-    game_type = key % 5
-    gt_name = GAME_TYPE_NAMES.get(game_type, f"gt{game_type}")
-
-    if game_id == GAME_ID_KW:
-        faction_key_max = KW_FACTION_KEY_MAX
-        faction_map = KW_FACTION_ENUM_MAP
-        stat_base_names = KW_PLAYER_STAT_BASE_NAMES
-    elif game_id == GAME_ID_TW:
-        faction_key_max = 14
-        faction_map = TW_FACTION_ENUM_MAP
-        stat_base_names = PLAYER_STAT_BASE_NAMES
-    else:
-        raise ValueError(f"Unsupported game_id: {game_id}")
-
-    if 0 <= key <= faction_key_max:
-        faction_enum = key // 5
-        faction = faction_map.get(faction_enum, f"faction{faction_enum}")
-        return f"faction_indicator.{faction}.{gt_name}"
-
-    # KW team_id key
-    if game_id == GAME_ID_KW and key == 117:
-        return "team_id"
-
-    base = key - game_type
-    stat_name = stat_base_names.get(base, f"unknown_{base}")
-    return f"{stat_name}.{gt_name}"
+    return cnc3_stats.player_key_name(_cnc3_game(game_id), key, gt)
 
 
 def get_game_key_name(key: int, game_id: int = GAME_ID_RA) -> str:
     """Get a human-readable name for a game section key."""
-    if game_id == GAME_ID_KW:
-        # KW game_type keys: 117-122
-        if 117 <= key <= 122:
-            gt = key - 117
-            gt_name = GAME_TYPE_NAMES.get(gt, f"gt{gt}")
-            return f"game_type_flag.{gt_name}"
-        return KW_GAME_KEY_NAMES.get(key, f"unknown_{key}")
-    elif game_id == GAME_ID_RA:
+    if game_id == GAME_ID_RA:
         return ra3_stats.game_key_name(key)
-    elif game_id == GAME_ID_TW:
-        # TW game_type keys: 72-77
-        if 72 <= key <= 77:
-            gt = key - 72
-            gt_name = GAME_TYPE_NAMES.get(gt, f"gt{gt}")
-            return f"game_type_flag.{gt_name}"
-        return GAME_KEY_NAMES.get(key, f"unknown_{key}")
-    else:
-        raise ValueError(f"Unsupported game_id: {game_id}")
+    return cnc3_stats.game_key_name(_cnc3_game(game_id), key)
 
 
 @dataclass
@@ -439,6 +302,22 @@ class MatchReport:
         """Check if this is a Red Alert 3 report."""
         return not self.is_kw and not self.is_tw
 
+    @property
+    def side_game_id(self) -> int:
+        """The game whose key numbering this report uses."""
+        if self.is_kw:
+            return GAME_ID_KW
+        return GAME_ID_TW if self.is_tw else GAME_ID_RA
+
+    @property
+    def key_offset(self) -> int:
+        """Kane's Wrath numbers every key 45 above Tiberium Wars and RA3."""
+        return cnc3_stats.KW.key_offset if self.is_kw else 0
+
+    @property
+    def cnc3_game(self) -> cnc3_stats.Cnc3Game | None:
+        return cnc3_stats.GAMES.get(self.side_game_id)
+
     @classmethod
     def from_bytes(cls, data: bytes, game_id: int = 0) -> "MatchReport":
         """Parse a match report from binary data."""
@@ -529,29 +408,12 @@ class MatchReport:
 
             faction = Faction.UNKNOWN
             player_data = self.player_section[i] if i < len(self.player_section) else {}
-
-            # Detect faction from player section keys using formula:
-            # key = faction_enum * 5 + game_type
-            # TW: keys 0-14 (3 factions * 5 game_types)
-            # KW: keys 0-59 (12 factions * 5 game_types)
-            # RA3: keys 1-15 (game_type 1..5)
-            if self.is_kw:
-                faction_key_max = KW_FACTION_KEY_MAX
-                faction_map = KW_FACTION_ENUM_MAP
-            elif self.is_ra3:
-                faction_key_max = 15
-                faction_map = FACTION_ENUM_MAP
-            elif self.is_tw:
-                faction_key_max = 14
-                faction_map = TW_FACTION_ENUM_MAP
-            else:
-                raise ValueError(f"Unsupported game_id: {self.game_id}")
             for key, value in player_data.items():
-                if value.value_type == ValueType.INT16 and 0 <= key <= faction_key_max:
-                    faction_enum = (key - 1) // 5 if self.is_ra3 else key // 5
-                    detected_faction = faction_map.get(faction_enum, Faction.UNKNOWN)
-                    faction = detected_faction
-                    break
+                if value.value_type == ValueType.INT16:
+                    side_faction, side_gt = get_faction_from_key(key, self.side_game_id)
+                    if side_gt:
+                        faction = side_faction
+                        break
 
             # Result: 0=win, 1=loss, 3=disconnect, 4=dsync
             result = 0
@@ -583,44 +445,22 @@ class MatchReport:
         ]
 
     def get_local_player_index(self) -> int | None:
-        """
-        Identify the local (submitting) player by checking for duration_seconds.
-
-        The game only writes duration_seconds for the local player's stats.
-        KW base=60, RA3/TW base=15, key = base + game_type (0-4; RA3 1-5).
-        """
-        if self.is_kw:
-            duration_keys = range(60, 65)
-        elif self.is_ra3:
-            duration_keys = range(16, 21)
-        elif self.is_tw:
-            duration_keys = range(15, 20)
-        else:
-            raise ValueError(f"Unsupported game_id: {self.game_id}")
+        """The index of the submitting player: the game sends the duration key 15 + gt only for that player."""
+        base = ra3_stats.PLAYER_KEY_DURATION_BASE + self.key_offset
+        duration_keys = {base + gt for gt in range(1, 6)}
         for i, section in enumerate(self.player_section):
-            if section.keys() & set(duration_keys):
+            if section.keys() & duration_keys:
                 return i
         return None
 
     def get_map_path(self) -> str:
         """Get the map path from the report."""
-        if self.is_kw:
-            key = 106
-        elif self.is_ra3 or self.is_tw:
-            key = 61
-        else:
-            raise ValueError(f"Unsupported game_id: {self.game_id}")
+        key = 61 + self.key_offset
         return str(self.game_section[key].value) if key in self.game_section else ""
 
-    def get_replay_guid(self) -> str:
-        """Get the replay GUID from the report."""
-        if 67 in self.game_section:
-            return str(self.game_section[67].value)
-        return ""
-
     def get_match_id(self) -> str:
-        """RA3: the lobby MatchID (game key 67), sent only when key 65 is set."""
-        value = self.game_section.get(67)
+        """The lobby MatchID (game key 67), sent only when key 65 is set."""
+        value = self.game_section.get(67 + self.key_offset)
         return str(value.value) if value is not None else ""
 
     def get_ra3_mode(self) -> str:
@@ -638,19 +478,25 @@ class MatchReport:
                 counts[stat.key] = int(value.value)
         return counts
 
-    def get_duration(self) -> int:
-        """
-        Get the game duration in seconds from the report.
+    def get_cnc3_mode(self) -> str:
+        """Tiberium Wars and Kane's Wrath: the career mode of this report."""
+        return cnc3_stats.GT_TO_MODE.get(self.get_game_type_from_key(), "unranked")
 
-        Returns:
-            Duration in seconds, or 0 if not available (partial reports).
-        """
-        if self.is_kw:
-            key = 107
-        elif self.is_ra3 or self.is_tw:
-            key = 62
-        else:
-            raise ValueError(f"Unsupported game_id: {self.game_id}")
+    def get_cnc3_counts(self, index: int) -> dict[str, int]:
+        """Tiberium Wars and Kane's Wrath: one player's counts for this match, by career key."""
+        game = self.cnc3_game
+        gt = self.get_game_type_from_key()
+        section = self.player_section[index] if index < len(self.player_section) else {}
+        counts: dict[str, int] = {}
+        for stat in game.report_stats if game else ():
+            value = section.get(stat.report_base + game.key_offset + gt)
+            if value is not None and value.value_type in (ValueType.INT32, ValueType.INT16, ValueType.BYTE):
+                counts[stat.key] = int(value.value)
+        return counts
+
+    def get_duration(self) -> int:
+        """The game length in seconds. Partial reports do not carry it, so they give 0."""
+        key = 62 + self.key_offset
         return int(self.game_section[key].value) if key in self.game_section else 0
 
     def get_game_type_from_key(self) -> int:
@@ -671,14 +517,9 @@ class MatchReport:
         Returns:
             The game_type integer (0-5), defaults to 0 if not found.
         """
-        if self.is_kw:
-            base, end = 117, 122
-        elif self.is_ra3 or self.is_tw:
-            base, end = 72, 77
-        else:
-            raise ValueError(f"Unsupported game_id: {self.game_id}")
+        base = ra3_stats.GAME_KEY_MODE_BASE + self.key_offset
         for key in self.game_section:
-            if base <= key <= end:
+            if base <= key <= base + 5:
                 return key - base
         return 0  # Default to unranked
 

@@ -4,8 +4,8 @@ Red Alert 3 stats tool. Run from the repository root with the server stopped.
     python scripts/ra3_stats_tool.py decode <report.bin>    names every key of a saved report
     python scripts/ra3_stats_tool.py show <persona>         career, score and rank (name or id)
     python scripts/ra3_stats_tool.py history <persona>      the matches behind a career
-    python scripts/ra3_stats_tool.py rebuild                folds every career again from ra3_match
-    python scripts/ra3_stats_tool.py import [dir]           adds saved reports (default Report/ra3) to ra3_match, then rebuilds
+    python scripts/ra3_stats_tool.py rebuild                folds every career again from match_history
+    python scripts/ra3_stats_tool.py import [dir]           adds saved reports (default Report/ra3) to match_history, then rebuilds
     python scripts/ra3_stats_tool.py catalog [out.csv]      writes the stat catalogue (default docs/ra3_stat_catalog.csv)
 """
 
@@ -48,7 +48,7 @@ def _session() -> Session:
 
     import app.db.database as database
 
-    # The server's engine echoes every SQL statement. Creating the tables adds ra3_match to an older database.
+    # The server's engine echoes every SQL statement. Creating the tables adds match_history to an older database.
     database.engine = create_engine(database.DATABASE_URL, connect_args={"check_same_thread": False})
     database.create_db_and_tables()
     return Session(database.engine)
@@ -97,11 +97,12 @@ def show(who: str) -> None:
 
 
 def history(who: str) -> None:
-    from app.models.models import Ra3Match
+    from app.models.models import MatchHistory
 
     with _session() as session:
         persona = _persona(session, who)
-        for match in session.exec(select(Ra3Match).order_by(Ra3Match.id)).all():
+        matches = session.exec(select(MatchHistory).where(MatchHistory.game_id == GAME_ID_RA).order_by(MatchHistory.id))
+        for match in matches.all():
             for player in match.players:
                 if player.get("persona_id") == persona.id:
                     print(

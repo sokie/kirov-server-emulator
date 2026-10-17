@@ -138,13 +138,23 @@ See [Web Portal Documentation](docs/ui/WEB_PORTAL.md) for detailed information a
 python -m pytest app/test/ -v
 ```
 
-Red Alert 3 careers can be read and rebuilt with the server stopped:
+Careers can be read and rebuilt with the server stopped. Red Alert 3:
 
 ```bash
 python scripts/ra3_stats_tool.py show <persona>     # career, score and rank
 python scripts/ra3_stats_tool.py history <persona>  # the matches behind it
 python scripts/ra3_stats_tool.py import             # load saved reports from Report/ra3, then rebuild
 ```
+
+Tiberium Wars (`tw`) and Kane's Wrath (`kw`):
+
+```bash
+python scripts/cnc3_stats_tool.py tw show <persona>     # career, score and rank
+python scripts/cnc3_stats_tool.py kw history <persona>  # the matches behind it
+python scripts/cnc3_stats_tool.py tw import             # load saved reports from Report/TW, then rebuild
+```
+
+Run `rebuild` for each game after an upgrade, so older careers get their all-online totals.
 
 ## Documentation
 
@@ -158,9 +168,12 @@ Detailed protocol documentation is available in the `docs/` directory:
 | [NATNEG.md](docs/NATNEG.md) | NAT negotiation protocol for establishing peer-to-peer connections |
 | [RELAY.md](docs/RELAY.md) | UDP relay fallback when direct P2P fails |
 | [MASTER_SERVER.md](docs/MASTER_SERVER.md) | Master server for game discovery and session registration |
-| [STATS_AND_SOAP_FORMAT.md](docs/STATS_AND_SOAP_FORMAT.md) | Red Alert 3 match reports, careers and Sake tables |
+| [STATS_AND_SOAP_FORMAT.md](docs/STATS_AND_SOAP_FORMAT.md) | Red Alert 3, Tiberium Wars and Kane's Wrath match reports, careers and Sake tables |
 | [ra3_stat_catalog.csv](docs/ra3_stat_catalog.csv) | Every Red Alert 3 stat: career key, Sake column, fold rule and report key |
-| [ELO_AND_RANKINGS.md](docs/ELO_AND_RANKINGS.md) | ELO ladders and match finalization |
+| [tw_stat_catalog.csv](docs/tw_stat_catalog.csv) | Every Tiberium Wars stat |
+| [kw_stat_catalog.csv](docs/kw_stat_catalog.csv) | Every Kane's Wrath stat |
+| [ELO_AND_RANKINGS.md](docs/ELO_AND_RANKINGS.md) | ELO ladders, score and rank, and match finalization |
+| [WEB_PORTAL.md](docs/ui/WEB_PORTAL.md) | Web portal pages, including the player profile |
 
 ## Architecture Overview
 
