@@ -444,15 +444,6 @@ class MatchReport:
             for p in self.parsed_players
         ]
 
-    def get_local_player_index(self) -> int | None:
-        """The index of the submitting player: the game sends the duration key 15 + gt only for that player."""
-        base = ra3_stats.PLAYER_KEY_DURATION_BASE + self.key_offset
-        duration_keys = {base + gt for gt in range(1, 6)}
-        for i, section in enumerate(self.player_section):
-            if section.keys() & duration_keys:
-                return i
-        return None
-
     def get_map_path(self) -> str:
         """Get the map path from the report."""
         key = 61 + self.key_offset

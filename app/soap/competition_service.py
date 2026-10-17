@@ -325,41 +325,24 @@ def handle_submit_report(
                 # Use ccid persona_id instead of SOAP profile_id for reliability
                 profile_id = ccid_persona_id
 
-            # Find this player's data in the report
             player_result = 0
             player_faction = ""
-            player_found = False
-
-            # Primary method: identify the local (submitting) player via the
-            # gameDuration key (0x3D / 61) which is only written for the local player.
-            local_idx = report.get_local_player_index()
-            if local_idx is not None and local_idx < len(player_list):
-                player = player_list[local_idx]
+            submitter = next(((i, p) for i, p in enumerate(player_list) if p.persona_id == profile_id), None)
+            if submitter is not None:
+                idx, player = submitter
                 player_result = 0 if player.is_winner else 1
                 player_faction = player.faction
                 player_full_id = player.full_id
-                player_found = True
                 logger.info(
-                    "[%s] Identified submitter as player %d via gameDuration key "
-                    "(persona_id=%d, faction=%s, is_winner=%s)",
+                    "[%s] Submitter persona_id=%d is roster player %d (faction=%s, is_winner=%s)",
                     request_id,
-                    local_idx,
                     profile_id,
+                    idx,
                     player_faction,
                     player.is_winner,
                 )
-
-            # Fallback: single-player partial report
-            if not player_found and len(player_list) == 1:
-                player = player_list[0]
-                player_result = 0 if player.is_winner else 1
-                player_faction = player.faction
-                player_full_id = player.full_id
-                player_found = True
-                logger.info(
-                    "[%s] Used partial report (single player)",
-                    request_id,
-                )
+            else:
+                logger.warning("[%s] No roster player has the submitter's persona_id=%d", request_id, profile_id)
 
             # The mode comes from the game section key, not from get_game_type(): that one collapses to
             # "Disconnect"/"Dsync" as soon as any player drops, which filed ranked drops as unranked and

@@ -16,10 +16,10 @@ from sqlmodel import Session, SQLModel, select
 import app.db.database as _db_module
 import app.soap.competition_service as competition_service
 from app.db import cnc3_career
-from app.db.crud import get_player_stats
+from app.db.crud import extract_persona_from_ccid, get_player_stats
 from app.models.cnc3_stats import KW, SAKE_COLUMNS, TW
 from app.models.game_config import SAGE_LEVEL_THRESHOLDS
-from app.models.models import MatchHistory, Persona
+from app.models.models import MatchHistory, MatchReport, Persona, PlayerReportIntent
 from app.soap.competition_service import competition_handler
 from app.soap.sake_service import sake_storage_handler
 from app.test.test_cnc3_stats import build_report, guid
@@ -192,6 +192,22 @@ class TestCompetitionRequests:
         db.expire_all()
         assert get_player_stats(db, 1, TW.game_id).stats["ranked_1v1"]["units_killed"] == 4
         assert get_player_stats(db, 2, TW.game_id).stats["ranked_1v1"]["factions"]["scrin"]["losses"] == 1
+
+    @pytest.mark.parametrize("game", [TW, KW])
+    def test_the_submitter_row_is_found_by_its_ccid(self, db, game):
+        csid, ccid = self._session(game.game_id)
+        assert extract_persona_from_ccid(ccid) == 1
+        sides = sorted(game.side_to_faction)
+        players = [
+            {"guid": guid(2), "side": sides[0], "result": 0},
+            {"guid": guid(1), "side": sides[-1], "result": 1},
+        ]
+        self._submit(game.game_id, csid, ccid, build_report(game, 2, players))
+
+        row = db.exec(select(MatchReport).where(MatchReport.csid == csid)).one()
+        assert (row.persona_id, row.faction, row.result) == (1, "Scrin" if game is TW else "Traveler-59", 1)
+        intent = db.exec(select(PlayerReportIntent).where(PlayerReportIntent.ccid == ccid)).one()
+        assert intent.full_id == str(guid(1))
 
     def test_kane_s_wrath_settles_from_the_report_that_names_everyone(self, db):
         csid, ccid = self._session(KW.game_id)

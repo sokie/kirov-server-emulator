@@ -165,7 +165,6 @@ class TestReports:
             "Barstow Badlands (2)",
         )
         assert [(p.faction, p.result) for p in report.get_player_list()] == [("GDI", 0), ("Scrin", 1)]
-        assert report.get_local_player_index() == 0
         winner = report.get_cnc3_counts(0)
         assert (winner["structures_built"], winner["structures_destroyed"], winner["units_built"]) == (
             2,
@@ -184,7 +183,6 @@ class TestReports:
         )
         assert report.game_section[108].value == "1.3"
         assert [(p.faction, p.result) for p in report.get_player_list()] == [("GDI", 0), ("Marked of Kane", 1)]
-        assert report.get_local_player_index() == 0
         winner = report.get_cnc3_counts(0)
         assert (winner["structures_built"], winner["structures_destroyed"], winner["units_built"]) == (2, 1, 7)
         assert report.get_cnc3_counts(1)["structures_lost"] == 1
@@ -225,7 +223,6 @@ class TestReports:
         assert factions == (["GDI", "Scrin"] if game is TW else ["GDI", "Traveler-59"])
         assert report.get_cnc3_counts(0)["units_killed"] == 9
         assert report.get_cnc3_counts(1)["structures_lost"] == 3
-        assert report.get_local_player_index() == 0
 
     def test_kane_s_wrath_keys_are_45_higher(self):
         players = [{"guid": guid(1), "side": 3, "result": 0}, {"guid": guid(2), "side": 6, "result": 1}]
@@ -233,7 +230,7 @@ class TestReports:
         assert report.is_kw and 106 in report.game_section and 107 in report.game_section
         assert (report.get_cnc3_mode(), report.get_duration(), report.get_map_path()) == ("ranked_1v1", 410, "Test Map")
         assert [p.faction for p in report.get_player_list()] == ["Steel Talons", "Black Hand"]
-        assert 62 in report.player_section[0] and report.get_local_player_index() == 0
+        assert 62 in report.player_section[0]
 
 
 def _fold(game: Cnc3Game, matches: list[tuple]) -> dict:

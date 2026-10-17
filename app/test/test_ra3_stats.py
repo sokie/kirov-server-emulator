@@ -104,7 +104,6 @@ class TestCapturedReports:
         assert report.get_ra3_mode() == "unranked"
         assert report.get_map_path() == "Battlebase Beta (2)"
         assert report.get_duration() == 167
-        assert report.get_local_player_index() == 0
 
         players = report.get_player_list()
         assert [(p.persona_id, p.faction, p.result) for p in players] == [
@@ -127,7 +126,6 @@ class TestCapturedReports:
     def test_loser_report_lists_its_own_player_first(self):
         report = MatchReport.from_bytes(_fixture("report_unranked_2p_loser.bin"), game_id=GAME_ID_RA)
         assert [p.persona_id for p in report.get_player_list()] == [2, 1]
-        assert report.get_local_player_index() == 0
 
 
 class TestReportKeys:
@@ -149,7 +147,6 @@ class TestReportKeys:
         assert [p.faction for p in report.get_player_list()] == [Faction.ALLIED, Faction.SOVIET, Faction.EMPIRE]
         assert report.get_ra3_counts(0)["units_killed"] == 7
         assert report.get_ra3_counts(2)["units_lost_value"] == 900
-        assert report.get_local_player_index() == 0
 
 
 class TestCareerFold:
