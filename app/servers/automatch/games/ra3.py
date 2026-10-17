@@ -1,9 +1,15 @@
-"""RA3 automatch game factory — ELO range matching, client map bitsets."""
+"""RA3 automatch game factory: ELO matching on the server's ratings, client map bitsets."""
 
 import random
 import time
 from dataclasses import dataclass
+from functools import reduce
+from itertools import combinations
 
+from app.db.crud import get_mode_elo
+from app.db.database import create_session
+from app.models.game_config import GAME_ID_RA
+from app.models.ladder import INITIAL_ELO, SEARCH_WINDOW, balanced_split, team_average, within_reach
 from app.servers.automatch.base import BasePlayer, GameFactory, find_common_maps, pick_random_map_index
 
 
@@ -11,18 +17,35 @@ from app.servers.automatch.base import BasePlayer, GameFactory, find_common_maps
 class RA3Player(BasePlayer):
     """RA3-specific player fields."""
 
-    point_range: int = 1000
-    points_stddev: int = 50
+    point_range: int = SEARCH_WINDOW  # the rating difference the player accepts
     teammate: str | None = None
 
-
-# PointRange -> sigma coefficient for ELO interval
-POINTS_RANGE_MAPPING = {"100": 1, "250": 2, "400": 4, "1000": 8}
 
 # Ladder IDs
 LAD_1V1 = 1
 LAD_2V2 = 2
 LAD_TEAM_2V2 = 3
+
+LADDER_MODES = {LAD_1V1: "ranked_1v1", LAD_2V2: "ranked_2v2", LAD_TEAM_2V2: "ranked_2v2"}
+
+
+def ladder_elo(profile_id: int, ladder_id: int) -> int:
+    """Returns the player's ELO in the mode the ladder rates."""
+    if profile_id <= 0:
+        return INITIAL_ELO
+    session = create_session()
+    try:
+        return get_mode_elo(session, profile_id, GAME_ID_RA, LADDER_MODES.get(ladder_id, "ranked_1v1"))
+    finally:
+        session.close()
+
+
+def common_maps(players: list[RA3Player]) -> str:
+    return reduce(find_common_maps, (p.map_bitset for p in players[1:]), players[0].map_bitset)
+
+
+def all_within_reach(players: list[RA3Player]) -> bool:
+    return all(within_reach(a.points, a.point_range, b.points, b.point_range) for a, b in combinations(players, 2))
 
 
 class RA3GameFactory(GameFactory):
@@ -36,19 +59,19 @@ class RA3GameFactory(GameFactory):
     valid_num_players = [2, 4]
 
     def build_player(self, nickname: str, profile_id: int, infos: dict[str, str]) -> RA3Player:
+        ladder_id = int(infos.get("LadID", "1"))
         return RA3Player(
             nickname=nickname,
             profile_id=profile_id,
-            points=int(infos.get("Points", "1000")),
-            points_stddev=int(infos.get("PointsStddev", "50")),
-            point_range=int(infos.get("PointRange", "1000")),
+            points=ladder_elo(profile_id, ladder_id),
+            point_range=int(infos.get("PointRange", str(SEARCH_WINDOW))),
             ip=int(infos.get("IP", "0")),
             side=int(infos.get("Side", "-1")),
             color=int(infos.get("Color", "-1")),
             nat=int(infos.get("NAT", "0")),
             num_players=int(infos.get("NumPlayers", "2")),
             map_bitset=infos.get("Maps", ""),
-            ladder_id=int(infos.get("LadID", "1")),
+            ladder_id=ladder_id,
             teammate=infos.get("teammate1"),
             queued_at=time.time(),
             infos=infos,
@@ -68,136 +91,76 @@ class RA3GameFactory(GameFactory):
         for (num_players, ladder_id), pool in pools.items():
             if num_players == 2 and ladder_id == LAD_1V1:
                 match = self._match_1v1(pool)
-                if match:
-                    results.append(match)
             elif num_players == 4 and ladder_id == LAD_2V2:
                 match = self._match_2v2_random(pool)
-                if match:
-                    results.append(match)
             elif num_players == 4 and ladder_id == LAD_TEAM_2V2:
                 match = self._match_2v2_team(pool)
-                if match:
-                    results.append(match)
+            else:
+                match = None
+            if match:
+                results.append(match)
 
         return results or None
 
-    # ── 1v1 ELO-range matching ──────────────────────────────────────────────
+    def _finish(
+        self, matched: list[RA3Player], team_ids: list[int] | None = None
+    ) -> tuple[list[BasePlayer], str] | None:
+        map_index = pick_random_map_index(common_maps(matched))
+        if map_index == -1:
+            return None
+        return list(matched), self._format_matched(matched, map_index, team_ids)
+
+    # ── 1v1 ─────────────────────────────────────────────────────────────────
 
     def _match_1v1(self, pool: list[RA3Player]) -> tuple[list[BasePlayer], str] | None:
-        """Find the best ELO-range pair and return (players, formatted message)."""
-        if len(pool) < 2:
+        """Pairs the two players with the closest ratings that are within reach and share a map."""
+        pairs = [
+            (abs(a.points - b.points), min(a.queued_at, b.queued_at), a, b)
+            for a, b in combinations(pool, 2)
+            if within_reach(a.points, a.point_range, b.points, b.point_range) and common_maps([a, b])
+        ]
+        if not pairs:
             return None
+        _, _, a, b = min(pairs, key=lambda pair: pair[:2])
+        return self._finish([a, b])
 
-        best_pair: tuple[RA3Player, RA3Player] | None = None
-        best_score = 0.0
-
-        for i in range(len(pool)):
-            p1 = pool[i]
-            p1_elo = max(p1.points, 1)
-            p1_stddev = max(p1.points_stddev, 50)
-            p1_sigma = POINTS_RANGE_MAPPING.get(str(p1.point_range), 8)
-            p1_interval = (p1_elo - p1_sigma * p1_stddev, p1_elo + p1_sigma * p1_stddev)
-
-            for j in range(i + 1, len(pool)):
-                p2 = pool[j]
-
-                p2_elo = max(p2.points, 1)
-                p2_stddev = max(p2.points_stddev, 50)
-                p2_sigma = POINTS_RANGE_MAPPING.get(str(p2.point_range), 8)
-                p2_interval = (p2_elo - p2_sigma * p2_stddev, p2_elo + p2_sigma * p2_stddev)
-
-                overlap_low = max(p1_interval[0], p2_interval[0])
-                overlap_high = min(p1_interval[1], p2_interval[1])
-
-                if overlap_high < overlap_low:
-                    continue
-
-                overlap_len = overlap_high - overlap_low
-                p1_range = p1_interval[1] - p1_interval[0]
-                p2_range = p2_interval[1] - p2_interval[0]
-
-                if p1_range == 0 or p2_range == 0:
-                    continue
-
-                score = min(overlap_len / p1_range, overlap_len / p2_range)
-                score += random.randint(0, 3) / 100.0
-                score = max(0.0, min(1.0, score))
-
-                if score > best_score:
-                    best_score = score
-                    best_pair = (p1, p2)
-
-        if not best_pair:
-            return None
-
-        p1, p2 = best_pair
-        common = find_common_maps(p1.map_bitset, p2.map_bitset)
-        if not common:
-            return None
-        map_index = pick_random_map_index(common)
-        if map_index == -1:
-            return None
-        msg = self._format_matched([p1, p2], map_index)
-        return [p1, p2], msg
-
-    # ── 2v2 random matching (LadID=2) ───────────────────────────────────────
+    # ── 2v2 random partners (LadID=2) ───────────────────────────────────────
 
     def _match_2v2_random(self, pool: list[RA3Player]) -> tuple[list[BasePlayer], str] | None:
-        """Match 4 random players. No ELO check — mirrors reference."""
-        if len(pool) < 4:
+        """Takes the four neighbours in rating order with the smallest spread, then balances the teams."""
+        ranked = sorted(pool, key=lambda p: p.points)
+        groups = [ranked[i : i + 4] for i in range(len(ranked) - 3)]
+        groups = [g for g in groups if all_within_reach(g) and common_maps(g)]
+        if not groups:
             return None
+        group = min(groups, key=lambda g: g[-1].points - g[0].points)
+        team_a, team_b = balanced_split(group, lambda p: p.points)
+        return self._finish(team_a + team_b, team_ids=[0, 0, 1, 1])
 
-        matched = pool[:4]
-        common = matched[0].map_bitset
-        for p in matched[1:]:
-            common = find_common_maps(common, p.map_bitset)
-        if not common:
-            return None
-        map_index = pick_random_map_index(common)
-        if map_index == -1:
-            return None
-        msg = self._format_matched(matched, map_index, team_ids=[0, 0, 1, 1])
-        return list(matched), msg
-
-    # ── Team 2v2 matching (LadID=3) ─────────────────────────────────────────
+    # ── Team 2v2 (LadID=3) ──────────────────────────────────────────────────
 
     def _match_2v2_team(self, pool: list[RA3Player]) -> tuple[list[BasePlayer], str] | None:
-        """
-        Match pre-formed teams using teammate1 field.
-
-        Both players in a team must reference each other. Two complete teams
-        are required for a match.
-        """
-        # Find complete teams (mutual teammate references)
+        """Pairs the two pre-formed teams (mutual teammate1) with the closest average ratings."""
         teams: list[tuple[RA3Player, RA3Player]] = []
         used: set[str] = set()
-
         for p in pool:
             if p.nickname in used or not p.teammate:
                 continue
-            # Find the teammate in the pool
             mate = next((t for t in pool if t.nickname == p.teammate and t.nickname not in used), None)
             if mate and mate.teammate == p.nickname:
                 teams.append((p, mate))
-                used.add(p.nickname)
-                used.add(mate.nickname)
+                used.update((p.nickname, mate.nickname))
 
-        if len(teams) < 2:
+        candidates = []
+        for team_a, team_b in combinations(teams, 2):
+            gap = abs(team_average([p.points for p in team_a]) - team_average([p.points for p in team_b]))
+            matched = [*team_a, *team_b]
+            if gap <= min(p.point_range for p in matched) and common_maps(matched):
+                candidates.append((gap, matched))
+        if not candidates:
             return None
-
-        team_a = teams[0]
-        team_b = teams[1]
-        matched: list[RA3Player] = [team_a[0], team_a[1], team_b[0], team_b[1]]
-        common = matched[0].map_bitset
-        for p in matched[1:]:
-            common = find_common_maps(common, p.map_bitset)
-        if not common:
-            return None
-        map_index = pick_random_map_index(common)
-        if map_index == -1:
-            return None
-        msg = self._format_matched(matched, map_index, team_ids=[0, 0, 1, 1])
-        return list(matched), msg
+        _, matched = min(candidates, key=lambda c: c[0])
+        return self._finish(matched, team_ids=[0, 0, 1, 1])
 
     # ── Message formatting ──────────────────────────────────────────────────
 

@@ -12,6 +12,7 @@ from app.models.game_config import (
     FACTION_MAPS,
     GAME_ID_RA,
 )
+from app.models.ladder import INITIAL_ELO, team_average
 from app.models.models import (
     AuthCertificate,
     BuddyRequest,
@@ -914,7 +915,7 @@ def create_or_update_player_level(
 # =============================================================================
 
 
-def calculate_expected_score(player_rating: int, opponent_rating: int) -> float:
+def calculate_expected_score(player_rating: float, opponent_rating: float) -> float:
     """
     Calculate the expected score for a player against an opponent.
 
@@ -953,7 +954,7 @@ def get_k_factor(games_played: int, current_rating: int) -> int:
     return 20
 
 
-def calculate_new_elo(player_rating: int, opponent_rating: int, actual_score: float, k_factor: int) -> int:
+def calculate_new_elo(player_rating: int, expected_score: float, actual_score: float, k_factor: int) -> int:
     """
     Calculate new ELO rating after a match.
 
@@ -961,23 +962,28 @@ def calculate_new_elo(player_rating: int, opponent_rating: int, actual_score: fl
 
     Args:
         player_rating: Current player rating.
-        opponent_rating: Opponent's rating.
+        expected_score: The player's side's expected score.
         actual_score: 1.0 for win, 0.5 for draw, 0.0 for loss.
         k_factor: K-factor for calculation.
 
     Returns:
         New ELO rating (minimum 100).
     """
-    expected = calculate_expected_score(player_rating, opponent_rating)
-    new_rating = player_rating + k_factor * (actual_score - expected)
+    new_rating = player_rating + k_factor * (actual_score - expected_score)
     return max(100, int(round(new_rating)))
+
+
+def get_mode_elo(session: Session, persona_id: int, game_id: int, mode: str) -> int:
+    """Returns a player's ELO in a rated mode, or the initial rating before a rated match."""
+    stats = get_player_stats(session, persona_id, game_id=game_id)
+    return getattr(stats, f"elo_{mode}", INITIAL_ELO) if stats else INITIAL_ELO
 
 
 def update_player_elo(
     session: Session,
     persona_id: int,
     game_type: str,
-    opponent_rating: int,
+    expected_score: float,
     won: bool,
     disconnected: bool = False,
     game_id: int = DEFAULT_GAME_ID,
@@ -989,7 +995,7 @@ def update_player_elo(
         session: Database session.
         persona_id: Player's persona ID.
         game_type: Game type (ranked_1v1, ranked_2v2, clan_1v1, clan_2v2).
-        opponent_rating: Opponent's ELO rating.
+        expected_score: The expected score of the player's side, from the two sides' average ratings.
         won: True if player won, False if lost.
         disconnected: True if player disconnected (1.5x K-factor penalty on loss).
 
@@ -1017,7 +1023,7 @@ def update_player_elo(
 
     # Calculate new rating
     actual_score = 1.0 if won else 0.0
-    new_elo = calculate_new_elo(current_elo, opponent_rating, actual_score, k_factor)
+    new_elo = calculate_new_elo(current_elo, expected_score, actual_score, k_factor)
 
     # Update stats
     setattr(stats, elo_field, new_elo)
@@ -1288,20 +1294,11 @@ def finalize_match_from_report(
         winners = [p for p in players if p["result"] == 0]
         losers = [p for p in players if p["result"] in (1, 3, 4)]
 
-        def current_elo(persona_id: int) -> int:
-            stats = get_player_stats(session, persona_id, game_id=game_id)
-            if stats and game_type != "unranked":
-                return getattr(stats, f"elo_{game_type}", 1200)
-            return 1200
-
-        winner_avg_elo = sum(current_elo(p["persona_id"]) for p in winners) / len(winners) if winners else 1200
-        loser_avg_elo = sum(current_elo(p["persona_id"]) for p in losers) / len(losers) if losers else 1200
-
-        # ELO needs a real opponent on both sides. A report with no winner (e.g. everyone desynced) or no
-        # loser would rate every player against the 1200 default, so those matches only record counters.
-        rated = game_type != "unranked" and bool(winners) and bool(losers)
+        # ELO needs a real opponent on both sides, and a desync ends the match without a result.
+        desynced = any(p["result"] == 4 for p in players)
+        rated = game_type != "unranked" and bool(winners) and bool(losers) and not desynced
         if game_type != "unranked" and not rated:
-            logger.info("Match %s (%s) has no winner/loser split; recording counters without ELO", csid, game_type)
+            logger.info("Match %s (%s) has no winner/loser result; recording counters without ELO", csid, game_type)
 
         history = [
             {
@@ -1321,13 +1318,17 @@ def finalize_match_from_report(
             )
 
         if rated:
+            # Every player of a side shares the side's expected score, from the two sides' average ratings.
+            winner_avg = team_average([get_mode_elo(session, p["persona_id"], game_id, game_type) for p in winners])
+            loser_avg = team_average([get_mode_elo(session, p["persona_id"], game_id, game_type) for p in losers])
+            winner_expected = calculate_expected_score(winner_avg, loser_avg)
             for p in players:
                 is_winner = p["result"] == 0
                 update_player_elo(
                     session,
                     p["persona_id"],
                     game_type,
-                    int(loser_avg_elo if is_winner else winner_avg_elo),
+                    winner_expected if is_winner else 1.0 - winner_expected,
                     won=is_winner,
                     disconnected=p["result"] == 3,
                     game_id=game_id,

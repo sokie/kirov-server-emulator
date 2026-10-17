@@ -12,6 +12,7 @@ from fastapi import APIRouter, Response
 
 from app.db.crud import (
     get_clan_by_id,
+    get_mode_elo,
     get_persona_clan_membership,
     get_player_level,
     get_player_stats,
@@ -19,6 +20,7 @@ from app.db.crud import (
 )
 from app.db.database import create_session
 from app.models.game_config import GAME_ID_KW, GAME_ID_RA, GAME_ID_TW
+from app.models.ladder import INITIAL_ELO, KW_LADDERS, TW_LADDERS, ladder_entry
 from app.models.models import PlayerStats
 from app.soap.models.clan import ClanInfoResponse, NotMemberResponse
 from app.util.logging_helper import get_logger
@@ -128,24 +130,20 @@ def _resolve_rank_icon(game_id: int, pid: int = 0, gp: str = "", ro: int = 0, si
         return b""
 
 
-def _get_elo_for_ladder(game_id: int, gp: str) -> tuple[int, int]:
-    """Get 1v1 and 2v2 ELO for ladder ratings."""
-    elo_1v1 = 1200
-    elo_2v2 = 1200
-    if gp:
-        ticket_data = parse_ticket(gp)
-        if ticket_data:
-            _, persona_id, _ = ticket_data
-            if persona_id > 0:
-                session = create_session()
-                try:
-                    stats = get_player_stats(session, persona_id, game_id=game_id)
-                    if stats:
-                        elo_1v1 = stats.elo_ranked_1v1
-                        elo_2v2 = stats.elo_ranked_2v2
-                finally:
-                    session.close()
-    return elo_1v1, elo_2v2
+def _quickmatch_ladders(game_id: int, gp: str, ladders: dict[int, str]) -> str:
+    """Returns the QuickMatch ladder groups of a player, each with the player's ELO in that mode as the rank."""
+    persona_id = 0
+    ticket_data = parse_ticket(gp) if gp else None
+    if ticket_data:
+        _, persona_id, _ = ticket_data
+    session = create_session()
+    try:
+        return ",".join(
+            ladder_entry(ladder_id, get_mode_elo(session, persona_id, game_id, mode) if persona_id > 0 else INITIAL_ELO)
+            for ladder_id, mode in ladders.items()
+        )
+    finally:
+        session.close()
 
 
 def format_asof_timestamp() -> str:
@@ -244,11 +242,7 @@ async def get_player_rank_icon(gp: str = "", pid: int = 0, size: str = ""):
 @clan_router.get("/KWServices/KWGetPlayerLadderRatings.aspx")
 async def kw_get_player_ladder_ratings(gp: str = ""):
     """Returns KW ladder ratings for a player in CSV format."""
-    default_rank = -1
-    elo_1v1, elo_2v2 = _get_elo_for_ladder(GAME_ID_KW, gp)
-
-    dynamic = f"52177,15359,{default_rank},{elo_1v1},52178,6882,{default_rank},{elo_2v2}"
-    content = f"{dynamic},{_KW_FIXED_LADDER},"
+    content = f"{_quickmatch_ladders(GAME_ID_KW, gp, KW_LADDERS)},{_KW_FIXED_LADDER},"
     return Response(content=content, media_type="text/html")
 
 
@@ -273,13 +267,7 @@ async def kw_get_player_rank_icon(gp: str = "", pid: int = 0, ro: int = 0, size:
 @clan_router.get("/CC3Services/GetPlayerLadderRatings.aspx")
 async def tw_get_player_ladder_ratings(gp: str = ""):
     """Returns TW ladder ratings for a player in CSV format."""
-    default_rank = -1
-    elo_1v1, elo_2v2 = _get_elo_for_ladder(GAME_ID_TW, gp)
-
-    # TW format: fixed entries first, then dynamic 1v1/2v2, then rest of fixed
-    # The 8 pre-dynamic entries are at the start of _TW_FIXED_LADDER
-    dynamic = f"43738,31146,{default_rank},{elo_1v1},43783,33248,{default_rank},{elo_2v2}"
-    content = f"{dynamic},{_TW_FIXED_LADDER},"
+    content = f"{_quickmatch_ladders(GAME_ID_TW, gp, TW_LADDERS)},{_TW_FIXED_LADDER},"
     return Response(content=content, media_type="text/html")
 
 

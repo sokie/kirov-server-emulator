@@ -2,6 +2,8 @@
 
 Automatch is the automated matchmaking system used by Red Alert 3 and Command & Conquer Generals / Zero Hour. It works via virtual IRC bots that sit in game channels on the Peerchat server. Players send search requests to the bot via `PRIVMSG`, and the bot responds with match results when compatible opponents are found.
 
+Kane's Wrath and Tiberium Wars use no bot; see [Kane's Wrath and Tiberium Wars QuickMatch](#kanes-wrath-and-tiberium-wars-quickmatch).
+
 ## Bot Identities
 
 Each game has a dedicated bot with a fixed IRC identity:
@@ -82,9 +84,9 @@ The parser strips the `\CINFO` prefix, splits on `\`, and pairs up remaining tok
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `NumPlayers` | int | `2` | Players per match (2 or 4) |
-| `Points` | int | `1000` | Player's ELO rating |
-| `PointsStddev` | int | `50` | ELO standard deviation |
-| `PointRange` | int | `1000` | Search range preference (100, 250, 400, or 1000) |
+| `Points` | int | — | Not used: the bot reads the player's ELO for the ladder from the server |
+| `PointsStddev` | int | — | Not used |
+| `PointRange` | int | `400` | The rating difference the player accepts (100, 250, 400, or 1000) |
 | `IP` | int | `0` | Player's encoded IP address |
 | `Side` | int | `-1` | Faction selection (-1 = random) |
 | `Color` | int | `-1` | Color selection (-1 = random) |
@@ -143,7 +145,7 @@ MBOT:MATCHED {mapIdx} {matchId} 1 {nick} {ip} {side} {color} {nat} -1 {points} {
 | `color` | Color |
 | `nat` | NAT type |
 | `-1` | Literal constant |
-| `points` | Player's ELO rating |
+| `points` | Player's ELO rating for the ladder |
 | `teamId` | Team identifier (0 or 1) |
 
 Player blocks repeat for each participant. In 1v1, team IDs are 0 and 1. In 2v2, team IDs are 0, 0, 1, 1.
@@ -181,9 +183,9 @@ Player blocks repeat for each participant (2 for 1v1, 4 for 2v2, etc.).
 
 | LadID | Mode | Description |
 |-------|------|-------------|
-| 1 | 1v1 | ELO-range interval overlap matching (see below) |
-| 2 | 2v2 Random | First 4 queued players are matched; no ELO check |
-| 3 | 2v2 Team | Both players in a team must reference each other via `teammate1`; two complete teams required |
+| 1 | 1v1 | The closest ratings within reach (see below) |
+| 2 | 2v2 Random | The four neighbours in rating order with the smallest spread, split into the most even teams |
+| 3 | 2v2 Team | Both players in a team must reference each other via `teammate1`; the two teams with the closest average ratings |
 
 ### Generals Modes
 
@@ -205,47 +207,19 @@ When a match is found, the server ANDs all matched players' bitsets together and
 - **RA3**: Clients typically send all `1`s (no user map restriction).
 - **Generals**: Clients can restrict maps via the bitset. The `WIDEN` command overrides the bitset to all `1`s.
 
-## RA3 ELO-Range Matching
+## RA3 ELO Matching
 
-RA3 1v1 uses ELO-range interval overlap to find the best match.
+The bot reads each player's ELO from the server when the CINFO arrives: `ranked_1v1` for LadID 1,
+`ranked_2v2` for LadID 2 and 3. Two players are within reach when each rating lies inside the other's
+`PointRange`: `|elo1 - elo2| <= min(range1, range2)`. Kane's Wrath and Tiberium Wars apply the same rule
+with a fixed window of 400.
 
-### PointRange to Sigma Mapping
-
-The `PointRange` CINFO field maps to a sigma coefficient that controls how wide the search interval is:
-
-| PointRange | Sigma (σ) |
-|------------|-----------|
-| 100 | 1 |
-| 250 | 2 |
-| 400 | 4 |
-| 1000 | 8 |
-
-Any unrecognized `PointRange` value defaults to σ = 8 (widest search).
-
-### Interval Calculation
-
-Each player's search interval is:
-
-```
-interval = [points - σ × stddev, points + σ × stddev]
-```
-
-Where `stddev` is clamped to a minimum of 50 and `points` is clamped to a minimum of 1.
-
-### Scoring
-
-For every pair of queued players:
-
-1. Compute the overlap region between their intervals
-2. If no overlap exists, skip the pair
-3. Calculate the overlap score:
-   ```
-   score = min(overlap_length / range1, overlap_length / range2) + random_noise
-   ```
-   Where `random_noise` is 0–0.03 (adds slight randomization)
-4. Score is clamped to [0.0, 1.0]
-
-The pair with the highest score is matched. Map compatibility is checked after scoring — if the best pair has no common maps, no match occurs.
+- **1v1**: of the pairs within reach that share a map, the closest ratings meet; on a tie, the player who
+  waited longest.
+- **2v2 random**: the four neighbours in rating order with the smallest spread, all within reach of each
+  other, split into weakest + strongest against the middle two (the most even team averages).
+- **2v2 team**: the two complete teams whose average ratings are closest, within the smallest
+  `PointRange` of the four players.
 
 ## Generals Fitness Matching
 
@@ -289,6 +263,82 @@ For team games (NumPlayers 4, 6, or 8), the algorithm uses greedy team formation
 3. Find `N/2` players for team B where each has fitness > 0 with every member of team A
 4. Check map compatibility across all players
 5. If successful, send `MBOT:MATCHED`; otherwise try the next seed
+
+## Kane's Wrath and Tiberium Wars QuickMatch
+
+Kane's Wrath (`cnc3ep1.dat` 1.3) and Tiberium Wars (`cnc3game.dat` 1.10) have no matchbot. QuickMatch is the
+GameSpy Peer SDK automatch: the clients find each other through the master server and agree on the game
+with UTM messages between themselves. The server provides the parts the SDK expects: the automatch server
+list, the staging rooms, and the ladder ratings.
+
+KW reads `<QMBot>` from `config.txt`, but nothing uses the value, and the game never joins the
+`QuickMatch` group room: the room is only hidden from the lobby lists. A player searches from the lobby
+they are in.
+
+### Automatch states
+
+| Status | Meaning | What the client does |
+|--------|---------|----------------------|
+| 1 Searching | looking for a host | lists `<title>am` (`cc3xp1am`, `cc3tibwarsam`) with push updates |
+| 2 Waiting | hosting | creates its staging room, reports it with QR2 on `<title>am`, keeps listing |
+| 3 Staging | another player is in the room | the joiner stops listing and reporting; the host keeps reporting |
+| 4 Ready | the room is full | the host may start the game |
+| 5 Complete | the game launched | everything stops |
+
+- A search that finds no host becomes a host (Waiting).
+- A client rates every listed host with the game's rate callback, then joins the best one. A host in
+  Waiting that sees a better-rated host leaves its own room and joins that one.
+- The joiner builds the host's room name from the host's server list entry:
+  `#GSP!<title>!M<mangled public IP, private IP and port>M`. The host used its own public IP, private IP
+  and QR2 port, so the entry must carry those (private IP flag set, private port = the QR2 port).
+
+### What a host rates
+
+The rate callback uses only the host's keys, so the master sends them all (full rules):
+
+| Key | Rule |
+|-----|------|
+| `maxRPlyr` | must equal the searcher's player count (2 or 4) |
+| `vCRC`, `cCRC`, `iCRC` | must equal the searcher's version, INI and exe CRCs |
+| `pings`, `maxPing` | pseudo ping against the ping servers; must be under both limits |
+| `rank_0`, `minPntPrcnt`, `maxPntPrcnt` | the host's rank must be in the searcher's window, and the searcher's rank in the host's |
+| `widen` | a widened search skips the ping and rank limits |
+| `mapBit` | the two map sets must share a map |
+| `numplayers`, `maxplayers` | a full host is skipped |
+
+The rank comes from `GetPlayerLadderRatings`. The menu searches `rank ± ceil(size / 8)` inside `[1, size]`,
+and the fitness of a host is `min(rank) / max(rank)`. The server returns each player's ELO in that mode as
+the rank and a ladder size of 3200, so QuickMatch matches on ELO with a window of ±400
+([`ELO_AND_RANKINGS.md`](ELO_AND_RANKINGS.md)).
+
+### Game handshake
+
+```
+Host (Waiting)                                  Joiner
+     │◄────────── JOIN #GSP!cc3xp1!M...M ──────────│
+     │── UTM <joiner> :QMREQ/ ────────────────────►│
+     │◄── UTM <host> :QMRES/ Faction=<n> ──────────│   one UTM per field:
+     │◄── UTM <host> :QMRES/ Color=<n> ────────────│   Faction, Color, IP, NAT,
+     │◄── ... IP, NAT, Rank, ProfileID ────────────│   Rank, ProfileID,
+     │◄── UTM <host> :QMRES/ BroadcastEnabled=<n> ─│   BroadcastEnabled
+     │◄── UTM <host> :QMRDY/ ──────────────────────│
+     │                                             │
+     │  every slot ready and the room full (Ready) │
+     │── UTM #GSP!cc3xp1!M...M :QMGO/ <params> ───►│   both launch the game
+```
+
+`QMGO/` parameters: `<mapIndex> <seed> <1 if every player allows broadcast, else 0>`, then per player
+`<nick> <IP> <faction> <color> <NAT> <rank> <profileID>`. The map is a random map that every player has.
+
+### Server pieces
+
+- **Master server**: lists `<title>am` hosts with full rules, pushes hosts that appear or change and
+  deletes those that leave, and answers server info requests ([`MASTER_SERVER.md`](MASTER_SERVER.md)).
+- **QR2**: a host that sends `statechanged=2`, or nothing for 180 seconds, is removed.
+- **Peerchat**: the host sets `MODE +l 2` (or 4); a JOIN to a full room gets `471`, so a third searcher
+  goes back to searching. UTMs go to the named player or to everyone in the room.
+- **Ladder ratings**: `KWServices/KWGetPlayerLadderRatings.aspx` (ladders 52177 1v1, 52178 2v2) and
+  `CC3Services/GetPlayerLadderRatings.aspx` (43738 1v1, 43783 2v2).
 
 ## Extra Commands
 

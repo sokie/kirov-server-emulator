@@ -71,8 +71,36 @@ Each ladder has:
 - Separate game count (for K-factor calculation)
 - Separate career counters (see below)
 
-A match changes ELO only in a ranked or clan mode, and only when the report has both a winner and a loser.
-Each player is rated against the average ELO of the other side.
+A match changes ELO only in a ranked or clan mode, only when the report has both a winner and a loser, and
+only when no player desynced: a desync ends the match without a result.
+
+Each side's expected score comes from the two sides' average ratings:
+
+```
+WinnerExpected = 1 / (1 + 10^((LoserAverage - WinnerAverage) / 400))
+LoserExpected  = 1 - WinnerExpected
+```
+
+Every player of a side gets the side's expected score and moves by their own K. So a strong player teamed
+with a weak one is not punished for it: 1800 + 1000 against 1400 + 1400 is an even match, and everyone moves
+by K/2.
+
+### What the modes mean
+
+| Mode | Games | Rating |
+|------|-------|--------|
+| Unranked | custom lobby games | none |
+| Ranked 1v1, Ranked 2v2 | automatch: the RA3 bot, the KW and TW QuickMatch | one each |
+| Clan 1v1, Clan 2v2 | clan ladder games | one each, per player |
+
+1v1 and team games measure different skills and team games carry partner luck, so each mode has its own
+rating and its own game count for K. Each game (RA3, TW, KW) keeps its own ratings.
+
+### Matchmaking
+
+The RA3 bot and the KW and TW QuickMatch match on these ratings. Two searches can meet when each rating is
+inside the other's window: the RA3 player's `PointRange`, or ±400 in KW and TW. The closest ratings are
+preferred, and a 2v2 is split into the most even teams. See [`AUTOMATCH.md`](AUTOMATCH.md).
 
 ## Player Statistics Tracking
 
@@ -130,22 +158,44 @@ every player, so a leaver's own report does not settle the match. See
 
 ## GetPlayerLadderRatings Response Format
 
-The `GetPlayerLadderRatings.aspx` endpoint returns CSV-formatted ladder data:
+The `GetPlayerLadderRatings.aspx` endpoints return CSV-formatted ladder data in groups of four:
 
 ```
-statID,value,rank,elo,statID,value,rank,elo,...
+ladderID,size,rank,rating,ladderID,size,rank,rating,...
 ```
 
 ### Response Fields
 
 | Field | Description |
 |-------|-------------|
-| statID | Game stat identifier |
-| value | Base stat value |
+| ladderID | Ladder identifier |
+| size | Number of players on the ladder |
 | rank | Player's rank (-1 if unranked) |
-| elo | Player's ELO rating |
+| rating | Player's rating |
 
-### Stat IDs
+### Kane's Wrath and Tiberium Wars
+
+KW (`KWServices/KWGetPlayerLadderRatings.aspx`) and TW (`CC3Services/GetPlayerLadderRatings.aspx`) read
+only the first three fields. The rank is shown as "1v1 Rank" and "2v2 Rank" and sets the QuickMatch search
+window, `rank ± ceil(size / 8)`. For the QuickMatch ladders the server returns the player's ELO in that mode
+as the rank (and again as the rating) and a size of 3200, which makes the window ±400:
+
+| Game | Ladder | Mode |
+|------|--------|------|
+| KW | 52177 | ranked_1v1 |
+| KW | 52178 | ranked_2v2 |
+| TW | 43738 | ranked_1v1 |
+| TW | 43783 | ranked_2v2 |
+
+```
+52177,3200,1350,1350,52178,3200,1200,1200,52180,8,-1,-1,...
+```
+
+### Red Alert 3
+
+RA3 reads the rating field. Both automatch ladders carry the `ranked_1v1` ELO.
+
+#### Stat IDs
 
 | Stat ID | Description |
 |---------|-------------|
@@ -154,7 +204,7 @@ statID,value,rank,elo,statID,value,rank,elo,...
 | 58938 | RA3 v1.12 AutoMatch 1v1 ladder |
 | 58940 | Corona AutoMatch 1v1 ladder |
 
-### Example Response
+#### Example Response
 
 ```
 72587,1,-1,-1,72743,1,-1,-1,75643,1,-1,-1,...,58938,32034,-1,1350,58940,1088,-1,1350,
@@ -298,3 +348,15 @@ NewRating = 1300 + 30 * (0.0 - 0.5) = 1300 - 15 = 1285
 ```
 
 Without disconnect penalty, the loss would only be 10 points.
+
+### Example 3: 2v2 With Uneven Partners
+
+- Winners: 1800 and 1000 (average 1400), both new (K = 40)
+- Losers: 1400 and 1400 (average 1400), both new
+
+```
+WinnerExpected = 1 / (1 + 10^((1400-1400)/400)) = 0.5
+1800 -> 1800 + 40 * (1.0 - 0.5) = 1820
+1000 -> 1000 + 40 * (1.0 - 0.5) = 1020
+1400 -> 1400 + 40 * (0.0 - 0.5) = 1380
+```
