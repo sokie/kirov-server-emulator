@@ -2,6 +2,7 @@
 Tests for Tiberium Wars and Kane's Wrath match reports, careers and Sake tables.
 
 The two Tiberium Wars reports are the ones the game sent after two ranked 1v1 matches in which GDI beat Scrin.
+The Kane's Wrath report is the one the game sent after an unranked match in which GDI beat Marked of Kane.
 The column fixtures are the PlayerStats tables of cnc3game.dat 1.10 and cnc3ep1.dat 1.3: column name, lobby
 mode, faction bucket and stat id.
 """
@@ -25,6 +26,7 @@ from app.models.cnc3_stats import (
     SAKE_COLUMNS,
     TW,
     Cnc3Game,
+    game_key_name,
     player_key_name,
 )
 from app.models.match_report import MatchReport, get_player_key_name
@@ -172,13 +174,33 @@ class TestReports:
         )
         assert report.get_cnc3_counts(1)["structures_lost"] == 1
 
-    def test_every_captured_key_has_a_name(self):
-        for name in ("report_ranked1v1_342s.bin", "report_ranked1v1_468s.bin"):
-            report = MatchReport.from_bytes(_fixture(TW, name), game_id=TW.game_id)
-            gt = report.get_game_type_from_key()
-            for section in report.player_section:
-                for key in section:
-                    assert not get_player_key_name(key, TW.game_id, gt).startswith("unknown_"), key
+    def test_captured_kane_s_wrath_report_decodes(self):
+        report = MatchReport.from_bytes(_fixture(KW, "report_unranked_150s.bin"), game_id=KW.game_id)
+        assert report.is_kw and report.flags & 1
+        assert (report.get_cnc3_mode(), report.get_duration(), report.get_map_path()) == (
+            "unranked",
+            150,
+            "Small Town USA (2)",
+        )
+        assert report.game_section[108].value == "1.3"
+        assert [(p.faction, p.result) for p in report.get_player_list()] == [("GDI", 0), ("Marked of Kane", 1)]
+        assert report.get_local_player_index() == 0
+        winner = report.get_cnc3_counts(0)
+        assert (winner["structures_built"], winner["structures_destroyed"], winner["units_built"]) == (2, 1, 7)
+        assert report.get_cnc3_counts(1)["structures_lost"] == 1
+
+    @pytest.mark.parametrize(
+        ("game", "name"),
+        [(TW, "report_ranked1v1_342s.bin"), (TW, "report_ranked1v1_468s.bin"), (KW, "report_unranked_150s.bin")],
+    )
+    def test_every_captured_key_has_a_name(self, game, name):
+        report = MatchReport.from_bytes(_fixture(game, name), game_id=game.game_id)
+        gt = report.get_game_type_from_key()
+        for key in report.game_section:
+            assert not game_key_name(game, key).startswith("unknown_"), key
+        for section in report.player_section:
+            for key in section:
+                assert not get_player_key_name(key, game.game_id, gt).startswith("unknown_"), key
 
     @pytest.mark.parametrize("game", GAMES)
     @pytest.mark.parametrize("gt", [1, 2, 3, 4, 5])

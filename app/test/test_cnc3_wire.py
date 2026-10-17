@@ -135,6 +135,21 @@ class TestSakeRequests:
         rows = _rows(_post(sake_storage_handler, SAKE + "SearchForRecords", search))
         assert rows == [[("asciiStringValue", "guid-1"), ("intValue", "2"), ("intValue", "4"), ("intValue", "5")]]
 
+    def test_the_kane_s_wrath_player_rating_the_game_created(self, db):
+        created = _post(
+            sake_storage_handler, SAKE + "CreateRecord", _fixture("kw", "sake_createrecord_ratingplayer.xml")
+        )
+        assert _text(created, "CreateRecordResult") == "Success"
+        search = _fixture("tw", "sake_search_ratingplayer.xml").replace(b"<ns1:gameid>1422", b"<ns1:gameid>1814")
+        rows = _rows(_post(sake_storage_handler, SAKE + "SearchForRecords", search))
+        assert rows[0][1:] == [("intValue", "2"), ("intValue", "5"), ("intValue", "5")]
+        assert (
+            _rows(
+                _post(sake_storage_handler, SAKE + "SearchForRecords", _fixture("tw", "sake_search_ratingplayer.xml"))
+            )
+            == []
+        )
+
     def test_an_operation_no_game_sends_is_a_fault(self, db):
         body = _create_record(TW.game_id, "RatingPlayer", []).replace(b"CreateRecord", b"DeleteRecord")
         with pytest.raises(AssertionError):

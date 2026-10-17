@@ -1,5 +1,4 @@
 import base64
-import copy
 import random
 import secrets
 import string
@@ -12,7 +11,6 @@ from app.models import cnc3_stats
 from app.models.game_config import (
     FACTION_MAPS,
     GAME_ID_RA,
-    GAME_TYPES,
 )
 from app.models.models import (
     AuthCertificate,
@@ -48,21 +46,6 @@ DEFAULT_GAME_ID = GAME_ID_RA
 def get_stat(stats_dict: dict, game_type: str, key: str, default=0):
     """Get stat from nested JSON: stats[game_type][key]."""
     return stats_dict.get(game_type, {}).get(key, default)
-
-
-def set_stat(stats_dict: dict, game_type: str, key: str, value):
-    """Set stat in nested JSON: stats[game_type][key] = value."""
-    stats_dict.setdefault(game_type, {})[key] = value
-
-
-def get_faction_stat(stats_dict: dict, game_type: str, faction: str, key: str, default=0):
-    """Get faction stat from nested JSON: stats[game_type]["factions"][faction][key]."""
-    return stats_dict.get(game_type, {}).get("factions", {}).get(faction, {}).get(key, default)
-
-
-def set_faction_stat(stats_dict: dict, game_type: str, faction: str, key: str, value):
-    """Set faction stat in nested JSON: stats[game_type]["factions"][faction][key] = value."""
-    stats_dict.setdefault(game_type, {}).setdefault("factions", {}).setdefault(faction, {})[key] = value
 
 
 # =============================================================================
@@ -651,53 +634,6 @@ def get_player_stats(session: Session, persona_id: int, game_id: int = DEFAULT_G
     """Gets player stats for a persona."""
     stmt = select(PlayerStats).where(PlayerStats.persona_id == persona_id, PlayerStats.game_id == game_id)
     return session.exec(stmt).first()
-
-
-def create_or_update_player_stats(
-    session: Session, persona_id: int, stats_data: dict, game_id: int = DEFAULT_GAME_ID
-) -> PlayerStats:
-    """
-    Creates or updates player stats for a persona.
-
-    Accepts flat keys from the game client (e.g. "wins_ranked_1v1") and
-    converts them into the nested JSON stats structure.
-
-    Args:
-        session: Database session
-        persona_id: Persona ID
-        stats_data: Dictionary of flat stat keys to update
-        game_id: Game ID (RA3=2128, KW=1814, TW=1422)
-
-    Returns:
-        Updated or created PlayerStats
-    """
-    stats = get_player_stats(session, persona_id, game_id=game_id)
-
-    if stats is None:
-        stats = PlayerStats(persona_id=persona_id, game_id=game_id)
-        session.add(stats)
-
-    # Copy JSON dict for mutation (SQLAlchemy JSON change tracking)
-    json_stats = copy.deepcopy(stats.stats) if stats.stats else {}
-
-    for flat_key, value in stats_data.items():
-        # Real columns stay as real columns
-        if hasattr(stats, flat_key) and flat_key != "stats":
-            setattr(stats, flat_key, value)
-            continue
-
-        # Convert flat key → nested JSON: "wins_ranked_1v1" → stats["ranked_1v1"]["wins"]
-        for game_type in GAME_TYPES:
-            if flat_key.endswith(f"_{game_type}"):
-                stat_key = flat_key[: -(len(game_type) + 1)]
-                set_stat(json_stats, game_type, stat_key, value)
-                break
-
-    stats.stats = json_stats
-    stats.updated_at = datetime.utcnow()
-    session.commit()
-    session.refresh(stats)
-    return stats
 
 
 # =============================================================================

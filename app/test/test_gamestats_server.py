@@ -23,6 +23,8 @@ import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.servers.gamestats_server import GameStatsServer
 from app.util.cipher import gs_chresp_num, gs_xor
 
@@ -763,44 +765,22 @@ class TestHandleSetpdGenerals:
 
 
 class TestHandleSetpdJson:
-    """RA3/CNC3 setpd: saves JSON stats, does NOT touch Generals KV store."""
+    """RA3/CNC3 setpd: acknowledged, but careers and ELO come only from match reports."""
 
-    def test_returns_setpdr_1(self):
-        server, _ = _authed_server("redalert3pc", pid=1)
-        with patch("app.servers.gamestats_server.create_or_update_player_stats"):
-            result = server._handle_setpd_json(1, LIVE_RA3_SETPD_JSON, "0", "1")
+    @pytest.mark.parametrize("gamename", ["redalert3pc", "cnc3pc", "cnc3ep1pc"])
+    def test_acknowledged_and_not_stored(self, gamename):
+        server, _ = _authed_server(gamename, pid=1)
+        with patch("app.servers.gamestats_server.create_or_update_generals_stats") as mock_gs:
+            result = server._handle_setpd_json(1, LIVE_RA3_SETPD_JSON, "3", "1")
         assert "\\setpdr\\1" in result
-
-    def test_pid_and_lid_echoed(self):
-        server, _ = _authed_server("redalert3pc", pid=1)
-        with patch("app.servers.gamestats_server.create_or_update_player_stats"):
-            result = server._handle_setpd_json(1, "{}", "3", "1")
-        assert "\\pid\\1" in result
-        assert "\\lid\\3" in result
-
-    def test_calls_player_stats_not_generals_stats(self):
-        server, _ = _authed_server("redalert3pc", pid=1)
-        with (
-            patch("app.servers.gamestats_server.create_or_update_player_stats") as mock_ps,
-            patch("app.servers.gamestats_server.create_or_update_generals_stats") as mock_gs,
-        ):
-            server._handle_setpd_json(1, LIVE_RA3_SETPD_JSON, "0", "1")
-        mock_ps.assert_called_once()
+        assert "\\pid\\1" in result and "\\lid\\3" in result
         mock_gs.assert_not_called()
-
-    def test_empty_data_skips_save(self):
-        # _handle_setpd_json skips the CRUD call when the parsed dict is empty.
-        # This matches the production code: `if stats_data: create_or_update(...)`.
-        server, _ = _authed_server("redalert3pc", pid=1)
-        with patch("app.servers.gamestats_server.create_or_update_player_stats") as mock_ps:
-            result = server._handle_setpd_json(1, "", "0", "1")
-        mock_ps.assert_not_called()
-        assert "\\setpdr\\1" in result  # still returns a valid ack
+        server._db_session.add.assert_not_called()
+        server._db_session.commit.assert_not_called()
 
     def test_invalid_json_does_not_crash(self):
         server, _ = _authed_server("redalert3pc", pid=1)
-        with patch("app.servers.gamestats_server.create_or_update_player_stats"):
-            result = server._handle_setpd_json(1, "not_json{{", "0", "1")
+        result = server._handle_setpd_json(1, "not_json{{", "0", "1")
         assert "\\setpdr\\1" in result
 
 
