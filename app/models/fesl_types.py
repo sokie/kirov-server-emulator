@@ -47,6 +47,7 @@ GAMESPY_GAME_KEY_MAP = {
     "cncra3pc": "cncra3pc",
     "cc3": "cnc3pc",
     "cc3tibwars": "cnc3pc",
+    "cc3tibwarsam": "cnc3pc",
     "cnc3pc": "cnc3pc",
     "cc3xp1": "cnc3ep1pc",
     "cc3xp1am": "cnc3ep1pc",

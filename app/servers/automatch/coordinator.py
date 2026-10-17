@@ -1,8 +1,7 @@
 """Coordinates all automatch bot instances."""
 
-from typing import Any
-
 from app.servers.automatch.base import GameFactory
+from app.servers.automatch.bot import AutoMatchBot
 from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
@@ -12,12 +11,12 @@ class BotCoordinator:
     """Manages all automatch bots across all games."""
 
     def __init__(self):
-        self._bots: dict[str, Any] = {}  # game_id -> bot instance
+        self._bots: dict[str, AutoMatchBot] = {}  # game_id -> AutoMatchBot
 
     async def start(self, factories: list[GameFactory]):
         """Start all configured bots."""
         for factory in factories:
-            bot = factory.create_bot()
+            bot = AutoMatchBot(factory)
             self._bots[factory.game_id] = bot
             await bot.start()
 

@@ -544,6 +544,10 @@ class NatNegSessionManager:
 # =============================================================================
 
 
+GAME_UPDATED = "updated"
+GAME_REMOVED = "removed"
+
+
 class GameSessionRegistry:
     """
     Shared registry for game sessions.
@@ -559,6 +563,8 @@ class GameSessionRegistry:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._sessions: dict[int, GameEntry] = {}  # client_id -> GameEntry
+            cls._instance._last_seen: dict[int, float] = {}
+            cls._instance._listeners: list[Callable[[str, GameEntry], None]] = []
         return cls._instance
 
     @classmethod
@@ -634,21 +640,59 @@ class GameSessionRegistry:
                 public_port,
                 info.get("hostname", "unknown"),
             )
+        self._last_seen[client_id] = time.monotonic()
+        self._notify(GAME_UPDATED, self._sessions[client_id])
 
     def unregister_game(self, client_id: int):
         """Remove a game session."""
-        if client_id in self._sessions:
-            del self._sessions[client_id]
+        game = self._sessions.pop(client_id, None)
+        self._last_seen.pop(client_id, None)
+        if game is not None:
             logger.info("Unregistered game: client_id=%d", client_id)
+            self._notify(GAME_REMOVED, game)
+
+    def touch(self, client_id: int):
+        """Records a keepalive from a registered game."""
+        if client_id in self._sessions:
+            self._last_seen[client_id] = time.monotonic()
+
+    def prune(self, max_age: float) -> int:
+        """Removes every game that sent no heartbeat or keepalive for max_age seconds; returns how many."""
+        now = time.monotonic()
+        stale = [cid for cid, seen in self._last_seen.items() if now - seen > max_age]
+        for client_id in stale:
+            logger.info("Game client_id=%d sent nothing for %.0f s, removing it", client_id, max_age)
+            self.unregister_game(client_id)
+        return len(stale)
+
+    def add_listener(self, listener: Callable[[str, GameEntry], None]):
+        """Calls listener(GAME_UPDATED or GAME_REMOVED, game) on every change."""
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[str, GameEntry], None]):
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def _notify(self, event: str, game: GameEntry):
+        for listener in list(self._listeners):
+            try:
+                listener(event, game)
+            except Exception:
+                logger.exception("Game registry listener failed on %s", event)
+
+    def find_game(self, ip: str, port: int) -> GameEntry | None:
+        """Finds the game a client names by its public or private address."""
+        for game in self._sessions.values():
+            if (game.public_ip, game.public_port) == (ip, port) or (game.private_ip, game.private_port) == (ip, port):
+                return game
+        return None
 
     def get_games(self, gamename: str | None = None) -> list:
         """Get registered games, optionally filtered by gamename."""
         if gamename is None:
             return list(self._sessions.values())
-        return [
-            g for g in self._sessions.values()
-            if g.fields.get("gamename", "").lower() == gamename.lower()
-        ]
+        return [g for g in self._sessions.values() if g.fields.get("gamename", "").lower() == gamename.lower()]
 
     def get_game(self, client_id: int) -> GameEntry | None:
         """Get a specific game by client ID."""
@@ -657,3 +701,4 @@ class GameSessionRegistry:
     def clear(self):
         """Clear all sessions."""
         self._sessions.clear()
+        self._last_seen.clear()

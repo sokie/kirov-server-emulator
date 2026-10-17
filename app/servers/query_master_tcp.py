@@ -1,7 +1,8 @@
 """
 Query Master TCP Server.
 
-Handles TCP queries from game clients requesting room lists and game lists.
+Answers server list queries for rooms and games. A query with PUSH_UPDATES keeps its connection open, and every
+game that is added, changed or removed later is pushed to it.
 """
 
 import asyncio
@@ -13,33 +14,64 @@ from app.models.fesl_types import GAMESPY_GAME_KEY_MAP
 from app.servers.query_master_parsing import (
     DEFAULT_MASTER_IP,
     DEFAULT_MASTER_PORT,
+    KEEPALIVE_REPLY,
+    PUSH_UPDATES,
+    SEND_MESSAGE_REQUEST,
+    SERVER_INFO_REQUEST,
+    SERVER_LIST_REQUEST,
     GameEntry,
     QueryRequest,
+    build_delete_server_message,
     build_game_list_response,
+    build_keepalive_message,
+    build_push_server_message,
     build_room_list_response,
-    build_server_info_message,
     create_default_rooms,
     create_rooms_by_game,
     is_room_list_request,
     parse_filter_string,
     parse_tcp_query,
 )
-from app.servers.sessions import GameSessionRegistry
+from app.servers.sessions import GAME_REMOVED, GameSessionRegistry
 from app.util.cipher import EncTypeX
 from app.util.logging_helper import format_hex, get_logger
 
 logger = get_logger(__name__)
 
-# Fields managed internally by the GameSpy ServerBrowser SDK.
-# Including these in the server response can confuse the SDK's parser.
-_SDK_INTERNAL_FIELDS = frozenset({
-    "publicip", "publicport",
-    "localip0", "localip1", "localip2", "localip3",
-    "localport",
-    "natneg",
-    "statechanged",
-    "gamename",
-})
+# A game that sends no heartbeat or keepalive for this long is removed and its deletion pushed.
+STALE_GAME_SECONDS = 180.0
+MAINTENANCE_INTERVAL = 30.0
+KEEPALIVE_EVERY = 2  # maintenance ticks
+
+_maintenance_task: asyncio.Task | None = None
+
+
+def game_matches_filters(game: GameEntry, filters: list) -> bool:
+    """Checks a game against parsed filter conditions. A condition on a key the game lacks is skipped."""
+    for f in filters:
+        expected = f["value"]
+        actual = game.fields.get(f["field"])
+        if actual is None:
+            continue
+        if isinstance(expected, int):
+            try:
+                actual = int(actual)
+            except (ValueError, TypeError):
+                return False
+        operator = f["operator"]
+        if operator in ("=", "==") and actual != expected:
+            return False
+        if operator == "!=" and actual == expected:
+            return False
+        if operator == "<" and actual >= expected:
+            return False
+        if operator == ">" and actual <= expected:
+            return False
+        if operator == "<=" and actual > expected:
+            return False
+        if operator == ">=" and actual < expected:
+            return False
+    return True
 
 
 # =============================================================================
@@ -48,12 +80,7 @@ _SDK_INTERNAL_FIELDS = frozenset({
 
 
 class QueryMasterHandler:
-    """
-    Handler for GameSpy master server TCP queries.
-
-    This handler parses incoming queries and generates appropriate responses
-    for room lists and game lists. Responses are encrypted using EncTypeX.
-    """
+    """Builds the room and game list responses for parsed queries."""
 
     def __init__(
         self,
@@ -83,189 +110,48 @@ class QueryMasterHandler:
     def handle_query(
         self, data: bytes, client_ip: str = "0.0.0.0", client_port: int = 0
     ) -> tuple[bytes, QueryRequest | None]:
-        """
-        Handle an incoming TCP query and return the plaintext response.
-
-        Encryption is handled by the per-connection protocol handler, NOT here,
-        because the GameSpy SDK uses a persistent stream cipher across the
-        entire TCP connection.
-
-        Returns:
-            (plaintext_response, parsed_request_or_None)
-        """
+        """Parses a list query and returns the plaintext response with the parsed request."""
         request = parse_tcp_query(data)
-
         if not request.game_name:
             logger.warning("Invalid query: no game name found")
             return b"", None
 
-        # Determine if this is a room list or game list request
         if is_room_list_request(request):
-            response = self._handle_room_list_request(request, client_ip)
-        else:
-            response = self._handle_game_list_request(request, client_ip, client_port)
+            return self._handle_room_list_request(request, client_ip), request
+        return self._handle_game_list_request(request, client_ip, client_port), request
 
-        return response, request
-
-    def handle_server_info(self, data: bytes, field_table: list[str]) -> bytes:
-        """
-        Handle a server info request (msg_type 0x01).
-
-        Format: length(2) + 0x01(1) + server_ip(4) + server_port(2).
-        Returns the response as a length-prefixed msg_type 0x01 message
-        (NOT the classic server list format).
-        """
-        server_ip = socket.inet_ntoa(data[3:7])
-        server_port = struct.unpack("!H", data[7:9])[0]
-        logger.info("Server info request for %s:%d", server_ip, server_port)
-
-        # Look up the game in the registry by matching IP:port
+    def list_games(self, request: QueryRequest) -> list:
+        """Lists the games of the request's game name that pass its filter."""
         registry = GameSessionRegistry.get_instance()
-        game = None
-        for g in registry.get_games():
-            if (g.public_ip == server_ip or g.private_ip == server_ip or g.traced_ip == server_ip) \
-                    and (g.public_port == server_port or g.private_port == server_port):
-                game = g
-                break
-
-        if not game:
-            logger.warning("Server info request: no game found for %s:%d", server_ip, server_port)
-            return b""
-
-        logger.info(
-            "Server info response for %s:%d: %d fields in table",
-            server_ip, server_port, len(field_table),
-        )
-
-        return build_server_info_message(game, field_table)
+        filters = parse_filter_string(request.filter_string)
+        games = registry.get_games(gamename=request.game_name) + self.games
+        return [game for game in games if game_matches_filters(game, filters)]
 
     def _handle_room_list_request(self, request: QueryRequest, client_ip: str) -> bytes:
         """Handle a room list request, returning game-specific rooms."""
-        logger.info("Handling room list request for %s", request.game_name)
-
-        # Look up rooms for this specific game, fall back to legacy list
         game_name = request.game_name.lower()
         rooms = self.rooms_by_game.get(game_name, self.rooms)
-        logger.debug("Returning %d rooms for game %s", len(rooms), game_name)
-
-        # Use requested fields or defaults
-        fields = (
-            request.fields
-            if request.fields
-            else [
-                "hostname",
-                "numwaiting",
-                "maxwaiting",
-                "numservers",
-                "numplayers",
-                "roomType",
-            ]
-        )
-
-        return build_room_list_response(
-            rooms=rooms,
-            fields=fields,
-            client_ip=client_ip,
-        )
+        logger.info("Room list for %s: %d rooms", game_name, len(rooms))
+        fields = request.fields or ["hostname", "numwaiting", "maxwaiting", "numservers", "numplayers", "roomType"]
+        return build_room_list_response(rooms=rooms, fields=fields, client_ip=client_ip)
 
     def _handle_game_list_request(self, request: QueryRequest, client_ip: str, client_port: int = 0) -> bytes:
-        """Handle a game list request (classic Type 1 format — all string fields)."""
-        logger.info("Handling game list request for %s", request.game_name)
-
-        # Parse filter conditions
-        filter_conditions = parse_filter_string(request.filter_string)
-
-        # Get games from shared registry (populated by UDP heartbeats)
-        # Filter by gamename so e.g. cc3xp1am queries only return automatch games
-        registry = GameSessionRegistry.get_instance()
-        all_games = registry.get_games(gamename=request.game_name) + self.games
-
-        # Filter games based on conditions
-        filtered_games = self._filter_games(all_games, filter_conditions)
-
-        logger.info("Game list: %d total, %d after filter", len(all_games), len(filtered_games))
-
-        # Use requested fields; if none, derive from game heartbeat data so the
-        # SDK gets complete server info in the initial response (avoiding the
-        # need for individual msg_type 0x01 follow-up queries).
-        # Exclude SDK-internal fields that the ServerBrowser manages itself.
-        fields = request.fields
-        if not fields and filtered_games:
-            field_set: set[str] = set()
-            for game in filtered_games:
-                for k in (game.fields or {}):
-                    if not k.startswith("_") and k not in _SDK_INTERNAL_FIELDS:
-                        field_set.add(k)
-            fields = sorted(field_set)
-            logger.info("Derived %d fields from game data: %s", len(fields), fields)
-
+        """Answers a game list query. A query that names no fields gets the full rules of every game."""
+        games = self.list_games(request)
+        logger.info(
+            "Game list for %s: %d games (filter %r, fields %s)",
+            request.game_name,
+            len(games),
+            request.filter_string,
+            request.fields,
+        )
         return build_game_list_response(
-            games=filtered_games,
-            fields=fields,
+            games=games,
+            fields=request.fields,
             client_ip=client_ip,
             client_port=client_port,
+            full_rules=not request.fields,
         )
-
-    def _filter_games(self, games: list, filter_conditions: list) -> list:
-        """
-        Filter games based on parsed filter conditions.
-
-        Args:
-            games: List of GameEntry objects to filter
-            filter_conditions: List of filter conditions from parse_filter_string
-
-        Returns:
-            Filtered list of GameEntry objects
-        """
-        if not filter_conditions:
-            return games
-
-        filtered = []
-        for game in games:
-            if self._game_matches_filters(game, filter_conditions):
-                filtered.append(game)
-
-        return filtered
-
-    def _game_matches_filters(self, game: GameEntry, filters: list) -> bool:
-        """Check if a game matches all filter conditions."""
-        for f in filters:
-            field_name = f["field"]
-            operator = f["operator"]
-            expected = f["value"]
-
-            actual = game.fields.get(field_name)
-            if actual is None:
-                # Game doesn't have this field — skip this condition
-                # (heartbeat-registered games may not have all filterable fields)
-                continue
-
-            # Normalize types for comparison
-            if isinstance(expected, int):
-                try:
-                    actual = int(actual)
-                except (ValueError, TypeError):
-                    return False
-
-            if operator == "=" or operator == "==":
-                if actual != expected:
-                    return False
-            elif operator == "!=":
-                if actual == expected:
-                    return False
-            elif operator == "<":
-                if actual >= expected:
-                    return False
-            elif operator == ">":
-                if actual <= expected:
-                    return False
-            elif operator == "<=":
-                if actual > expected:
-                    return False
-            elif operator == ">=" and actual < expected:
-                return False
-
-        return True
 
 
 # =============================================================================
@@ -275,18 +161,12 @@ class QueryMasterHandler:
 
 class QueryMasterServer(asyncio.Protocol):
     """
-    GameSpy Master Server TCP Protocol handler.
-
-    Manages per-connection EncTypeX cipher state.  The GameSpy SDK uses a
-    persistent stream cipher for the entire TCP session: the initial server
-    list response is encrypted with ``cipher.encode()`` (which prepends the
-    cipher challenge header), and all subsequent messages (e.g. msg_type 0x01
-    server-info responses) are encrypted with ``cipher.encrypt()`` continuing
-    the same cipher stream.
+    One query connection. The first response is EncTypeX-encoded (cipher header, then data); everything
+    sent later on the connection continues the same cipher stream.
     """
 
-    # Shared handler instance with room/game data
     _handler: QueryMasterHandler | None = None
+    _subscribers: set["QueryMasterServer"] = set()
 
     @classmethod
     def set_handler(cls, handler: QueryMasterHandler):
@@ -306,28 +186,28 @@ class QueryMasterServer(asyncio.Protocol):
         self.transport = None
         self.peername = None
         self.buffer = b""
-        # Per-connection cipher state (initialized on first response)
         self.cipher: EncTypeX | None = None
-        # Field table declared in the initial response — msg_type 0x01 responses
-        # reference fields by index into this table.
-        self.field_table: list[str] = []
+        self.request: QueryRequest | None = None
+        self.subscribed = False
+        self.filters: list = []
+        self.pushed: set[tuple[str, int]] = set()
 
     def connection_made(self, transport):
         self.transport = transport
         self.peername = transport.get_extra_info("peername")
-        logger.info("Master server: new TCP connection from %s", self.peername)
+        logger.debug("Master server: new TCP connection from %s", self.peername)
 
     def data_received(self, data: bytes):
-        """Handle incoming data from client."""
-        logger.debug("Master server: received %d bytes from %s", len(data), self.peername)
-        logger.debug("RX hex: %s", format_hex(data))
-
-        # Append to buffer (in case of fragmented packets)
+        logger.debug("Master server RX from %s: %s", self.peername, format_hex(data))
         self.buffer += data
-
-        # Process complete packets
         while self._process_packet():
             pass
+
+    def connection_lost(self, exc):
+        logger.debug("Master server: TCP connection closed for %s (exc=%s)", self.peername, exc)
+        self._subscribers.discard(self)
+        self.buffer = b""
+        self.cipher = None
 
     def _create_cipher(self, validate_token: bytes, game_name: str) -> EncTypeX:
         """Create an EncTypeX cipher for this connection."""
@@ -340,136 +220,116 @@ class QueryMasterServer(asyncio.Protocol):
         return EncTypeX(key=gamekey, validate=validate_token)
 
     def _process_packet(self) -> bool:
-        """
-        Process a single packet from the buffer.
-
-        Returns True if a packet was processed, False otherwise.
-        """
+        """Handles one length-prefixed client message; returns False when the buffer holds no whole message."""
         if len(self.buffer) < 2:
             return False
-
-        # Read packet length (first 2 bytes, big-endian)
         packet_length = struct.unpack("!H", self.buffer[0:2])[0]
-
-        # Check if we have the complete packet
-        if len(self.buffer) < packet_length:
-            logger.debug("Waiting for more data: have %d, need %d", len(self.buffer), packet_length)
+        if packet_length < 3:
+            logger.warning("Master server: bad message length %d from %s", packet_length, self.peername)
+            self.buffer = b""
             return False
-
-        # Extract the complete packet
+        if len(self.buffer) < packet_length:
+            return False
         packet = self.buffer[:packet_length]
         self.buffer = self.buffer[packet_length:]
 
-        logger.debug("Processing packet: %d bytes", len(packet))
-
         try:
-            handler = self.get_handler()
-            client_ip = "0.0.0.0"
-            client_port = 0
-            if self.peername:
-                client_ip = self.peername[0]
-                client_port = self.peername[1]
-
-            # Check for msg_type 0x01 (server info request)
-            if len(packet) >= 9 and packet[2] == 0x01:
-                logger.info(
-                    "Server info request raw hex (%d bytes): %s",
-                    len(packet),
-                    " ".join(f"{b:02x}" for b in packet),
-                )
-                self._handle_server_info(handler, packet)
+            msg_type = packet[2]
+            if msg_type == SERVER_LIST_REQUEST:
+                self._handle_list_request(packet)
+            elif msg_type == SERVER_INFO_REQUEST:
+                self._handle_server_info(packet)
+            elif msg_type == KEEPALIVE_REPLY:
+                pass
+            elif msg_type == SEND_MESSAGE_REQUEST:
+                logger.info("Master server: SEND_MESSAGE_REQUEST from %s is not supported", self.peername)
             else:
-                self._handle_initial_query(handler, packet, client_ip, client_port)
-
+                logger.warning("Master server: unknown message type %d from %s", msg_type, self.peername)
         except Exception as e:
-            logger.exception("Error processing master server query: %s", e)
-
+            logger.exception("Error processing master server message: %s", e)
         return True
 
-    def _handle_initial_query(
-        self, handler: QueryMasterHandler, packet: bytes, client_ip: str, client_port: int
-    ):
-        """Handle the initial server-list / room-list query."""
+    def _handle_list_request(self, packet: bytes):
+        client_ip, client_port = self.peername[:2] if self.peername else ("0.0.0.0", 0)
+        handler = self.get_handler()
         response, request = handler.handle_query(packet, client_ip=client_ip, client_port=client_port)
-
-        if not response:
-            logger.warning("No response generated for query")
+        if not response or request is None:
             return
 
-        # Remember the field table so msg_type 0x01 can reference it
-        if request and request.fields:
-            self.field_table = list(request.fields)
-        else:
-            # We derived fields from game data — extract them from the response.
-            # The field list is at offset 6 in the plaintext response:
-            # clientIP(4) + clientPort(2) + fieldCount(1) + fields...
-            if len(response) > 6:
-                field_count = response[6]
-                self.field_table = self._extract_field_names(response[7:], field_count)
-
-        # Encrypt with EncTypeX (encode = header + encrypted data)
-        if request and request.validate_token:
-            logger.info(
-                "Cipher init: validate=%s, game=%s",
-                " ".join(f"{b:02x}" for b in request.validate_token),
-                request.game_name,
-            )
+        if self.cipher is None:
+            if not request.validate_token:
+                self.transport.write(response)
+                return
             self.cipher = self._create_cipher(request.validate_token, request.game_name)
-            encrypted = self.cipher.encode(response)
-            logger.info(
-                "Sending initial response for %s to %s: plaintext=%d, encrypted=%d, fields=%s",
-                request.game_name, self.peername,
-                len(response), len(encrypted), self.field_table,
-            )
-            logger.info(
-                "Encrypted first 40 bytes: %s",
-                " ".join(f"{b:02x}" for b in encrypted[:40]),
-            )
-            self.transport.write(encrypted)
+            self.transport.write(self.cipher.encode(response))
         else:
-            # No validate token — send plaintext (shouldn't happen normally)
-            self.transport.write(response)
+            self.transport.write(self.cipher.encrypt(response))
 
-    @staticmethod
-    def _extract_field_names(data: bytes, count: int) -> list[str]:
-        """Extract field names from the field list section of a response."""
-        names = []
-        pos = 0
-        for _ in range(count):
-            if pos >= len(data):
-                break
-            pos += 1  # skip field type byte
-            end = data.find(b"\x00", pos)
-            if end == -1:
-                break
-            names.append(data[pos:end].decode("utf-8", errors="ignore"))
-            pos = end + 1
-        return names
+        self.request = request
+        if request.options & PUSH_UPDATES and not is_room_list_request(request):
+            self.filters = parse_filter_string(request.filter_string)
+            self.pushed = {(g.public_ip, g.public_port) for g in handler.list_games(request)}
+            self.subscribed = True
+            self._subscribers.add(self)
+            logger.info("Master server: %s follows %s games", self.peername, request.game_name)
 
-    def _handle_server_info(self, handler: QueryMasterHandler, packet: bytes):
-        """Handle msg_type 0x01 (server info request) with continuing cipher."""
-        response = handler.handle_server_info(packet, self.field_table)
-
-        if not response:
-            logger.warning("No server info response generated")
+    def _handle_server_info(self, packet: bytes):
+        """Answers SERVER_INFO_REQUEST (ip, port) with a PUSH_SERVER that carries the full rules."""
+        if len(packet) < 9:
             return
+        ip = socket.inet_ntoa(packet[3:7])
+        port = struct.unpack("!H", packet[7:9])[0]
+        game = GameSessionRegistry.get_instance().find_game(ip, port)
+        if game is None:
+            logger.info("Master server: server info for %s:%d, no such game", ip, port)
+            self._send(build_delete_server_message(GameEntry(ip, port, ip, port)))
+            return
+        fields = self.request.fields if self.request else []
+        self._send(build_push_server_message(game, fields, full_rules=True))
+        logger.info("Master server: sent the rules of %s:%d to %s", ip, port, self.peername)
 
-        if self.cipher:
-            encrypted = self.cipher.encrypt(response)
-            logger.debug(
-                "Encrypted server info response: plaintext=%d, encrypted=%d",
-                len(response), len(encrypted),
-            )
-            self.transport.write(encrypted)
-        else:
-            logger.warning("No cipher for server info response — sending plaintext")
-            self.transport.write(response)
+    def _send(self, message: bytes):
+        if self.transport is None or self.cipher is None:
+            return
+        self.transport.write(self.cipher.encrypt(message))
 
-    def connection_lost(self, exc):
-        logger.info("Master server: TCP connection closed for %s (exc=%s)", self.peername, exc)
-        self.buffer = b""
-        self.cipher = None
-        self.field_table = []
+    def push(self, event: str, game: GameEntry):
+        """Pushes one registry change to a following connection."""
+        if not self.subscribed or self.request is None:
+            return
+        if game.fields.get("gamename", "").lower() != self.request.game_name.lower():
+            return
+        key = (game.public_ip, game.public_port)
+        if event != GAME_REMOVED and game_matches_filters(game, self.filters):
+            self._send(build_push_server_message(game, self.request.fields, full_rules=not self.request.fields))
+            self.pushed.add(key)
+        elif key in self.pushed:
+            self._send(build_delete_server_message(game))
+            self.pushed.discard(key)
+
+    @classmethod
+    def on_registry_change(cls, event: str, game: GameEntry):
+        for subscriber in list(cls._subscribers):
+            subscriber.push(event, game)
+
+    @classmethod
+    def send_keepalives(cls):
+        for subscriber in list(cls._subscribers):
+            subscriber._send(build_keepalive_message())
+
+
+async def _maintenance_loop():
+    """Removes stale games (pushing their deletion) and keeps following connections alive."""
+    tick = 0
+    while True:
+        await asyncio.sleep(MAINTENANCE_INTERVAL)
+        tick += 1
+        try:
+            GameSessionRegistry.get_instance().prune(STALE_GAME_SECONDS)
+            if tick % KEEPALIVE_EVERY == 0:
+                QueryMasterServer.send_keepalives()
+        except Exception:
+            logger.exception("Master server maintenance failed")
 
 
 # =============================================================================
@@ -495,7 +355,7 @@ async def start_master_server(
     Returns:
         The asyncio server instance
     """
-    # Initialize the shared handler with default rooms
+    global _maintenance_task
     handler = QueryMasterHandler(
         master_ip=master_ip or host if host != "0.0.0.0" else "127.0.0.1",
         master_port=port,
@@ -504,10 +364,23 @@ async def start_master_server(
     handler.set_rooms(create_default_rooms())
     handler.set_rooms_by_game(create_rooms_by_game())
     QueryMasterServer.set_handler(handler)
+    GameSessionRegistry.get_instance().add_listener(QueryMasterServer.on_registry_change)
 
     logger.info("Master server using gamekeys for %d games", len(handler.gamekeys))
 
     loop = asyncio.get_running_loop()
     server = await loop.create_server(QueryMasterServer, host, port)
-
+    _maintenance_task = asyncio.create_task(_maintenance_loop())
     return server
+
+
+async def stop_master_maintenance():
+    """Stops the maintenance loop that start_master_server started."""
+    global _maintenance_task
+    if _maintenance_task is not None:
+        _maintenance_task.cancel()
+        try:
+            await _maintenance_task
+        except asyncio.CancelledError:
+            pass
+        _maintenance_task = None

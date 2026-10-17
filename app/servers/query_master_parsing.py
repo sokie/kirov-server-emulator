@@ -19,9 +19,44 @@ logger = get_logger(__name__)
 # Constants
 # =============================================================================
 
-RESULT_TYPE_FULL = 0x7E  # '~' - full result with all IP tuples
 ROOM_MARKER = 0x40  # '@' - room entry marker
 END_MARKER = b"\xff\xff\xff\xff"
+
+# Server list request options.
+SEND_FIELDS_FOR_ALL = 0x01
+NO_SERVER_LIST = 0x02
+PUSH_UPDATES = 0x04
+LIMIT_RESULT_COUNT = 0x80
+
+# Client to master messages on the query connection.
+SERVER_LIST_REQUEST = 0
+SERVER_INFO_REQUEST = 1
+SEND_MESSAGE_REQUEST = 2
+KEEPALIVE_REPLY = 3
+
+# Master to client messages after the first list.
+PUSH_KEYS_MESSAGE = 1
+PUSH_SERVER_MESSAGE = 2
+KEEPALIVE_MESSAGE = 3
+DELETE_SERVER_MESSAGE = 4
+
+# The client drops the connection on a longer message.
+MAX_PUSH_MESSAGE = 0x1000
+
+# Server entry flags.
+PRIVATE_IP_FLAG = 0x02
+CONNECT_NEGOTIATE_FLAG = 0x04
+ICMP_IP_FLAG = 0x08
+NONSTANDARD_PORT_FLAG = 0x10
+NONSTANDARD_PRIVATE_PORT_FLAG = 0x20
+HAS_KEYS_FLAG = 0x40
+HAS_FULL_RULES_FLAG = 0x80
+ADDRESS_FLAGS = (
+    PRIVATE_IP_FLAG | CONNECT_NEGOTIATE_FLAG | ICMP_IP_FLAG | NONSTANDARD_PORT_FLAG | NONSTANDARD_PRIVATE_PORT_FLAG
+)
+
+# Heartbeat keys that stay out of a full-rules entry.
+HIDDEN_RULES = frozenset({"statechanged"})
 
 # Default master server IP (will be overridden by actual server IP)
 DEFAULT_MASTER_IP = "0.0.0.0"
@@ -44,6 +79,7 @@ class QueryRequest:
     validate_token: bytes = b""
     filter_string: str = ""
     fields: list = field(default_factory=list)
+    options: int = 0
     tail: bytes = b""
     raw_data: bytes = b""
 
@@ -260,6 +296,7 @@ def parse_tcp_query(data: bytes) -> QueryRequest:
         8B     validate token
         str0   request string (filter, e.g., "(groupid=2167) AND ...")
         str0   fields string (e.g., "\\hostname\\mapname\\numplayers")
+        u32be  options (PUSH_UPDATES and others)
         bytes  tail
 
     Args:
@@ -318,14 +355,19 @@ def parse_tcp_query(data: bytes) -> QueryRequest:
         request.fields = [f for f in fields_str.split("\\") if f]
         pos = fields_end + 1
 
+    if len(data) >= pos + 4:
+        request.options = struct.unpack("!I", data[pos : pos + 4])[0]
+        pos += 4
+
     # Remaining bytes are tail
     request.tail = data[pos:]
 
     logger.debug(
-        "Parsed TCP query: game=%s, filter=%s, fields=%s",
+        "Parsed TCP query: game=%s, filter=%s, fields=%s, options=0x%x",
         request.game_name,
         request.filter_string,
         request.fields,
+        request.options,
     )
 
     return request
@@ -501,282 +543,95 @@ def _compute_query_key(validate_token: bytes) -> bytes:
     return b"\x00\x00"
 
 
+def server_rules(game: GameEntry) -> list[tuple[str, str]]:
+    """Lists the key/value pairs of a full-rules entry: the server keys, then each player's keys as key_N."""
+    rules = [(k, str(v)) for k, v in game.fields.items() if not k.startswith("_") and k not in HIDDEN_RULES]
+    for index, player in enumerate(game.fields.get("_players") or []):
+        rules.extend((f"{key}_{index}", str(value)) for key, value in player.items())
+    return rules
+
+
+def build_server_entry(game: GameEntry, fields: list, full_rules: bool = False, popular_index: bool = True) -> bytes:
+    """
+    Builds one server entry: flags, the address tuples, the values of `fields`, then the full rules.
+
+    A list entry puts a popular-string index (0xFF = inline) before each string value; a pushed entry does not.
+    """
+    flags = ADDRESS_FLAGS | (HAS_KEYS_FLAG if fields else 0) | (HAS_FULL_RULES_FLAG if full_rules else 0)
+    entry = struct.pack("B", flags)
+    entry += ip_to_bytes(game.public_ip) + struct.pack("!H", game.public_port)
+    entry += ip_to_bytes(game.private_ip) + struct.pack("!H", game.private_port)
+    entry += ip_to_bytes(game.traced_ip)
+    for field_name in fields:
+        value = game.get_field_value(field_name).encode("utf-8") + b"\x00"
+        entry += b"\xff" + value if popular_index else value
+    if full_rules:
+        for key, value in server_rules(game):
+            entry += key.encode("utf-8") + b"\x00" + value.encode("utf-8") + b"\x00"
+        entry += b"\x00"
+    return entry
+
+
 def build_game_list_response(
     games: list,
     fields: list,
     client_ip: str = DEFAULT_MASTER_IP,
     client_port: int = 0,
+    full_rules: bool = False,
 ) -> bytes:
     """
-    Build a classic-format game list response (Type 1).
+    Build a game list response.
 
     Response structure:
         ip4     clientIp (echoed back to client)
         u16be   clientPort (echoed back to client)
         fieldList  (all fields declared as type 0 / string)
-        u8      0x00
-        [gameEntryClassic]...
-        u8      0x00
-        u8x4    0xFF 0xFF 0xFF 0xFF (end marker)
-
-    Game entry structure:
-        u8      '~' (0x7E) resultType
-        ip4     publicIp
-        u16be   publicPort
-        ip4     privateIp
-        u16be   privatePort
-        ip4     tracedIp
-        repeat for each field:
-            u8 0xFF + str bytes + u8 0x00
-
-    Note: No per-entry terminator. The single 0x00 before the 0xFFFFFFFF
-    end marker terminates the entire entry list.
+        u8      number of popular strings (0)
+        [server entry]...
+        u8      0x00, u8x4 0xFF 0xFF 0xFF 0xFF (end entry)
 
     Args:
         games: List of GameEntry objects
         fields: List of field names to include
         client_ip: Client's IP address (echoed back in response)
         client_port: Client's source port (echoed back in response)
+        full_rules: Add every key of each server, for a request that names no fields
 
     Returns:
         Complete response bytes
     """
-    response = b""
-
-    # Client IP echoed back (4 bytes)
-    response += ip_to_bytes(client_ip)
-
-    # Client port echoed back (2 bytes)
-    response += struct.pack("!H", client_port)
-
-    # Field list — all type 0 (string) for the classic initial response
+    response = ip_to_bytes(client_ip) + struct.pack("!H", client_port)
     response += make_field_list(fields)
-
-    # Separator
     response += b"\x00"
-
-    # Game entries — no per-entry terminator
     for game in games:
-        entry_start = len(response)
+        response += build_server_entry(game, fields, full_rules)
+    response += b"\x00" + END_MARKER
 
-        # Result type '~' for full entry
-        response += struct.pack("B", RESULT_TYPE_FULL)
-
-        # Public IP/port
-        response += ip_to_bytes(game.public_ip)
-        response += struct.pack("!H", game.public_port)
-
-        # Private IP/port
-        response += ip_to_bytes(game.private_ip)
-        response += struct.pack("!H", game.private_port)
-
-        # Traced IP/port (same as public if not specified)
-        response += ip_to_bytes(game.traced_ip)
-
-        header_bytes = response[entry_start:]
-        logger.info(
-            "Game entry header (%d bytes): %s | pub=%s:%d priv=%s:%d traced=%s",
-            len(header_bytes),
-            " ".join(f"{b:02x}" for b in header_bytes),
-            game.public_ip, game.public_port,
-            game.private_ip, game.private_port,
-            game.traced_ip,
-        )
-
-        # Field values
-        for field_name in fields:
-            value = game.get_field_value(field_name)
-            response += encode_field_value_classic(value)
-
-    # End marker
-    response += b"\x00"
-    response += END_MARKER
-
-    logger.info(
-        "Built game list response: %d bytes, %d games, header hex: %s",
-        len(response), len(games),
-        " ".join(f"{b:02x}" for b in response[:40]),
-    )
-    logger.info(
-        "Response tail hex (last 20 bytes): %s",
-        " ".join(f"{b:02x}" for b in response[-20:]),
-    )
+    logger.debug("Built game list response: %d bytes, %d games, full_rules=%s", len(response), len(games), full_rules)
     return response
 
 
-def build_server_info_message(game, field_table: list[str]) -> bytes:
-    """
-    Build a msg_type 0x01 server-info response.
-
-    This is sent on the same encrypted TCP stream as the initial server list.
-    The GameSpy SDK (FUN_009a5deb) expects:
-
-        u16be   message_length (including these 2 bytes)
-        u8      0x01 (msg_type)
-        u8      field_count
-        repeat field_count:
-            u8    key_index (index into the field table from the initial response)
-            str0  field_value (NUL-terminated)
-
-    Args:
-        game: GameEntry with field data
-        field_table: Ordered list of field names declared in the initial response
-
-    Returns:
-        Complete length-prefixed message bytes
-    """
-    payload = b""
-    payload += struct.pack("B", 0x01)  # msg_type
-
-    # Collect fields that have values
-    entries = []
-    for idx, field_name in enumerate(field_table):
-        value = game.get_field_value(field_name)
-        if value:  # skip empty values
-            entries.append((idx, value))
-
-    payload += struct.pack("B", len(entries))  # field_count
-
-    for key_index, value in entries:
-        payload += struct.pack("B", key_index)
-        payload += value.encode("utf-8") + b"\x00"
-
-    # Length includes the 2-byte length field itself
-    length = len(payload) + 2
-    message = struct.pack("!H", length) + payload
-
-    logger.debug(
-        "Built server info message: %d bytes, %d fields",
-        len(message), len(entries),
-    )
+def _push_message(msg_type: int, payload: bytes) -> bytes:
+    """Frames a master-to-client message: u16be length (with this header), u8 type, payload."""
+    message = struct.pack("!HB", len(payload) + 3, msg_type) + payload
+    if len(message) > MAX_PUSH_MESSAGE:
+        logger.warning("Push message type %d is %d bytes; the client drops longer than 4096", msg_type, len(message))
     return message
 
 
-# =============================================================================
-# New Format Response Builders (length-prefixed)
-# =============================================================================
+def build_push_server_message(game: GameEntry, fields: list, full_rules: bool = False) -> bytes:
+    """Builds a PUSH_SERVER message: a server that was added or changed."""
+    return _push_message(PUSH_SERVER_MESSAGE, build_server_entry(game, fields, full_rules, popular_index=False))
 
 
-def build_value_map_message(fields: list, field_types: dict | None = None) -> bytes:
-    """
-    Build a VALUE_MAP message (type 0x01) in new format.
-
-    Message structure:
-        u16be   length (including these 2 bytes)
-        u8      0x01 (VALUE_MAP type)
-        fieldList
-
-    Args:
-        fields: List of field names
-        field_types: Optional dict mapping field name to type (0=string, 1=u8)
-
-    Returns:
-        Complete VALUE_MAP message bytes
-    """
-    payload = struct.pack("B", 0x01)  # Message type
-    payload += make_field_list(fields, field_types)
-
-    # Length includes the 2-byte length field itself
-    length = len(payload) + 2
-    return struct.pack("!H", length) + payload
+def build_delete_server_message(game: GameEntry) -> bytes:
+    """Builds a DELETE_SERVER message for the server at the entry's public address."""
+    return _push_message(DELETE_SERVER_MESSAGE, ip_to_bytes(game.public_ip) + struct.pack("!H", game.public_port))
 
 
-def build_game_result_message(
-    game: GameEntry,
-    fields: list,
-    field_types: dict | None = None,
-) -> bytes:
-    """
-    Build a GAME_RESULT message (type 0x02) in new format.
-
-    Message structure:
-        u16be   length (including these 2 bytes)
-        u8      0x02 (GAME_RESULT type)
-        u8      resultType ('~')
-        ip4     publicIp
-        u16be   publicPort
-        ip4     privateIp
-        u16be   privatePort
-        ip4     tracedIp
-        repeat for each VALUE_MAP field:
-            if type == 0: str0 (null-terminated string)
-            if type == 1: u8 (one byte integer)
-
-    Args:
-        game: GameEntry object
-        fields: List of field names (must match VALUE_MAP order)
-        field_types: Dict mapping field name to type
-
-    Returns:
-        Complete GAME_RESULT message bytes
-    """
-    if field_types is None:
-        field_types = {}
-
-    payload = b""
-    payload += struct.pack("B", 0x02)  # Message type
-    payload += struct.pack("B", RESULT_TYPE_FULL)  # Result type '~'
-
-    # IP/port tuples
-    payload += ip_to_bytes(game.public_ip)
-    payload += struct.pack("!H", game.public_port)
-    payload += ip_to_bytes(game.private_ip)
-    payload += struct.pack("!H", game.private_port)
-    payload += ip_to_bytes(game.traced_ip)
-
-    # Field values based on type
-    for field_name in fields:
-        value = game.get_field_value(field_name)
-        field_type = field_types.get(field_name, 0)
-
-        if field_type == 1:
-            # u8 immediate value
-            try:
-                payload += struct.pack("B", int(value) if value else 0)
-            except ValueError:
-                payload += struct.pack("B", 0)
-        else:
-            # Null-terminated string
-            payload += value.encode("utf-8") + b"\x00"
-
-    # Length includes the 2-byte length field itself
-    length = len(payload) + 2
-    return struct.pack("!H", length) + payload
-
-
-# =============================================================================
-# Field type resolution for game list responses
-# Fields in BYTE_FIELDS use type 1 (u8 byte), all others use type 0 (string).
-# These types are game-agnostic — the same field always has the same type.
-# =============================================================================
-
-BYTE_FIELDS: frozenset[str] = frozenset(
-    {
-        "host",
-        "joinable",
-        "maxplayers",
-        "maxRPlyr",
-        "maxRealPlayers",
-        "numObs",
-        "numObservers",
-        "numRPlyr",
-        "numRealPlayers",
-        "numplayers",
-        "obs",
-        "password",
-        "pw",
-        "teamAuto",
-    }
-)
-
-
-def get_field_types(fields: list[str]) -> dict[str, int]:
-    """Resolve field types from the requested field names.
-
-    Any field in BYTE_FIELDS gets type 1 (u8 byte encoding),
-    everything else gets type 0 (string encoding).
-    """
-    return {field: (1 if field in BYTE_FIELDS else 0) for field in fields}
+def build_keepalive_message() -> bytes:
+    """Builds a KEEPALIVE message; the client sends it back."""
+    return _push_message(KEEPALIVE_MESSAGE, b"")
 
 
 # =============================================================================

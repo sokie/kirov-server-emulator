@@ -19,7 +19,7 @@ from app.servers.gamestats_server import start_gamestats_server
 from app.servers.gp_server import start_gp_server
 from app.servers.natneg_server import start_natneg_server
 from app.servers.peerchat_server import start_irc_server
-from app.servers.query_master_tcp import start_master_server
+from app.servers.query_master_tcp import start_master_server, stop_master_maintenance
 from app.servers.query_master_udp import start_heartbeat_server
 from app.servers.relay_server import start_relay_server
 from app.servers.sessions import SessionManager
@@ -150,6 +150,7 @@ async def lifespan(app: FastAPI):
         automatch_module.bot_coordinator = None
     servers = [fesl_server, irc_server, gp_server]
     if master_server:
+        await stop_master_maintenance()
         servers.append(master_server)
     if gamestats_server:
         servers.append(gamestats_server)

@@ -70,24 +70,27 @@ The Master Server handles game session discovery and registration. It consists o
 
 All requests are length-prefixed binary packets:
 
-```
-┌─────────┬────────┬─────┬───────────┬───────────┬──────────┬────────┬────────┬──────┐
-│ u16be   │ 6B     │ 0x00│ str0      │ str0      │ 8B       │ str0   │ str0   │ tail │
-│ length  │ header │ sep │ gameName  │ gameName2 │ validate │ filter │ fields │      │
-└─────────┴────────┴─────┴───────────┴───────────┴──────────┴────────┴────────┴──────┘
-```
-
 | Field | Size | Description |
 |-------|------|-------------|
 | `length` | 2 bytes | Total packet length (big-endian) |
-| `header` | 6 bytes | Unknown header bytes |
-| `separator` | 1 byte | 0x00 |
-| `gameName` | null-terminated | Game identifier (e.g., `redalert3pc`) |
-| `gameName2` | null-terminated | Usually same as gameName |
+| `type` | 1 byte | 0 = server list request |
+| `protocol`, `encoding` | 1 byte each | 1 and 3 |
+| `version` | 4 bytes | Game version |
+| `gameName` | null-terminated | Game identifier (e.g., `redalert3pc`, `cc3xp1am`) |
+| `gameName2` | null-terminated | The game asking (e.g., `cc3xp1`) |
 | `validate` | 8 bytes | Validate token for encryption |
 | `filter` | null-terminated | Filter expression (e.g., `(groupid=2166)`) |
-| `fields` | null-terminated | Backslash-delimited field list |
-| `tail` | remaining | Trailing bytes |
+| `fields` | null-terminated | Backslash-delimited field list; may be empty |
+| `options` | 4 bytes | Bit flags; `0x04` PUSH_UPDATES keeps the connection open for updates |
+
+Later messages on the same connection have the same length and type header:
+
+| Type | Message | Body |
+|------|---------|------|
+| 0 | Server list request | as above |
+| 1 | Server info request | ip4, u16be port: the full rules of one listed server |
+| 2 | Send message request | not supported |
+| 3 | Keepalive reply | the client returns the master's keepalive |
 
 ### Filter Expression
 
@@ -141,17 +144,41 @@ Field types: `0` = string, `1` = u8 immediate
 ### Game Entry Format
 
 ```
-┌──────┬─────────┬─────────┬───────────┬───────────┬───────────┬───────────┬────────┬──────┐
-│ 0x7E │ ip4     │ u16be   │ ip4       │ u16be     │ ip4       │ u16be     │ fields │ 0x00 │
-│ '~'  │ pubIp   │ pubPort │ privIp    │ privPort  │ tracedIp  │ tracedPort│        │      │
-└──────┴─────────┴─────────┴───────────┴───────────┴───────────┴───────────┴────────┴──────┘
+┌───────┬─────────┬─────────┬───────────┬───────────┬───────────┬────────┬────────────┐
+│ flags │ ip4     │ u16be   │ ip4       │ u16be     │ ip4       │ fields │ full rules │
+│       │ pubIp   │ pubPort │ privIp    │ privPort  │ tracedIp  │        │            │
+└───────┴─────────┴─────────┴───────────┴───────────┴───────────┴────────┴────────────┘
 ```
 
-| Field | Description |
-|-------|-------------|
-| `publicIp/Port` | NAT-translated external address |
-| `privateIp/Port` | Local network address |
-| `tracedIp/Port` | Address packet was received from |
+| Flag | Meaning |
+|------|---------|
+| `0x02` | private IP follows |
+| `0x04` | connect through NAT negotiation |
+| `0x08` | traced (ICMP) IP follows |
+| `0x10` | public port follows |
+| `0x20` | private port follows |
+| `0x40` | a value for each listed field follows |
+| `0x80` | full rules follow: `key\0value\0` pairs, then an empty key |
+
+Every entry has `0x3E`. A request that lists fields gets `0x40` and the values in field order (in the list,
+each string value starts with `0xFF`). A request with an empty field list, such as the Kane's Wrath and
+Tiberium Wars automatch search, gets `0x80` and every heartbeat key except `statechanged`, with each player's
+keys as `key_N` (for example `rank_0`). The list ends with an entry of flags `0x00` and IP `0xFFFFFFFF`.
+
+### Push Updates
+
+After a request with PUSH_UPDATES, the master keeps the connection and sends framed messages
+(`u16be length`, `u8 type`, body), encrypted as the continuation of the same cipher stream:
+
+| Type | Message | Body |
+|------|---------|------|
+| 2 | Push server | one game entry (string values without the `0xFF`), for a game that appeared or changed |
+| 3 | Keepalive | empty; every 60 seconds |
+| 4 | Delete server | ip4, u16be port of a game that left |
+
+The same push server message answers a server info request, always with full rules. A game that sends
+`statechanged=2`, or no heartbeat or keepalive for 180 seconds, is removed and its deletion pushed. The client
+drops the connection on a message longer than 4096 bytes.
 
 ### EncTypeX Encryption
 
@@ -371,7 +398,7 @@ Add master server settings to `config.json`:
 
 1. **Shared Registry**: `GameSessionRegistry` is a singleton that bridges the UDP heartbeat server (registrations) with the TCP query server (queries).
 
-2. **Session Lifecycle**: Games register via HEARTBEAT, update via periodic HEARTBEATs, and unregister by sending `statechanged=2`.
+2. **Session Lifecycle**: Games register via HEARTBEAT, update via periodic HEARTBEATs, and unregister by sending `statechanged=2` or by going silent for 180 seconds.
 
 3. **Encryption**: All TCP responses are encrypted with EncTypeX. The cipher uses the game key and the client's 8-byte validate token.
 
