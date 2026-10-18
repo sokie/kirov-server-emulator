@@ -46,6 +46,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Stamp the version from the tag
+        shell: bash
+        run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > app/_version.py
+
       - name: Build executable
         run: pyinstaller kirov-server.spec
 

@@ -104,12 +104,32 @@ Then edit `config.json` and set your per-game keys. Each supported game requires
 
 See `config.example.json` for all available options.
 
+### Logging
+
+The server logs to the console and to a rotating file, `logs/kirov-server.log`. The file is in the server's
+directory: next to the executable, or in the working directory when the server runs from source. The `logging`
+section of `config.json` sets it:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `level` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` |
+| `file` | `logs/kirov-server.log` | Log file path, relative to the server's directory. `null` or `""` turns file logging off |
+| `max_bytes` | `10485760` | Size at which the file rotates (10 MB) |
+| `backup_count` | `5` | Number of rotated files that are kept |
+| `sql` | `false` | Log every SQL statement |
+
 ### Running the Server
 
 Start all servers with uvicorn ( note port 80 needs `sudo` on some systems ):
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
+```
+
+Or start it the way the release executable does, which also logs any error while the server loads:
+
+```bash
+python run_server.py
 ```
 
 This starts:

@@ -44,6 +44,13 @@
     "hour_multiplier": 1.0,
     "disconnect_multiplier": -5.0
   },
+  "matchbot": {
+    "enabled": true,
+    "games": {
+      "ra3": true,
+      "generals_zh": true
+    }
+  },
   "game": {
     "gamekeys": {
       "cnc3pc": "YOUR_CNC3_GAME_KEY",
