@@ -9,6 +9,7 @@ The server includes a web portal for account management, leaderboards, and live 
 | Home | `/` | Landing page with server overview, features, and getting started guide |
 | Register | `/register` | Create a new user account to play online |
 | Leaderboard | `/leaderboard` | View ELO rankings for all game modes (1v1, 2v2, clan matches) with win/loss stats |
+| Player Profile | `/players/{id}` | A player's ELO, score, rank and every lifetime stat, per game, mode and faction |
 | Live Matches | `/matches` | See currently active games, players online, map info, and game settings |
 | Clans | `/clans` | Browse, create, and manage clans |
 | Clan Detail | `/clans/{id}` | View clan members, applicants, and manage membership |
@@ -41,6 +42,24 @@ Features:
 - **Player Stats** - View ELO rating, wins, losses, disconnects (DC), win rate, and total games
 - **Rank Indicators** - Trophy icons indicate top-ranked players
 - Rankings update automatically after each match
+
+## Player Profile
+
+The player profile page has one tab per game: Red Alert 3, Generals / Zero Hour, Tiberium Wars and Kane's
+Wrath. The Red Alert 3, Tiberium Wars and Kane's Wrath tabs show the career the server keeps from the
+match reports:
+
+- **Overview** - Best ELO, score and rank, wins, losses, win rate, matches, play time and average match
+  length, over all online matches
+- **Game Modes** - ELO, matches, wins, losses, win rate and win/loss ratio for All online, Unranked,
+  Ranked 1v1, Ranked 2v2, Clan 1v1 and Clan 2v2
+- **Lifetime Stats** - Every stat of the game's career, such as streaks, time played, structures and units
+  built, lost, destroyed and killed, and the ratios, for each mode and All online
+- **Factions** - Matches, wins, losses, win rate and win/loss ratio per faction, with the ranked 1v1 and
+  2v2 records. Kane's Wrath also shows each parent faction with all its subfactions
+
+All online counts every match in the order it was played, so its streaks run across modes, and its ratios
+and averages are worked out from its totals.
 
 ## Live Matches
 

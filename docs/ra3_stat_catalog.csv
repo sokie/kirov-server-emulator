@@ -35,5 +35,5 @@ stat_id,career_key,sake_column,sake_type,fold,report_key,label
 0x21,powers_activated,CareerNumActivatedPowers_<MODE>,int,sum,97 + mode,Powers activated
 0x22,structures_infiltrated,CareerNumStructuresInfiltrated_<MODE>,int,sum,102 + mode,Structures infiltrated
 0x23,,,,client only,,games without a game-info object (campaign container only)
-0x24,disconnects,Disconnects_<MODE>,int,count,,Matches left before the end
+0x24,disconnects,Disconnects_<MODE>,int,count,,Matches ended by a lost connection
 0x25,desyncs,Desyncs_<MODE>,int,count,,Matches that desynced

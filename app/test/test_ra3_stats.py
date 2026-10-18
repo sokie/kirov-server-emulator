@@ -25,7 +25,7 @@ from app.db.crud import (
 )
 from app.models.game_config import GAME_ID_RA, SAGE_LEVEL_THRESHOLDS
 from app.models.match_report import Faction, MatchReport, get_player_key_name
-from app.models.models import CompetitionSession, Persona, Ra3Match
+from app.models.models import CompetitionSession, MatchHistory, Persona
 from app.models.ra3_stats import (
     GT_TO_MODE,
     REPORT_STATS,
@@ -104,7 +104,6 @@ class TestCapturedReports:
         assert report.get_ra3_mode() == "unranked"
         assert report.get_map_path() == "Battlebase Beta (2)"
         assert report.get_duration() == 167
-        assert report.get_local_player_index() == 0
 
         players = report.get_player_list()
         assert [(p.persona_id, p.faction, p.result) for p in players] == [
@@ -127,7 +126,6 @@ class TestCapturedReports:
     def test_loser_report_lists_its_own_player_first(self):
         report = MatchReport.from_bytes(_fixture("report_unranked_2p_loser.bin"), game_id=GAME_ID_RA)
         assert [p.persona_id for p in report.get_player_list()] == [2, 1]
-        assert report.get_local_player_index() == 0
 
 
 class TestReportKeys:
@@ -149,7 +147,6 @@ class TestReportKeys:
         assert [p.faction for p in report.get_player_list()] == [Faction.ALLIED, Faction.SOVIET, Faction.EMPIRE]
         assert report.get_ra3_counts(0)["units_killed"] == 7
         assert report.get_ra3_counts(2)["units_lost_value"] == 900
-        assert report.get_local_player_index() == 0
 
 
 class TestCareerFold:
@@ -206,7 +203,7 @@ class TestMatchHistory:
         assert (loser["losses"], loser["factions"]["allied"]["losses"]) == (1, 1)
         assert get_player_level(db, 1, GAME_ID_RA).score == 2
         assert get_player_level(db, 2, GAME_ID_RA).score == 1
-        assert len(db.exec(select(Ra3Match)).all()) == 1
+        assert len(db.exec(select(MatchHistory)).all()) == 1
 
         before = {pid: get_player_stats(db, pid, GAME_ID_RA).stats for pid in (1, 2)}
         assert ra3_career.rebuild_careers(db) == 1
@@ -216,7 +213,7 @@ class TestMatchHistory:
 
     def _assert_nothing_applied(self, db, csid):
         db.expire_all()
-        assert db.exec(select(Ra3Match)).all() == []
+        assert db.exec(select(MatchHistory)).all() == []
         assert get_player_stats(db, 1, GAME_ID_RA) is None
         assert get_player_level(db, 1, GAME_ID_RA) is None
         claim = db.exec(select(CompetitionSession).where(CompetitionSession.csid == csid)).one()

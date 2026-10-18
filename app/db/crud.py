@@ -1,5 +1,4 @@
 import base64
-import copy
 import random
 import secrets
 import string
@@ -7,18 +6,11 @@ from datetime import datetime
 
 from sqlmodel import Session, select, update
 
-from app.db import ra3_career
+from app.db import cnc3_career, ra3_career
+from app.models import cnc3_stats
 from app.models.game_config import (
     FACTION_MAPS,
-    GAME_ID_KW,
     GAME_ID_RA,
-    GAME_ID_TW,
-    GAME_TYPES,
-    KW_FACTION_DISPLAY,
-    RA3_FACTION_DISPLAY,
-    SAGE_LEVEL_THRESHOLDS,
-    SAGE_SCORING_MULTIPLIERS,
-    TW_FACTION_DISPLAY,
 )
 from app.models.models import (
     AuthCertificate,
@@ -54,21 +46,6 @@ DEFAULT_GAME_ID = GAME_ID_RA
 def get_stat(stats_dict: dict, game_type: str, key: str, default=0):
     """Get stat from nested JSON: stats[game_type][key]."""
     return stats_dict.get(game_type, {}).get(key, default)
-
-
-def set_stat(stats_dict: dict, game_type: str, key: str, value):
-    """Set stat in nested JSON: stats[game_type][key] = value."""
-    stats_dict.setdefault(game_type, {})[key] = value
-
-
-def get_faction_stat(stats_dict: dict, game_type: str, faction: str, key: str, default=0):
-    """Get faction stat from nested JSON: stats[game_type]["factions"][faction][key]."""
-    return stats_dict.get(game_type, {}).get("factions", {}).get(faction, {}).get(key, default)
-
-
-def set_faction_stat(stats_dict: dict, game_type: str, faction: str, key: str, value):
-    """Set faction stat in nested JSON: stats[game_type]["factions"][faction][key] = value."""
-    stats_dict.setdefault(game_type, {}).setdefault("factions", {}).setdefault(faction, {})[key] = value
 
 
 # =============================================================================
@@ -659,53 +636,6 @@ def get_player_stats(session: Session, persona_id: int, game_id: int = DEFAULT_G
     return session.exec(stmt).first()
 
 
-def create_or_update_player_stats(
-    session: Session, persona_id: int, stats_data: dict, game_id: int = DEFAULT_GAME_ID
-) -> PlayerStats:
-    """
-    Creates or updates player stats for a persona.
-
-    Accepts flat keys from the game client (e.g. "wins_ranked_1v1") and
-    converts them into the nested JSON stats structure.
-
-    Args:
-        session: Database session
-        persona_id: Persona ID
-        stats_data: Dictionary of flat stat keys to update
-        game_id: Game ID (RA3=2128, KW=1814, TW=1422)
-
-    Returns:
-        Updated or created PlayerStats
-    """
-    stats = get_player_stats(session, persona_id, game_id=game_id)
-
-    if stats is None:
-        stats = PlayerStats(persona_id=persona_id, game_id=game_id)
-        session.add(stats)
-
-    # Copy JSON dict for mutation (SQLAlchemy JSON change tracking)
-    json_stats = copy.deepcopy(stats.stats) if stats.stats else {}
-
-    for flat_key, value in stats_data.items():
-        # Real columns stay as real columns
-        if hasattr(stats, flat_key) and flat_key != "stats":
-            setattr(stats, flat_key, value)
-            continue
-
-        # Convert flat key → nested JSON: "wins_ranked_1v1" → stats["ranked_1v1"]["wins"]
-        for game_type in GAME_TYPES:
-            if flat_key.endswith(f"_{game_type}"):
-                stat_key = flat_key[: -(len(game_type) + 1)]
-                set_stat(json_stats, game_type, stat_key, value)
-                break
-
-    stats.stats = json_stats
-    stats.updated_at = datetime.utcnow()
-    session.commit()
-    session.refresh(stats)
-    return stats
-
-
 # =============================================================================
 # Generals/Zero Hour Stats CRUD
 # =============================================================================
@@ -979,43 +909,6 @@ def create_or_update_player_level(
     return level
 
 
-def _rank_from_score(score: int) -> int:
-    """Return 1-based rank for a given XP score using SAGE_LEVEL_THRESHOLDS."""
-    rank = 1
-    for i, threshold in enumerate(SAGE_LEVEL_THRESHOLDS):
-        if score >= threshold:
-            rank = i + 1
-        else:
-            break
-    return rank
-
-
-def award_xp_and_update_rank(
-    session: Session, persona_id: int, game_type: str, is_winner: bool, game_id: int = DEFAULT_GAME_ID
-) -> None:
-    """Award XP for a match result and recompute the player's rank.
-
-    Only winners receive XP.  The amount depends on the game mode index:
-    unranked=1, ranked_1v1=2, ranked_2v2=2, clan=5 (from SAGE_SCORING_MULTIPLIERS).
-    """
-    if not is_winner:
-        return
-
-    mode_index_map = {"unranked": 0, "ranked_1v1": 1, "ranked_2v2": 2, "clan_1v1": 3, "clan_2v2": 3}
-    mode_index = mode_index_map.get(game_type, 0)
-    xp_gain = SAGE_SCORING_MULTIPLIERS[mode_index]
-
-    level = get_player_level(session, persona_id, game_id=game_id)
-    if level is None:
-        new_score = xp_gain
-        new_rank = _rank_from_score(new_score)
-        create_or_update_player_level(session, persona_id, rank=new_rank, score=new_score, game_id=game_id)
-    else:
-        new_score = level.score + xp_gain
-        new_rank = _rank_from_score(new_score)
-        create_or_update_player_level(session, persona_id, rank=new_rank, score=new_score, game_id=game_id)
-
-
 # =============================================================================
 # ELO Rating Operations
 # =============================================================================
@@ -1134,133 +1027,6 @@ def update_player_elo(
     session.add(stats)
     session.flush()
     return stats
-
-
-def get_stats_value(stats: "PlayerStats | None", level: "PlayerLevel | None", field: str) -> int:
-    """Map a field name to its value from PlayerStats or PlayerLevel."""
-    field_lower = field.lower()
-    if field_lower == "score":
-        return level.score if level else 0
-    if field_lower == "rank":
-        return level.rank if level else 1
-    if stats is None:
-        return 0
-
-    # Check real columns first (elo_*, games_*, total_matches_online)
-    val = getattr(stats, field_lower, None)
-    if val is not None:
-        return int(val)
-
-    # Parse flat key → nested JSON lookup: "wins_ranked_1v1" → stats["ranked_1v1"]["wins"]
-    json_stats = stats.stats or {}
-    for game_type in GAME_TYPES:
-        if field_lower.endswith(f"_{game_type}"):
-            stat_key = field_lower[: -(len(game_type) + 1)]
-            return int(get_stat(json_stats, game_type, stat_key, 0))
-
-    return 0
-
-
-def update_player_win_loss(
-    session: Session,
-    persona_id: int,
-    game_type: str,
-    result: int,
-    duration: int = 0,
-    faction: str = "",
-    game_id: int = DEFAULT_GAME_ID,
-) -> PlayerStats:
-    """
-    Update a player's win/loss/disconnect/dsync counters, streaks, faction stats, and time played.
-
-    Args:
-        session: Database session.
-        persona_id: Player's persona ID.
-        game_type: Game type (unranked, ranked_1v1, ranked_2v2, clan_1v1, clan_2v2).
-        result: Match result (0=win, 1=loss, 3=disconnect, 4=dsync).
-        duration: Match duration in seconds.
-        faction: Player's faction display name (e.g. "Allied", "Steel Talons").
-        game_id: Game ID for per-game faction resolution.
-
-    Returns:
-        Updated PlayerStats.
-    """
-    stats = get_player_stats(session, persona_id, game_id=game_id)
-    if stats is None:
-        stats = PlayerStats(persona_id=persona_id, game_id=game_id)
-        session.add(stats)
-        session.commit()
-        session.refresh(stats)
-
-    # Resolve faction display name → storage key using per-game map
-    faction_key = FACTION_MAPS.get(game_id, {}).get(faction, "")
-
-    # Copy JSON dict for mutation (SQLAlchemy JSON change tracking)
-    s = copy.deepcopy(stats.stats) if stats.stats else {}
-
-    # Update win/loss/dc/dsync counters
-    if result == 0:  # Win
-        set_stat(s, game_type, "wins", get_stat(s, game_type, "wins") + 1)
-        if faction_key:
-            set_faction_stat(s, game_type, faction_key, "wins", get_faction_stat(s, game_type, faction_key, "wins") + 1)
-    elif result == 1:  # Loss
-        set_stat(s, game_type, "losses", get_stat(s, game_type, "losses") + 1)
-        if faction_key:
-            set_faction_stat(
-                s, game_type, faction_key, "losses", get_faction_stat(s, game_type, faction_key, "losses") + 1
-            )
-    elif result == 3:  # Disconnect
-        set_stat(s, game_type, "disconnects", get_stat(s, game_type, "disconnects") + 1)
-    elif result == 4:  # Dsync
-        set_stat(s, game_type, "desyncs", get_stat(s, game_type, "desyncs") + 1)
-
-    # Win/loss streak tracking
-    if result == 0:  # Win
-        new_win_streak = get_stat(s, game_type, "current_win_streak") + 1
-        set_stat(s, game_type, "current_win_streak", new_win_streak)
-        set_stat(s, game_type, "current_loss_streak", 0)
-        if new_win_streak > get_stat(s, game_type, "longest_win_streak"):
-            set_stat(s, game_type, "longest_win_streak", new_win_streak)
-    elif result in (1, 3, 4):  # Loss/DC/desync
-        new_loss_streak = get_stat(s, game_type, "current_loss_streak") + 1
-        set_stat(s, game_type, "current_loss_streak", new_loss_streak)
-        set_stat(s, game_type, "current_win_streak", 0)
-        if new_loss_streak > get_stat(s, game_type, "longest_loss_streak"):
-            set_stat(s, game_type, "longest_loss_streak", new_loss_streak)
-
-    # Total time played (cumulative)
-    if duration > 0:
-        set_stat(s, game_type, "total_time_played", get_stat(s, game_type, "total_time_played") + duration)
-
-    # Update average game length
-    if duration > 0:
-        total_games = get_stat(s, game_type, "wins") + get_stat(s, game_type, "losses")
-        if total_games > 0:
-            current_avg = get_stat(s, game_type, "avg_game_length")
-            new_avg = int((current_avg * (total_games - 1) + duration) / total_games)
-            set_stat(s, game_type, "avg_game_length", new_avg)
-
-    # Update win ratio
-    wins = get_stat(s, game_type, "wins")
-    losses = get_stat(s, game_type, "losses")
-    total = wins + losses
-    if total > 0:
-        set_stat(s, game_type, "win_ratio", (wins / total) * 100)
-
-    # Reassign JSON dict so SQLAlchemy detects the change
-    stats.stats = s
-    stats.total_matches_online += 1
-    stats.updated_at = datetime.utcnow()
-
-    session.add(stats)
-    session.commit()
-    session.refresh(stats)
-    return stats
-
-
-# =============================================================================
-# Competition Session Operations
-# =============================================================================
 
 
 def generate_csid() -> str:
@@ -1486,9 +1252,9 @@ def finalize_match_from_report(
 ) -> bool:
     """Settles a match from one authoritative report, once per csid.
 
-    `players` is [{persona_id, result, faction}, ...] with result 0 win, 1 loss, 3 disconnect, 4 desync.
+    `players` is [{persona_id, result, faction, counts}, ...] with result 0 win, 1 loss, 3 disconnect, 4 desync.
     The session is claimed with a conditional UPDATE before any stats are applied, so a resent or
-    concurrent report for the same csid changes nothing. RA3 applies the match in one transaction: a
+    concurrent report for the same csid changes nothing. The match is applied in one transaction: a
     failure rolls it all back and releases the claim.
     """
     comp_session = get_competition_session(session, csid)
@@ -1515,9 +1281,6 @@ def finalize_match_from_report(
         logger.info("Match %s already claimed by another submission; skipping stats", csid)
         return False
 
-    # Past this point the claim is ours. The KW/TW helpers commit as they go, so once they have applied
-    # stats the claim must stand to stop a resubmission from replaying them.
-    stats_applied = False
     try:
         game_type_map = {0: "unranked", 1: "ranked_1v1", 2: "ranked_2v2", 3: "clan_1v1", 4: "clan_2v2"}
         game_type = game_type_map.get(game_type_int, "unranked")
@@ -1540,58 +1303,45 @@ def finalize_match_from_report(
         if game_type != "unranked" and not rated:
             logger.info("Match %s (%s) has no winner/loser split; recording counters without ELO", csid, game_type)
 
+        history = [
+            {
+                "persona_id": p.get("persona_id"),
+                "full_id": p.get("full_id", ""),
+                "faction": FACTION_MAPS.get(game_id, {}).get(p.get("faction", ""), ""),
+                "result": p["result"],
+                "counts": p.get("counts", {}),
+            }
+            for p in roster
+        ]
         if game_id == GAME_ID_RA:
-            ra3_players = [
-                {
-                    "persona_id": p.get("persona_id"),
-                    "full_id": p.get("full_id", ""),
-                    "faction": FACTION_MAPS[GAME_ID_RA].get(p.get("faction", ""), ""),
-                    "result": p["result"],
-                    "counts": p.get("counts", {}),
-                }
-                for p in roster
-            ]
-            ra3_career.record_match(session, csid, game_type, duration, ra3_players, map_name, match_id, report_md5)
+            ra3_career.record_match(session, csid, game_type, duration, history, map_name, match_id, report_md5)
+        elif game_id in cnc3_stats.GAMES:
+            cnc3_career.record_match(
+                session, cnc3_stats.GAMES[game_id], csid, game_type, duration, history, map_name, match_id, report_md5
+            )
 
-        for p in players:
-            persona_id = p["persona_id"]
-            result = p["result"]
-            is_winner = result == 0
-            is_disconnect = result == 3
-
-            if game_id != GAME_ID_RA:
-                update_player_win_loss(
-                    session, persona_id, game_type, result, duration, faction=p.get("faction", ""), game_id=game_id
-                )
-                stats_applied = True
-
-            if rated:
-                opponent_elo = int(loser_avg_elo if is_winner else winner_avg_elo)
+        if rated:
+            for p in players:
+                is_winner = p["result"] == 0
                 update_player_elo(
                     session,
-                    persona_id,
+                    p["persona_id"],
                     game_type,
-                    opponent_elo,
+                    int(loser_avg_elo if is_winner else winner_avg_elo),
                     won=is_winner,
-                    disconnected=is_disconnect,
+                    disconnected=p["result"] == 3,
                     game_id=game_id,
                 )
-
-            if game_id != GAME_ID_RA:
-                award_xp_and_update_rank(session, persona_id, game_type, is_winner, game_id=game_id)
         session.commit()
     except Exception:
-        if not stats_applied:
-            session.rollback()
-            session.execute(
-                update(CompetitionSession)
-                .where(CompetitionSession.csid == csid)
-                .values(finalized=False, status=previous_status)
-            )
-            session.commit()
-            logger.exception("Match %s failed before any stats were applied; claim released", csid)
-        else:
-            logger.exception("Match %s failed after stats were applied; claim kept to prevent a replay", csid)
+        session.rollback()
+        session.execute(
+            update(CompetitionSession)
+            .where(CompetitionSession.csid == csid)
+            .values(finalized=False, status=previous_status)
+        )
+        session.commit()
+        logger.exception("Match %s failed; nothing was applied and the claim is released", csid)
         raise
 
     return True
@@ -1709,216 +1459,6 @@ def get_leaderboard(
         )
 
     return leaderboard
-
-
-def get_ra3_player_profile(session: Session, persona_id: int, game_id: int = DEFAULT_GAME_ID) -> dict | None:
-    """Return detailed RA3 stats for a player profile page."""
-    stats = get_player_stats(session, persona_id, game_id=game_id)
-    if stats is None:
-        return None
-
-    persona = get_persona_by_id(session, persona_id)
-    if persona is None:
-        return None
-
-    s = stats.stats or {}
-    modes = ["ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
-    mode_data = {}
-    best_elo = 0
-
-    for mode in modes:
-        elo = getattr(stats, f"elo_{mode}", 1200)
-        wins = get_stat(s, mode, "wins")
-        losses = get_stat(s, mode, "losses")
-        games = wins + losses
-        win_ratio = round((wins / games) * 100, 1) if games > 0 else 0.0
-        if elo > best_elo:
-            best_elo = elo
-
-        mode_data[mode] = {
-            "elo": elo,
-            "wins": wins,
-            "losses": losses,
-            "games": games,
-            "win_ratio": win_ratio,
-            "current_win_streak": get_stat(s, mode, "current_win_streak"),
-            "longest_win_streak": get_stat(s, mode, "longest_win_streak"),
-            "current_loss_streak": get_stat(s, mode, "current_loss_streak"),
-            "longest_loss_streak": get_stat(s, mode, "longest_loss_streak"),
-            "total_time_played": get_stat(s, mode, "total_time_played"),
-            "disconnects": get_stat(s, mode, "disconnects"),
-        }
-
-    factions = []
-    for display_name, key in RA3_FACTION_DISPLAY:
-        factions.append(
-            {
-                "name": display_name,
-                "key": key,
-                "wins_1v1": get_faction_stat(s, "ranked_1v1", key, "wins"),
-                "losses_1v1": get_faction_stat(s, "ranked_1v1", key, "losses"),
-                "wins_2v2": get_faction_stat(s, "ranked_2v2", key, "wins"),
-                "losses_2v2": get_faction_stat(s, "ranked_2v2", key, "losses"),
-            }
-        )
-
-    total_wins = sum(md["wins"] for md in mode_data.values())
-    total_losses = sum(md["losses"] for md in mode_data.values())
-    total_games = total_wins + total_losses
-    total_time = sum(md["total_time_played"] for md in mode_data.values())
-
-    return {
-        "persona_id": persona.id,
-        "name": persona.name,
-        "best_elo": best_elo,
-        **mode_data,
-        "factions": factions,
-        "total_wins": total_wins,
-        "total_losses": total_losses,
-        "total_games": total_games,
-        "total_time_played": total_time,
-        "win_ratio": round((total_wins / total_games) * 100, 1) if total_games > 0 else 0.0,
-    }
-
-
-def get_kw_player_profile(session: Session, persona_id: int) -> dict | None:
-    """Return detailed Kane's Wrath stats for a player profile page — all 9 factions."""
-    stats = get_player_stats(session, persona_id, game_id=GAME_ID_KW)
-    if stats is None:
-        return None
-
-    persona = get_persona_by_id(session, persona_id)
-    if persona is None:
-        return None
-
-    s = stats.stats or {}
-    modes = ["ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
-    mode_data = {}
-    best_elo = 0
-
-    for mode in modes:
-        elo = getattr(stats, f"elo_{mode}", 1200)
-        wins = get_stat(s, mode, "wins")
-        losses = get_stat(s, mode, "losses")
-        games = wins + losses
-        win_ratio = round((wins / games) * 100, 1) if games > 0 else 0.0
-        if elo > best_elo:
-            best_elo = elo
-
-        mode_data[mode] = {
-            "elo": elo,
-            "wins": wins,
-            "losses": losses,
-            "games": games,
-            "win_ratio": win_ratio,
-            "current_win_streak": get_stat(s, mode, "current_win_streak"),
-            "longest_win_streak": get_stat(s, mode, "longest_win_streak"),
-            "current_loss_streak": get_stat(s, mode, "current_loss_streak"),
-            "longest_loss_streak": get_stat(s, mode, "longest_loss_streak"),
-            "total_time_played": get_stat(s, mode, "total_time_played"),
-            "disconnects": get_stat(s, mode, "disconnects"),
-        }
-
-    factions = []
-    for display_name, key in KW_FACTION_DISPLAY:
-        factions.append(
-            {
-                "name": display_name,
-                "key": key,
-                "wins_1v1": get_faction_stat(s, "ranked_1v1", key, "wins"),
-                "losses_1v1": get_faction_stat(s, "ranked_1v1", key, "losses"),
-                "wins_2v2": get_faction_stat(s, "ranked_2v2", key, "wins"),
-                "losses_2v2": get_faction_stat(s, "ranked_2v2", key, "losses"),
-            }
-        )
-
-    total_wins = sum(md["wins"] for md in mode_data.values())
-    total_losses = sum(md["losses"] for md in mode_data.values())
-    total_games = total_wins + total_losses
-    total_time = sum(md["total_time_played"] for md in mode_data.values())
-
-    return {
-        "persona_id": persona.id,
-        "name": persona.name,
-        "best_elo": best_elo,
-        **mode_data,
-        "factions": factions,
-        "total_wins": total_wins,
-        "total_losses": total_losses,
-        "total_games": total_games,
-        "total_time_played": total_time,
-        "win_ratio": round((total_wins / total_games) * 100, 1) if total_games > 0 else 0.0,
-    }
-
-
-def get_tw_player_profile(session: Session, persona_id: int) -> dict | None:
-    """Return detailed Tiberium Wars stats for a player profile page — 3 factions."""
-    stats = get_player_stats(session, persona_id, game_id=GAME_ID_TW)
-    if stats is None:
-        return None
-
-    persona = get_persona_by_id(session, persona_id)
-    if persona is None:
-        return None
-
-    s = stats.stats or {}
-    modes = ["ranked_1v1", "ranked_2v2", "clan_1v1", "clan_2v2"]
-    mode_data = {}
-    best_elo = 0
-
-    for mode in modes:
-        elo = getattr(stats, f"elo_{mode}", 1200)
-        wins = get_stat(s, mode, "wins")
-        losses = get_stat(s, mode, "losses")
-        games = wins + losses
-        win_ratio = round((wins / games) * 100, 1) if games > 0 else 0.0
-        if elo > best_elo:
-            best_elo = elo
-
-        mode_data[mode] = {
-            "elo": elo,
-            "wins": wins,
-            "losses": losses,
-            "games": games,
-            "win_ratio": win_ratio,
-            "current_win_streak": get_stat(s, mode, "current_win_streak"),
-            "longest_win_streak": get_stat(s, mode, "longest_win_streak"),
-            "current_loss_streak": get_stat(s, mode, "current_loss_streak"),
-            "longest_loss_streak": get_stat(s, mode, "longest_loss_streak"),
-            "total_time_played": get_stat(s, mode, "total_time_played"),
-            "disconnects": get_stat(s, mode, "disconnects"),
-        }
-
-    factions = []
-    for display_name, key in TW_FACTION_DISPLAY:
-        factions.append(
-            {
-                "name": display_name,
-                "key": key,
-                "wins_1v1": get_faction_stat(s, "ranked_1v1", key, "wins"),
-                "losses_1v1": get_faction_stat(s, "ranked_1v1", key, "losses"),
-                "wins_2v2": get_faction_stat(s, "ranked_2v2", key, "wins"),
-                "losses_2v2": get_faction_stat(s, "ranked_2v2", key, "losses"),
-            }
-        )
-
-    total_wins = sum(md["wins"] for md in mode_data.values())
-    total_losses = sum(md["losses"] for md in mode_data.values())
-    total_games = total_wins + total_losses
-    total_time = sum(md["total_time_played"] for md in mode_data.values())
-
-    return {
-        "persona_id": persona.id,
-        "name": persona.name,
-        "best_elo": best_elo,
-        **mode_data,
-        "factions": factions,
-        "total_wins": total_wins,
-        "total_losses": total_losses,
-        "total_games": total_games,
-        "total_time_played": total_time,
-        "win_ratio": round((total_wins / total_games) * 100, 1) if total_games > 0 else 0.0,
-    }
 
 
 # =============================================================================

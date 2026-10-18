@@ -30,7 +30,6 @@ from app.config.app_settings import app_config
 from app.db.crud import (
     DEFAULT_GAME_ID,
     create_or_update_generals_stats,
-    create_or_update_player_stats,
     get_generals_player_stats,
     get_player_stats,
     validate_and_consume_preauth_ticket,
@@ -577,27 +576,14 @@ class GameStatsServer(asyncio.Protocol):
         return self._handle_setpd_json(pid, data_str, lid, request_id)
 
     def _handle_setpd_json(self, pid: int, data_str: str, lid: str, request_id: str) -> str:
-        """Handle setpd for CNC3/RA3 (JSON format)."""
-        if not data_str:
-            data_str = "{}"
-
-        try:
-            stats_data = json.loads(data_str)
-        except json.JSONDecodeError:
-            stats_data = {}
-
-        if stats_data:
-            game_id = GAMENAME_TO_GAME_ID.get(self.gamename, DEFAULT_GAME_ID)
-            create_or_update_player_stats(self.db_session, pid, stats_data, game_id=game_id)
-
+        """Acknowledges a CNC3 or RA3 setpd without storing it."""
+        logger.info("GameStats: setpd from pid=%s not stored; RA3, TW and KW stats come from match reports", pid)
         response_data = {
             "setpdr": "1",
             "lid": lid,
             "pid": str(pid),
             "mod": "1",
         }
-
-        logger.debug("GameStats: JSON stats saved for pid=%s", pid)
         return self._format_response(response_data)
 
     def _handle_setpd_generals(self, pid: int, data_str: str, lid: str, request_id: str) -> str:
