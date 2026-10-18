@@ -195,7 +195,7 @@ Client: MODE #channel -i-p-s-m-n-t+l+e 6  (typical game lobby)
 
 | Mode | Description |
 |------|-------------|
-| `+l N` | Player limit |
+| `+l N` | Player limit; a JOIN to a full room gets `471 ERR_CHANNELISFULL` |
 | `+i` | Invite only |
 | `+p` | Private |
 | `+s` | Secret |
