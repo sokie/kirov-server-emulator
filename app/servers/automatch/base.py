@@ -1,6 +1,8 @@
 """Base classes for the automatch game factory architecture."""
 
 import random
+import socket
+import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -117,6 +119,7 @@ def pick_random_map_index(common_bitset: str) -> int:
 
 _GAMESPY_XOR_KEY = 0xC3801DC7
 _GAMESPY_ALPHABET = "aFl4uOD9sfWq1vGp"
+_STAGING_ALPHABET = "qJ1h4N9cP3lzD0Ka"
 _HEX_CHARS = "0123456789abcdef"
 
 
@@ -126,3 +129,18 @@ def encode_gamespy_username(ip: int, profile_id: int) -> str:
     hex_str = f"{xored:08x}"
     encoded = "".join(_GAMESPY_ALPHABET[_HEX_CHARS.index(c)] for c in hex_str)
     return f"X{encoded}X|{profile_id}"
+
+
+def staging_room_name(title: str, public_ip: str, private_ip: str, port: int) -> str:
+    """
+    Returns the staging room name of a host: #GSP!<title>!M<encoded address>M.
+
+    A Kane's Wrath or Tiberium Wars QuickMatch joiner builds it from the host's server list entry (public IP,
+    private IP and private port), so the entry must carry the address the host used.
+    """
+    public = struct.unpack("!I", socket.inet_aton(public_ip))[0]
+    # The game reads the private address in the opposite byte order.
+    private = struct.unpack("<I", socket.inet_aton(private_ip))[0]
+    value = public ^ private ^ (port | port << 16) ^ _GAMESPY_XOR_KEY
+    encoded = "".join(_STAGING_ALPHABET[_HEX_CHARS.index(c)] for c in f"{value:08x}")
+    return f"#GSP!{title}!M{encoded}M"

@@ -8,6 +8,7 @@ This module contains session managers for different server types:
 """
 
 import asyncio
+import ipaddress
 import socket
 import struct
 import time
@@ -27,6 +28,32 @@ from app.servers.query_master_parsing import GameEntry
 from app.util.logging_helper import get_logger
 
 logger = get_logger(__name__)
+
+PRIVATE_NETWORKS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
+
+
+def _is_private(ip: str) -> bool:
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(address in network for network in PRIVATE_NETWORKS)
+
+
+def peer_private_ip(info: dict) -> str:
+    """
+    Returns the first 10/8, 172.16/12 or 192.168/16 address among a host's localipN keys, else 0.0.0.0.
+
+    The host names its staging room and recognises its own server list entry with this address. The address
+    only identifies the room. The games connect to the addresses that NAT negotiation gives them.
+    """
+    index = 0
+    while f"localip{index}" in info:
+        ip = info[f"localip{index}"]
+        if _is_private(ip):
+            return ip
+        index += 1
+    return "0.0.0.0"
 
 
 # =============================================================================
@@ -544,6 +571,10 @@ class NatNegSessionManager:
 # =============================================================================
 
 
+GAME_UPDATED = "updated"
+GAME_REMOVED = "removed"
+
+
 class GameSessionRegistry:
     """
     Shared registry for game sessions.
@@ -559,6 +590,8 @@ class GameSessionRegistry:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._sessions: dict[int, GameEntry] = {}  # client_id -> GameEntry
+            cls._instance._last_seen: dict[int, float] = {}
+            cls._instance._listeners: list[Callable[[str, GameEntry], None]] = []
         return cls._instance
 
     @classmethod
@@ -593,7 +626,7 @@ class GameSessionRegistry:
 
         # Parse ports
         public_port = int(info.get("hostport", port))
-        private_ip = info.get("localip0", host)
+        private_ip = peer_private_ip(info)
         private_port = int(info.get("localport", public_port))
 
         # Check if session already exists
@@ -634,16 +667,59 @@ class GameSessionRegistry:
                 public_port,
                 info.get("hostname", "unknown"),
             )
+        self._last_seen[client_id] = time.monotonic()
+        self._notify(GAME_UPDATED, self._sessions[client_id])
 
     def unregister_game(self, client_id: int):
         """Remove a game session."""
-        if client_id in self._sessions:
-            del self._sessions[client_id]
+        game = self._sessions.pop(client_id, None)
+        self._last_seen.pop(client_id, None)
+        if game is not None:
             logger.info("Unregistered game: client_id=%d", client_id)
+            self._notify(GAME_REMOVED, game)
 
-    def get_games(self) -> list:
-        """Get all registered games as a list of GameEntry objects."""
-        return list(self._sessions.values())
+    def touch(self, client_id: int):
+        """Records a keepalive from a registered game."""
+        if client_id in self._sessions:
+            self._last_seen[client_id] = time.monotonic()
+
+    def prune(self, max_age: float) -> int:
+        """Removes every game that sent no heartbeat or keepalive for max_age seconds. Returns how many."""
+        now = time.monotonic()
+        stale = [cid for cid, seen in self._last_seen.items() if now - seen > max_age]
+        for client_id in stale:
+            logger.info("Game client_id=%d sent nothing for %.0f s, removing it", client_id, max_age)
+            self.unregister_game(client_id)
+        return len(stale)
+
+    def add_listener(self, listener: Callable[[str, GameEntry], None]):
+        """Adds a listener, called as listener(GAME_UPDATED or GAME_REMOVED, game) on every change."""
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[str, GameEntry], None]):
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def _notify(self, event: str, game: GameEntry):
+        for listener in list(self._listeners):
+            try:
+                listener(event, game)
+            except Exception:
+                logger.exception("Game registry listener failed on %s", event)
+
+    def find_game(self, ip: str, port: int) -> GameEntry | None:
+        """Returns the game at a public or private address, or None."""
+        for game in self._sessions.values():
+            if (game.public_ip, game.public_port) == (ip, port) or (game.private_ip, game.private_port) == (ip, port):
+                return game
+        return None
+
+    def get_games(self, gamename: str | None = None) -> list:
+        """Get registered games, optionally filtered by gamename."""
+        if gamename is None:
+            return list(self._sessions.values())
+        return [g for g in self._sessions.values() if g.fields.get("gamename", "").lower() == gamename.lower()]
 
     def get_game(self, client_id: int) -> GameEntry | None:
         """Get a specific game by client ID."""
@@ -652,3 +728,4 @@ class GameSessionRegistry:
     def clear(self):
         """Clear all sessions."""
         self._sessions.clear()
+        self._last_seen.clear()

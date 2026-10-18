@@ -19,6 +19,28 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def channel_limit(mode_changes: str, mode_params: list[str]) -> int | None:
+    """Returns the user limit a MODE change sets: the +l value, 0 for -l, or None if the change does not set l."""
+    params = list(mode_params)
+    sign = "+"
+    limit = None
+    for char in mode_changes:
+        if char in "+-":
+            sign = char
+        elif char == "l":
+            if sign == "-":
+                limit = 0
+            elif params:
+                try:
+                    limit = max(0, int(params.pop(0)))
+                except ValueError:
+                    limit = 0
+        elif char == "k" and sign == "+" and params:
+            # +k also takes a parameter.
+            params.pop(0)
+    return limit
+
+
 class IRCFactory:
     """
     Factory for handling IRC commands (similar to AcctFactory and FsysFactory).
@@ -571,6 +593,12 @@ class IRCFactory:
                 await client.send_numeric(IRCNumeric.ERR_BADCHANMASK, channel_name, "Bad channel mask")
                 continue
 
+            channel = irc_channels.get(channel_name)
+            is_full = channel is not None and 0 < channel.limit <= len(channel.users)
+            if is_full and client.user.nickname not in channel.users:
+                await client.send_numeric(IRCNumeric.ERR_CHANNELISFULL, channel_name, "Cannot join channel (+l)")
+                continue
+
             # Join channel
             await join_channel(client, channel_name)
 
@@ -632,9 +660,10 @@ class IRCFactory:
                 names.append(nickname)
 
         # Send RPL_NAMREPLY (353)
+        channel_type = "*" if channel.is_private() else "="
         await client.send_numeric(
             IRCNumeric.RPL_NAMREPLY,
-            "=",  # Public channel
+            channel_type,
             channel_name,
             " ".join(names),
         )
@@ -718,13 +747,19 @@ class IRCFactory:
                     await client.send_numeric(IRCNumeric.ERR_CHANOPRIVSNEEDED, target, "You're not channel operator")
                     return
 
-                # Parse and update channel modes
-                # Store the full mode string for now (simplified)
                 channel.modes = mode_changes
                 if mode_params:
                     channel.modes += " " + mode_params
+                limit = channel_limit(mode_changes, message.params[2:])
+                if limit is not None:
+                    channel.limit = limit
 
-                # Broadcast mode change to channel (no response needed for self)
+                mode_msg = IRCMessage(
+                    command="MODE",
+                    params=[target, mode_changes] + ([mode_params] if mode_params else []),
+                    prefix=client.user.get_prefix(),
+                )
+                await client.broadcast_to_channel(target, mode_msg, exclude_self=False)
                 logger.debug(f"Channel {target} mode set to: {channel.modes}")
         else:
             # User mode

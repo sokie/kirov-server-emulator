@@ -88,6 +88,7 @@ class IRCChannel:
     name: str
     topic: str | None = None
     modes: str = ""
+    limit: int = 0  # +l user limit, 0 for none
     users: set[str] = field(default_factory=set)  # Set of nicknames
     operators: set[str] = field(default_factory=set)  # Set of operator nicknames
     user_stats: dict[str, dict[str, str]] = field(default_factory=dict)  # GameSpy user stats
@@ -182,6 +183,7 @@ class IRCNumeric:
     ERR_NEEDMOREPARAMS = "461"  # Need more params
     ERR_ALREADYREGISTRED = "462"  # Already registered
     ERR_PASSWDMISMATCH = "464"  # Password incorrect
+    ERR_CHANNELISFULL = "471"  # Channel is full (+l)
     ERR_BADCHANMASK = "476"  # Bad channel mask
     ERR_CHANOPRIVSNEEDED = "482"  # Channel operator required
 

@@ -10,7 +10,7 @@ import contextlib
 import socket
 import struct
 
-from app.servers.query_master_parsing import BYTE_FIELDS
+from app.servers.automatch.base import staging_room_name
 from app.servers.sessions import GameSessionRegistry
 from app.util.logging_helper import format_hex, get_logger
 
@@ -169,18 +169,14 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
         # Register game in shared registry (for TCP query responses)
         registry = GameSessionRegistry.get_instance()
         registry.register_game(client_id, host, port, info)
-
-        # Debug: warn if any heartbeat value contradicts BYTE_FIELDS classification
-        if logger.isEnabledFor(10):  # logging.DEBUG == 10
-            for key, value in info.items():
-                if key in BYTE_FIELDS and not value.isdigit():
-                    logger.debug(
-                        "BYTE_FIELDS mismatch: field '%s' classified as byte but has non-numeric value '%s' "
-                        "(client_id=%d)",
-                        key,
-                        value,
-                        client_id,
-                    )
+        gamename = info.get("gamename", "")
+        if gamename.endswith("am") and statechanged != HeartbeatState.NORMAL:
+            game = registry.get_game(client_id)
+            try:
+                room = staging_room_name(gamename[:-2], game.public_ip, game.private_ip, game.private_port)
+            except (OSError, ValueError):
+                room = f"an unknown room (bad address {game.private_ip}:{game.private_port})"
+            logger.info("QuickMatch host client_id=%d of %s waits in %s", client_id, gamename, room)
 
         # If publicip is "0", send challenge with actual IP/port
         public_ip = info.get("publicip", "")
@@ -207,9 +203,9 @@ class HeartbeatMaster(asyncio.DatagramProtocol):
 
         logger.debug("UDP KEEPALIVE from %s:%d (client_id=%d)", host, port, client_id)
 
-        # Update session timestamp if exists
         if client_id in self.game_sessions:
             self.game_sessions[client_id]["last_keepalive"] = True
+        GameSessionRegistry.get_instance().touch(client_id)
 
     def _send_challenge(self, addr: tuple[str, int], client_id: int):
         """
