@@ -8,6 +8,14 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from app.util.paths import get_runtime_path
+
+if TYPE_CHECKING:
+    from app.config.app_settings import LoggingSettings
+
+_configured = False
 
 
 def format_hex(data: bytes) -> str:
@@ -40,9 +48,10 @@ def setup_logging(
     log_file: str | Path | None = None,
     max_bytes: int = 10 * 1024 * 1024,
     backup_count: int = 5,
+    sql: bool = False,
 ) -> Path | None:
     """
-    Configure root logging for the application.
+    Configure root logging for the application. A second call replaces the handlers of the first.
 
     Args:
         level: Default log level for the application
@@ -50,10 +59,12 @@ def setup_logging(
         log_file: Optional path for a rotating UTF-8 log file
         max_bytes: Maximum file size before rotation
         backup_count: Number of rotated files to retain
+        sql: Log every SQL statement
 
     Returns:
         The resolved log path when file logging is enabled, otherwise None
     """
+    global _configured
     # Create formatter
     formatter = logging.Formatter(fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -65,8 +76,10 @@ def setup_logging(
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
-    # Remove existing handlers to avoid duplicates
-    root_logger.handlers.clear()
+    # Close the handlers of an earlier call, so its log file is not left open.
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+        handler.close()
     root_logger.addHandler(console_handler)
 
     resolved_log_file = None
@@ -91,11 +104,40 @@ def setup_logging(
         uvicorn_logger.propagate = True
         uvicorn_logger.setLevel(level)
 
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO if sql else logging.WARNING)
+
     # Set debug level for specific modules if requested
     if debug_modules:
         for module in debug_modules:
             logging.getLogger(module).setLevel(logging.DEBUG)
 
+    _configured = True
+    return resolved_log_file
+
+
+def configure_logging(settings: "LoggingSettings") -> Path | None:
+    """
+    Configure logging from the logging section of the config, if nothing has configured it yet.
+
+    A relative log file goes in the runtime directory: the executable's directory, or the working directory
+    when the server runs from source. Returns the log file path, or None.
+    """
+    if _configured:
+        return None
+    log_file = None
+    if settings.file:
+        log_file = Path(settings.file)
+        if not log_file.is_absolute():
+            log_file = Path(get_runtime_path()) / log_file
+    resolved_log_file = setup_logging(
+        level=getattr(logging, settings.level),
+        log_file=log_file,
+        max_bytes=settings.max_bytes,
+        backup_count=settings.backup_count,
+        sql=settings.sql,
+    )
+    if resolved_log_file is not None:
+        logging.getLogger(__name__).info("Logging to %s", resolved_log_file)
     return resolved_log_file
 
 

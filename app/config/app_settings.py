@@ -1,6 +1,7 @@
 import os
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, JsonConfigSettingsSource, SettingsConfigDict
 
 from app.util.paths import get_runtime_path
@@ -21,13 +22,24 @@ class GameSettings(BaseModel):
 class LoggingSettings(BaseModel):
     """Logging configuration."""
 
-    level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO")
     file: str | None = Field(
         default="logs/kirov-server.log",
-        description="Log file path, relative to the runtime directory; null disables file logging",
+        description="Log file path, relative to the runtime directory. null or an empty string disables file logging",
     )
     max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, description="Maximum log file size before rotation")
     backup_count: int = Field(default=5, ge=0, description="Number of rotated log files to retain")
+    sql: bool = Field(default=False, description="Log every SQL statement the server runs")
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def _level_in_capitals(cls, value):
+        return value.upper() if isinstance(value, str) else value
+
+    @field_validator("file", mode="before")
+    @classmethod
+    def _blank_file_disables(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
 
 
 class FeslSettings(BaseModel):

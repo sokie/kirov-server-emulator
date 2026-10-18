@@ -57,6 +57,7 @@
     "level": "INFO",
     "file": "logs/kirov-server.log",
     "max_bytes": 10485760,
-    "backup_count": 5
+    "backup_count": 5,
+    "sql": false
   }
 }

@@ -12,7 +12,7 @@ DATABASE_URL = f"sqlite:///{_db_path}"
 # The engine is the central point of communication with the database.
 # connect_args is needed only for SQLite to allow sharing the connection
 # across different threads, which is important for FastAPI.
-engine = create_engine(DATABASE_URL, echo=True, connect_args={"check_same_thread": False})
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 
 def create_db_and_tables():

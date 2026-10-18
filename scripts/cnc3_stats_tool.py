@@ -45,12 +45,9 @@ def decode(game: Cnc3Game, path: str) -> None:
 
 
 def _session() -> Session:
-    from sqlmodel import create_engine
-
     import app.db.database as database
 
-    # The server's engine echoes every SQL statement. Creating the tables adds match_history to an older database.
-    database.engine = create_engine(database.DATABASE_URL, connect_args={"check_same_thread": False})
+    # Creating the tables adds match_history to an older database.
     database.create_db_and_tables()
     return Session(database.engine)
 

@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -28,28 +27,18 @@ from app.soap.clan_service import clan_router
 from app.soap.competition_service import competition_router
 from app.soap.sake_service import sake_router
 from app.soap.service import soap_router
-from app.util.logging_helper import setup_logging
-from app.util.paths import get_base_path, get_runtime_path
+from app.util.logging_helper import configure_logging, get_logger
+from app.util.paths import get_base_path
 from app.web.routes import router as web_router
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    log_level = getattr(logging, app_config.logging.level.upper(), logging.INFO)
-    log_file = app_config.logging.file
-    if log_file is not None and not os.path.isabs(log_file):
-        log_file = os.path.join(get_runtime_path(), log_file)
-    resolved_log_file = setup_logging(
-        level=log_level,
-        log_file=log_file,
-        max_bytes=app_config.logging.max_bytes,
-        backup_count=app_config.logging.backup_count,
-    )
-    logger = logging.getLogger(__name__)
+    # Startup. run_server.py configures logging first; this covers a server started by uvicorn directly.
+    configure_logging(app_config.logging)
     logger.info("Application startup (version %s)", __version__)
-    if resolved_log_file is not None:
-        logger.info("File logging enabled: %s", resolved_log_file)
 
     # Initialize database
     logger.info("Initializing database...")
@@ -61,16 +50,16 @@ async def lifespan(app: FastAPI):
     # Start FESL server
     fesl_host = app_config.fesl.host
     fesl_port = app_config.fesl.port
-    print(f"INFO:     Starting FESL server on {fesl_host}:{fesl_port}...")
+    logger.info(f"Starting FESL server on {fesl_host}:{fesl_port}...")
     fesl_server = await start_fesl_server(fesl_host, fesl_port)
-    print(f"INFO:     FESL server is listening on {fesl_host}:{fesl_port}")
+    logger.info(f"FESL server is listening on {fesl_host}:{fesl_port}")
 
     # Start Peerchat IRC server
     irc_host = app_config.irc.host
     irc_port = app_config.irc.port
-    print(f"INFO:     Starting Peerchat IRC server on {irc_host}:{irc_port}...")
+    logger.info(f"Starting Peerchat IRC server on {irc_host}:{irc_port}...")
     irc_server = await start_irc_server(host=irc_host, port=irc_port)
-    print(f"INFO:     Peerchat IRC server is listening on {irc_host}:{irc_port}")
+    logger.info(f"Peerchat IRC server is listening on {irc_host}:{irc_port}")
 
     # Start Automatch bots
     coordinator = None
@@ -82,14 +71,14 @@ async def lifespan(app: FastAPI):
             await coordinator.start(enabled_factories)
             automatch_module.bot_coordinator = coordinator
             game_ids = ", ".join(f.game_id for f in enabled_factories)
-            print(f"INFO:     Automatch bots started for: {game_ids}")
+            logger.info(f"Automatch bots started for: {game_ids}")
 
     # Start GameSpy Protocol server
     gp_host = app_config.gp.host
     gp_port = app_config.gp.port
-    print(f"INFO:     Starting GameSpy server on {gp_host}:{gp_port}...")
+    logger.info(f"Starting GameSpy server on {gp_host}:{gp_port}...")
     gp_server = await start_gp_server(gp_host, gp_port, session_manager)
-    print(f"INFO:     GameSpy server is listening on {gp_host}:{gp_port}")
+    logger.info(f"GameSpy server is listening on {gp_host}:{gp_port}")
 
     # Start Relay server (for NAT traversal fallback)
     relay_server = None
@@ -98,14 +87,14 @@ async def lifespan(app: FastAPI):
         relay_port_start = app_config.relay.port_start
         relay_port_end = app_config.relay.port_end
         relay_timeout = app_config.relay.session_timeout
-        print(f"INFO:     Starting Relay server on {relay_host}:{relay_port_start}-{relay_port_end}...")
+        logger.info(f"Starting Relay server on {relay_host}:{relay_port_start}-{relay_port_end}...")
         relay_server = await start_relay_server(
             host=relay_host,
             port_start=relay_port_start,
             port_end=relay_port_end,
             session_timeout=relay_timeout,
         )
-        print(f"INFO:     Relay server is ready (port range {relay_port_start}-{relay_port_end})")
+        logger.info(f"Relay server is ready (port range {relay_port_start}-{relay_port_end})")
 
     # Start NAT Negotiation server
     natneg_transport = None
@@ -113,14 +102,14 @@ async def lifespan(app: FastAPI):
         natneg_host = app_config.natneg.host
         natneg_port = app_config.natneg.port
         pair_ttl = app_config.relay.pair_ttl if app_config.relay.enabled else 300
-        print(f"INFO:     Starting NAT Negotiation server on {natneg_host}:{natneg_port}...")
+        logger.info(f"Starting NAT Negotiation server on {natneg_host}:{natneg_port}...")
         natneg_transport, natneg_protocol = await start_natneg_server(
             host=natneg_host,
             port=natneg_port,
             relay_server=relay_server,
             pair_ttl=pair_ttl,
         )
-        print(f"INFO:     NAT Negotiation server is listening on {natneg_host}:{natneg_port}")
+        logger.info(f"NAT Negotiation server is listening on {natneg_host}:{natneg_port}")
 
     # Start Master Server (GameSpy server/room list queries)
     master_server = None
@@ -131,28 +120,28 @@ async def lifespan(app: FastAPI):
         master_udp_port = app_config.master.udp_port
 
         # Start TCP server for queries
-        print(f"INFO:     Starting Master Server (TCP) on {master_host}:{master_port}...")
+        logger.info(f"Starting Master Server (TCP) on {master_host}:{master_port}...")
         master_server = await start_master_server(host=master_host, port=master_port)
-        print(f"INFO:     Master Server (TCP) is listening on {master_host}:{master_port}")
+        logger.info(f"Master Server (TCP) is listening on {master_host}:{master_port}")
 
         # Start UDP server for heartbeats
-        print(f"INFO:     Starting Heartbeat Server (UDP) on {master_host}:{master_udp_port}...")
+        logger.info(f"Starting Heartbeat Server (UDP) on {master_host}:{master_udp_port}...")
         heartbeat_transport, heartbeat_protocol = await start_heartbeat_server(host=master_host, port=master_udp_port)
-        print(f"INFO:     Heartbeat Server (UDP) is listening on {master_host}:{master_udp_port}")
+        logger.info(f"Heartbeat Server (UDP) is listening on {master_host}:{master_udp_port}")
 
     # Start GameStats server (game statistics protocol)
     gamestats_server = None
     if app_config.gamestats.enabled:
         gamestats_host = app_config.gamestats.host
         gamestats_port = app_config.gamestats.port
-        print(f"INFO:     Starting GameStats server on {gamestats_host}:{gamestats_port}...")
+        logger.info(f"Starting GameStats server on {gamestats_host}:{gamestats_port}...")
         gamestats_server = await start_gamestats_server(gamestats_host, gamestats_port)
-        print(f"INFO:     GameStats server is listening on {gamestats_host}:{gamestats_port}")
+        logger.info(f"GameStats server is listening on {gamestats_host}:{gamestats_port}")
 
     yield
 
     # Shutdown - consistent pattern for all servers
-    print("INFO:     Application shutdown...")
+    logger.info("Application shutdown...")
 
     # Stop automatch bots
     if coordinator:
