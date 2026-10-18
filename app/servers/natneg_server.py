@@ -339,18 +339,11 @@ class NatNegServer(asyncio.DatagramProtocol):
 
         port_a, port_b = relay_ports
 
-        # Get relay server host (use the transport's local address)
-        relay_host = self.relay_server.host
-        if relay_host == "0.0.0.0" and self.transport:
-            # Use the natneg server's bound address as relay address
-            # This assumes relay and natneg are on the same machine
-            sockname = self.transport.get_extra_info("sockname")
-            if sockname and sockname[0] != "0.0.0.0":
-                relay_host = sockname[0]
-
-        # If still 0.0.0.0, we need a proper public IP
-        # For now, use the server's perspective of the connection
-        # In production, this should be configured
+        relay_host = self.relay_server.advertised_host
+        if relay_host is None:
+            logger.error("Relay server has not resolved its advertised host")
+            await self._send_connect_fallback_wan(session)
+            return
         if relay_host == "0.0.0.0":
             logger.warning(
                 "Session %08X: Relay host is 0.0.0.0, clients may not be able to connect",

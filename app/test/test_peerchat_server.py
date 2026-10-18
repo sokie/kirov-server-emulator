@@ -28,6 +28,7 @@ from app.models.peerchat_state import (
     part_channel,
 )
 from app.servers.peerchat_handlers import IRCFactory
+from app.servers.peerchat_relay import SlotPreparation, peerchat_relay
 from app.servers.peerchat_server import IRCClient
 
 # =============================================================================
@@ -1219,6 +1220,35 @@ class TestUTMCommand:
         # Should not raise
         other_written = self.other_writer.get_all_written()
         assert b"SL/" in other_written
+
+    @pytest.mark.asyncio
+    async def test_prepared_slot_list_keeps_non_slot_member_broadcast(self, monkeypatch):
+        """Slot players get prepared SL/ data while non-slot members get the original."""
+        non_slot_writer = MockStreamWriter()
+        non_slot_member = IRCClient(MockStreamReader([]), non_slot_writer, ("192.168.1.30", 12347))
+        non_slot_member.user.nickname = "non-slot-member"
+        non_slot_member.user.username = "NonSlotToken|123"
+        with irc_clients_lock:
+            irc_clients["non-slot-member"] = non_slot_member
+        channel = irc_channels[TEST_GSP_CHANNEL]
+        channel.users.add("non-slot-member")
+        channel.join_order = [TEST_NICKNAME, TEST_NICKNAME_2, "non-slot-member"]
+
+        prepared = SlotPreparation(
+            messages={
+                TEST_NICKNAME: "SL/ PREPARED=host",
+                TEST_NICKNAME_2: "SL/ PREPARED=guest",
+            },
+            host_requests=[],
+        )
+        monkeypatch.setattr(peerchat_relay, "prepare_slot_list", lambda *args: prepared)
+        message = IRCMessage.parse(f"UTM {TEST_GSP_CHANNEL} :SL/ ORIGINAL=1")
+
+        await IRCFactory.handle_utm(self.client, message)
+
+        assert b"SL/ PREPARED=host" in self.writer.get_all_written()
+        assert b"SL/ PREPARED=guest" in self.other_writer.get_all_written()
+        assert b"SL/ ORIGINAL=1" in non_slot_writer.get_all_written()
 
 
 # =============================================================================
