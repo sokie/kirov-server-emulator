@@ -1,71 +1,38 @@
 """
-Loads the saved RA3 reports (Report/ra3/*.bin and their .json) into the ra3_match history.
+Loads the saved RA3 reports (Report/ra3/*.bin and their .json) into the match history.
 """
-
-import glob
-import json
-import os
 
 from sqlmodel import Session
 
-from app.db.crud import extract_persona_from_ccid
 from app.db.ra3_career import record_match
+from app.db.saved_reports import saved_reports, submitter_personas
 from app.models.game_config import FACTION_MAPS, GAME_ID_RA
-from app.models.match_report import MatchReport
-from app.util.logging_helper import get_logger
-
-logger = get_logger(__name__)
-
-
-def _saved_reports(report_dir: str) -> dict[str, list[tuple[str, str, MatchReport]]]:
-    """csid -> [(save time, submitter ccid, report)] for every saved report."""
-    groups: dict[str, list[tuple[str, str, MatchReport]]] = {}
-    for bin_path in glob.glob(os.path.join(report_dir, "*.bin")):
-        json_path = bin_path[:-4] + ".json"
-        if not os.path.exists(json_path):
-            logger.info("RA3 import: %s has no .json with its csid; skipped", bin_path)
-            continue
-        with open(json_path, encoding="utf-8") as f:
-            meta = json.load(f)
-        with open(bin_path, "rb") as f:
-            try:
-                report = MatchReport.from_bytes(f.read(), game_id=GAME_ID_RA)
-            except Exception as e:
-                logger.info("RA3 import: %s does not parse (%s); skipped", bin_path, e)
-                continue
-        groups.setdefault(meta.get("csid", ""), []).append((meta.get("save_time", ""), meta.get("ccid", ""), report))
-    groups.pop("", None)
-    return groups
 
 
 def import_saved_reports(session: Session, report_dir: str) -> tuple[int, int]:
-    """Adds one ra3_match per saved csid that is not in the history yet, from its first authoritative
-    report. Does not fold, so run rebuild_careers afterwards. Returns (added, skipped).
+    """
+    Adds one match_history row for each saved csid that is not in the history yet, and returns (added, skipped).
 
-    A roster GUID the server did not mint gets the persona of the client that lists it first.
+    The match comes from its first authoritative report. The matches are not folded, so run rebuild_careers
+    afterwards.
     """
     added = skipped = 0
-    for csid, reports in sorted(_saved_reports(report_dir).items(), key=lambda item: min(r[0] for r in item[1])):
-        reports.sort(key=lambda r: r[0])
-        persona_of: dict[str, int] = {}
-        for _time, ccid, report in reports:
-            submitter = extract_persona_from_ccid(ccid) if ccid else None
-            if submitter and report.roster_section:
-                persona_of[str(report.roster_section[0].player_id)] = submitter
-        base = next((r for _t, _c, r in reports if r.flags & 1), reports[0][2])
+    for csid, reports in saved_reports(report_dir, GAME_ID_RA, "RA3").items():
+        personas = submitter_personas(reports)
+        base = next((saved.report for saved in reports if saved.report.is_authoritative), reports[0].report)
 
         players = []
-        for i, p in enumerate(base.get_player_list()):
+        for index, player in enumerate(base.get_player_list()):
             players.append(
                 {
-                    "persona_id": p.persona_id or persona_of.get(p.full_id),
-                    "full_id": p.full_id,
-                    "faction": FACTION_MAPS[GAME_ID_RA].get(p.faction, ""),
-                    "result": p.result,
-                    "counts": base.get_ra3_counts(i),
+                    "persona_id": player.persona_id or personas.get(player.full_id),
+                    "full_id": player.full_id,
+                    "faction": FACTION_MAPS[GAME_ID_RA].get(player.faction, ""),
+                    "result": player.result,
+                    "counts": base.get_ra3_counts(index),
                 }
             )
-        if sum(1 for p in players if p["persona_id"]) < 2:
+        if len([player for player in players if player["persona_id"]]) < 2:
             skipped += 1
             continue
         match = record_match(

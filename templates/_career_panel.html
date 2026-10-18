@@ -1,0 +1,173 @@
+{# The career tab of one SAGE game: overview cards, modes, every lifetime stat and the factions. #}
+
+{% macro win_percent(value, matches) -%}
+{%- if matches > 0 -%}
+<span class="{% if value >= 60 %}text-success{% elif value >= 40 %}text-warning{% else %}text-danger{% endif %}">{{ value }}%</span>
+{%- else -%}
+<span class="text-muted">&mdash;</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro count(value, style) -%}
+{%- if value > 0 %}<span class="{{ style }}">{{ value }}</span>{% else %}0{% endif -%}
+{%- endmacro %}
+
+{% macro card(value, label, style="") %}
+<div class="col-6 col-md-3">
+    <div class="card text-center">
+        <div class="card-body py-3">
+            <div class="fs-5 fw-bold {{ style }}">{{ value }}</div>
+            <div class="text-secondary small">{{ label }}</div>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro career_panel(p, game_name, icon) %}
+{% if p %}
+
+{# Overview #}
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <div class="fs-4 fw-bold">
+                    <span class="badge bg-dark border border-secondary fs-6 px-3 py-2">{{ p.best_elo }}</span>
+                </div>
+                <div class="text-secondary small mt-1">Best ELO</div>
+            </div>
+        </div>
+    </div>
+    {{ card(p.score ~ " (rank " ~ p.rank ~ ")", "Score") }}
+    {{ card(p.total.wins, "Wins", "text-success") }}
+    {{ card(p.total.losses, "Losses", "text-danger") }}
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <div class="fs-5 fw-bold">{{ win_percent(p.total.win_percent, p.total.matches) }}</div>
+                <div class="text-secondary small">Win Rate</div>
+            </div>
+        </div>
+    </div>
+    {{ card(p.total.matches, "Matches") }}
+    {{ card(p.time_played, "Play Time") }}
+    {{ card(p.avg_game_length, "Average Match") }}
+</div>
+
+{# Modes #}
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="card-title mb-3"><i class="bi bi-trophy-fill me-2"></i>Game Modes</h6>
+        <div class="table-responsive">
+            <table class="table table-dark table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Mode</th>
+                        <th class="text-center">ELO</th>
+                        <th class="text-center">Matches</th>
+                        <th class="text-center">Wins</th>
+                        <th class="text-center">Losses</th>
+                        <th class="text-center">Win%</th>
+                        <th class="text-center d-none d-sm-table-cell">W/L</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in p.modes %}
+                    <tr class="{% if loop.first %}fw-bold{% elif m.matches == 0 %}text-muted{% endif %}">
+                        <td>{{ m.label }}</td>
+                        <td class="text-center">
+                            {% if m.elo is defined %}<span class="badge bg-dark border border-secondary">{{ m.elo }}</span>{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+                        </td>
+                        <td class="text-center">{{ m.matches }}</td>
+                        <td class="text-center">{{ count(m.wins, "text-success") }}</td>
+                        <td class="text-center">{{ count(m.losses, "text-danger") }}</td>
+                        <td class="text-center">{{ win_percent(m.win_percent, m.matches) }}</td>
+                        <td class="text-center d-none d-sm-table-cell">{{ m.win_loss_ratio }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# Every lifetime stat #}
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="card-title mb-3"><i class="bi bi-list-columns-reverse me-2"></i>Lifetime Stats</h6>
+        <div class="table-responsive">
+            <table class="table table-dark table-sm table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Stat</th>
+                        {% for label in p.mode_labels %}
+                        <th class="text-end {% if loop.first %}fw-bold{% endif %}">{{ label }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in p.stats %}
+                    <tr>
+                        <td class="text-secondary">{{ s.label }}</td>
+                        {% for value in s["values"] %}
+                        <td class="text-end {% if loop.first %}fw-bold{% endif %}">{{ value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# Factions #}
+<div class="card">
+    <div class="card-body">
+        <h6 class="card-title mb-3"><i class="bi bi-bar-chart-fill me-2"></i>Factions</h6>
+        <div class="table-responsive">
+            <table class="table table-dark table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Faction</th>
+                        <th class="text-center">Matches</th>
+                        <th class="text-center">Wins</th>
+                        <th class="text-center">Losses</th>
+                        <th class="text-center">Win%</th>
+                        <th class="text-center d-none d-sm-table-cell">W/L</th>
+                        <th class="text-center d-none d-md-table-cell">Ranked 1v1</th>
+                        <th class="text-center d-none d-md-table-cell">Ranked 2v2</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in p.factions %}
+                    <tr class="{% if f.parent %}fw-bold{% elif f.matches == 0 %}text-muted{% endif %}">
+                        <td>
+                            <span class="badge bg-secondary bg-opacity-25 border border-secondary">{{ f.name }}</span>
+                        </td>
+                        <td class="text-center">{{ f.matches }}</td>
+                        <td class="text-center">{{ count(f.wins, "text-success") }}</td>
+                        <td class="text-center">{{ count(f.losses, "text-danger") }}</td>
+                        <td class="text-center">{{ win_percent(f.win_percent, f.matches) }}</td>
+                        <td class="text-center d-none d-sm-table-cell">{{ f.win_loss_ratio }}</td>
+                        <td class="text-center d-none d-md-table-cell">{{ f.modes.ranked_1v1.wins }}-{{ f.modes.ranked_1v1.losses }}</td>
+                        <td class="text-center d-none d-md-table-cell">{{ f.modes.ranked_2v2.wins }}-{{ f.modes.ranked_2v2.losses }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi {{ icon }} fs-1 text-secondary d-block mb-3"></i>
+        <h5 class="text-secondary">No {{ game_name }} Stats</h5>
+        <p class="text-muted">This player hasn't played any {{ game_name }} matches yet.</p>
+    </div>
+</div>
+{% endif %}
+{% endmacro %}
