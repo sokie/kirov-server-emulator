@@ -30,9 +30,9 @@ from app.config.app_settings import app_config
 from app.db.crud import (
     DEFAULT_GAME_ID,
     create_or_update_generals_stats,
+    find_preauth_ticket,
     get_generals_player_stats,
     get_player_stats,
-    validate_and_consume_preauth_ticket,
 )
 from app.db.database import create_session
 from app.models.fesl_types import GAMESPY_GAME_KEY_MAP
@@ -326,7 +326,7 @@ class GameStatsServer(asyncio.Protocol):
             return self._format_error("Invalid response", request_id)
 
         self.authenticated_game = True
-        self.gamename = gamename
+        self.gamename = gamename.lower()
 
         # Generate a session key
         sesskey = str(secrets.randbelow(999999999) + 100000000)
@@ -374,7 +374,7 @@ class GameStatsServer(asyncio.Protocol):
 
         if authtoken:
             # CNC3/RA3 path: validate using FESL pre-auth ticket
-            result = validate_and_consume_preauth_ticket(self.db_session, authtoken)
+            result = find_preauth_ticket(self.db_session, authtoken)
 
             if not result:
                 logger.debug("GameStats: Invalid or expired authtoken")
@@ -417,6 +417,9 @@ class GameStatsServer(asyncio.Protocol):
         """Check if the current game is Generals or Zero Hour."""
         return self.gamename in ("ccgenerals", "ccgenzh")
 
+    def _is_bfme_game(self) -> bool:
+        return self.gamename == "lotrbme"
+
     def _handle_getpd(self, request_data: dict[str, str]) -> str:
         r"""
         Handle \getpd\ command - Get profile data.
@@ -446,7 +449,13 @@ class GameStatsServer(asyncio.Protocol):
 
         if self._is_generals_game():
             return self._handle_getpd_generals(pid, lid, request_id, request_data)
+        if self._is_bfme_game():
+            return self._handle_getpd_bfme(pid, lid)
         return self._handle_getpd_json(pid, lid, request_id, request_data)
+
+    def _handle_getpd_bfme(self, pid: int, lid: str) -> str:
+        """Returns empty profile data for BFME, which has no stored stats."""
+        return f"\\getpdr\\1\\lid\\{lid}\\pid\\{pid}\\mod\\0\\length\\0\\data\\\\final\\"
 
     def _handle_getpd_json(self, pid: int, lid: str, request_id: str, request_data: dict[str, str]) -> str:
         """Handle getpd for CNC3/RA3/KW (JSON format).
@@ -573,6 +582,9 @@ class GameStatsServer(asyncio.Protocol):
 
         if self._is_generals_game():
             return self._handle_setpd_generals(pid, data_str, lid, request_id)
+        if self._is_bfme_game():
+            logger.info("GameStats: setpd from pid=%s not stored; BFME stats are not kept", pid)
+            return self._format_response({"setpdr": "1", "lid": lid, "pid": str(pid), "mod": "1"})
         return self._handle_setpd_json(pid, data_str, lid, request_id)
 
     def _handle_setpd_json(self, pid: int, data_str: str, lid: str, request_id: str) -> str:

@@ -121,6 +121,7 @@ GAME_FRIENDLY_NAMES: dict[str, str] = {
     "cnc3ep1pc": "Kane's Wrath",
     "ccgenerals": "Generals",
     "ccgenzh": "Generals Zero Hour",
+    "lotrbme": "Battle for Middle-earth",
 }
 
 # Match type rules per game family: rule_number -> (display_name, icon)

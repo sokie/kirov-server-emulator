@@ -13,6 +13,7 @@ import time
 
 from app.models.fesl_types import (
     CLIENT_STRING_MAP,
+    GAMES_WITHOUT_MEMCHECK,
     AddSubAccountClient,
     FeslBaseModel,
     FeslErrorResponse,
@@ -21,7 +22,6 @@ from app.models.fesl_types import (
     GameSpyPreAuthClient,
     GetSubAccountsClient,
     HelloClient,
-    HelloServer,
     LoginClient,
     LoginSubAccountClient,
     MemcheckClient,
@@ -30,7 +30,6 @@ from app.models.fesl_types import (
     NuGetPersonasClient,
     NuLoginClient,
     NuLoginPersonaClient,
-    NuLoginServer,
     client_data_var,
 )
 from app.servers.fesl_handlers import FeslHandlers
@@ -79,35 +78,28 @@ def get_model_for_txn(data_dict: dict, header: FeslHeader):
         else:
             return MemcheckServer.from_dict(data_dict)
 
-    if header.fesl_type == FeslType.TAG_SINGLE_SERVER or header.fesl_type == FeslType.TAG_MULTI_SERVER:
-        match txn_type:
-            case "Hello":
-                return HelloServer.from_dict(data_dict)
-            case "NuLogin":
-                return NuLoginServer.from_dict(data_dict)
-
-    elif header.fesl_type == FeslType.TAG_SINGLE_CLIENT or header.fesl_type == FeslType.TAG_MULTI_CLIENT:
-        match txn_type:
-            case "Hello":
-                return HelloClient.from_dict(data_dict)
-            case "NuLogin":
-                return NuLoginClient.from_dict(data_dict)
-            case "Login":
-                return LoginClient.from_dict(data_dict)
-            case "NuGetPersonas":
-                return NuGetPersonasClient.from_dict(data_dict)
-            case "GetSubAccounts":
-                return GetSubAccountsClient.from_dict(data_dict)
-            case "NuLoginPersona":
-                return NuLoginPersonaClient.from_dict(data_dict)
-            case "LoginSubAccount":
-                return LoginSubAccountClient.from_dict(data_dict)
-            case "NuAddPersona":
-                return NuAddPersonaClient.from_dict(data_dict)
-            case "AddSubAccount":
-                return AddSubAccountClient.from_dict(data_dict)
-            case "GameSpyPreAuth":
-                return GameSpyPreAuthClient.from_dict(data_dict)
+    # Every TXN here is a client request. BFME tags its requests 0x80, the reply tag, so the tag cannot pick the model.
+    match txn_type:
+        case "Hello":
+            return HelloClient.from_dict(data_dict)
+        case "NuLogin":
+            return NuLoginClient.from_dict(data_dict)
+        case "Login":
+            return LoginClient.from_dict(data_dict)
+        case "NuGetPersonas":
+            return NuGetPersonasClient.from_dict(data_dict)
+        case "GetSubAccounts":
+            return GetSubAccountsClient.from_dict(data_dict)
+        case "NuLoginPersona":
+            return NuLoginPersonaClient.from_dict(data_dict)
+        case "LoginSubAccount":
+            return LoginSubAccountClient.from_dict(data_dict)
+        case "NuAddPersona":
+            return NuAddPersonaClient.from_dict(data_dict)
+        case "AddSubAccount":
+            return AddSubAccountClient.from_dict(data_dict)
+        case "GameSpyPreAuth":
+            return GameSpyPreAuthClient.from_dict(data_dict)
 
     # Return the dictionary if no specific model is found
     return data_dict
@@ -348,6 +340,8 @@ def memcheck_sender(loop: asyncio.AbstractEventLoop):
                 clients_to_remove: list[FeslServer] = []
 
                 for peername, client in list(fesl_clients.items()):
+                    if client.active_game in GAMES_WITHOUT_MEMCHECK:
+                        continue
                     try:
                         # Send MemCheck using thread-safe method
                         future = asyncio.run_coroutine_threadsafe(_send_memcheck_async(client), loop)

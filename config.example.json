@@ -48,7 +48,8 @@
     "enabled": true,
     "games": {
       "ra3": true,
-      "generals_zh": true
+      "generals_zh": true,
+      "bfme": true
     }
   },
   "game": {
@@ -57,7 +58,8 @@
       "cnc3ep1pc": "YOUR_KW_GAME_KEY",
       "cncra3pc": "YOUR_RA3_GAME_KEY",
       "ccgenerals": "YOUR_GENERALS_GAME_KEY",
-      "ccgenzh": "YOUR_ZEROHOUR_GAME_KEY"
+      "ccgenzh": "YOUR_ZEROHOUR_GAME_KEY",
+      "lotrbme": "YOUR_BFME_GAME_KEY"
     }
   },
   "logging": {

@@ -379,7 +379,7 @@ class TestHandleAuthp:
         server, _ = _make_server("redalert3pc")
         mock_ticket_result = (100, 200, "ticket_data")
 
-        with patch("app.servers.gamestats_server.validate_and_consume_preauth_ticket") as mock_v:
+        with patch("app.servers.gamestats_server.find_preauth_ticket") as mock_v:
             mock_v.return_value = mock_ticket_result
             result = server._handle_authp({"authtoken": "valid_token", "lid": "1", "id": "1"})
 
@@ -390,7 +390,7 @@ class TestHandleAuthp:
     def test_ra3_authtoken_path_invalid_token(self):
         server, _ = _make_server("redalert3pc")
 
-        with patch("app.servers.gamestats_server.validate_and_consume_preauth_ticket") as mock_v:
+        with patch("app.servers.gamestats_server.find_preauth_ticket") as mock_v:
             mock_v.return_value = None
             result = server._handle_authp({"authtoken": "bad_token", "lid": "1", "id": "1"})
 
