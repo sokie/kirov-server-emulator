@@ -28,6 +28,7 @@ This project aims to:
 - [x] **GP Server** - GameSpy Presence server for buddy system, status, and messaging
 - [x] **Peerchat Server** - IRC-based lobby, chat, and game session coordination
 - [x] **NAT Negotiation Server** - UDP hole punching for peer-to-peer connections
+- [x] **Mangler Server** - SAGE NAT classification and public-port prediction
 - [x] **Master Server** - Game server listing and room discovery (TCP)
 - [x] **Heartbeat Server** - Game session registration and keepalive (UDP)
 - [x] **GameStats Server** - Game statistics reporting and retrieval
@@ -143,6 +144,7 @@ This starts:
 | Peerchat IRC | 6667 | TCP | Lobby and chat |
 | GP Server | 29900 | TCP | Buddy system and presence |
 | NAT Negotiation | 27901 | UDP | P2P hole punching |
+| Mangler | 4321-4324 | UDP | CNC3/Generals NAT classification and port prediction |
 | NAT Relay | 50000-59999 | UDP | Relay fallback when direct P2P fails (`relay.host` must be your public IP) |
 | Master Server | 28910 | TCP | Room/game list queries |
 | Heartbeat Server | 27900 | UDP | Game session registration |
@@ -227,8 +229,13 @@ Detailed protocol documentation is available in the `docs/` directory:
 5. Client connects to GP Server for buddy system
 6. Client queries Master Server (TCP :28910) for room/game lists
 7. Game hosts register via Heartbeat Server (UDP :27900)
-8. During game start, clients use NAT Negotiation for P2P setup
-9. GameStats server handles post-match statistics reporting
+8. Clients use the Mangler Server to classify NAT behavior and predict public UDP ports when needed
+9. During game start, clients use NAT Negotiation or Peerchat NAT messages for P2P setup
+10. GameStats server handles post-match statistics reporting
+
+For full mangler classification, `mangler1` through `mangler3` must resolve to at least three distinct IPv4 addresses that reach UDP 4321 on this server. Binding the service to `0.0.0.0` accepts traffic for multiple IP aliases, but DNS and those aliases must be configured separately.
+
+Set `mangler.blitz_enabled` to `false` to disable Blitz replies. In that mode, the mangler only binds its primary UDP port instead of four adjacent ports.
 
 ## Contributing
 

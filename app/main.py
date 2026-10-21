@@ -16,6 +16,7 @@ from app.servers.automatch.games import ALL_GAME_FACTORIES
 from app.servers.fesl_server import start_fesl_server
 from app.servers.gamestats_server import start_gamestats_server
 from app.servers.gp_server import start_gp_server
+from app.servers.mangler_server import start_mangler_server
 from app.servers.natneg_server import start_natneg_server
 from app.servers.peerchat_server import start_irc_server
 from app.servers.query_master_tcp import start_master_server, stop_master_maintenance
@@ -111,6 +112,21 @@ async def lifespan(app: FastAPI):
         )
         logger.info(f"NAT Negotiation server is listening on {natneg_host}:{natneg_port}")
 
+    # Start the SAGE mangler service used by CNC3 and Generals NAT detection
+    mangler_server = None
+    if app_config.mangler.enabled:
+        mangler_host = app_config.mangler.host
+        mangler_port = app_config.mangler.port
+        mangler_blitz = app_config.mangler.blitz_enabled
+        mangler_ports = f"{mangler_port}-{mangler_port + 3}" if mangler_blitz else str(mangler_port)
+        print(f"INFO:     Starting Mangler server on {mangler_host}:{mangler_ports}...")
+        mangler_server = await start_mangler_server(
+            host=mangler_host,
+            port=mangler_port,
+            blitz_enabled=mangler_blitz,
+        )
+        print(f"INFO:     Mangler server is listening on {mangler_host}:{mangler_ports}")
+
     # Start Master Server (GameSpy server/room list queries)
     master_server = None
     heartbeat_transport = None
@@ -162,6 +178,9 @@ async def lifespan(app: FastAPI):
         natneg_transport.close()
     if heartbeat_transport:
         heartbeat_transport.close()
+
+    if mangler_server:
+        mangler_server.stop()
 
     # Stop relay server
     if relay_server:
