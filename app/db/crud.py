@@ -342,6 +342,23 @@ def validate_and_consume_preauth_ticket(session: Session, ticket: str) -> tuple[
     return preauth.user_id, preauth.persona_id, preauth
 
 
+def find_preauth_ticket(session: Session, ticket: str) -> tuple[int, int, GameSpyPreAuthTicket] | None:
+    """
+    Finds an unexpired pre-auth ticket without marking it as used.
+
+    Returns (user_id, persona_id, ticket) if valid, None otherwise. GameStats gets the same ticket the GameSpy
+    login already used.
+    """
+    stmt = select(GameSpyPreAuthTicket).where(
+        GameSpyPreAuthTicket.ticket == ticket,
+        GameSpyPreAuthTicket.expires_at > datetime.utcnow(),
+    )
+    preauth = session.exec(stmt).first()
+    if not preauth:
+        return None
+    return preauth.user_id, preauth.persona_id, preauth
+
+
 def parse_ticket(ticket: str) -> tuple[int, int, str] | None:
     """
     Parses a ticket to extract user_id, persona_id, and secret_token.

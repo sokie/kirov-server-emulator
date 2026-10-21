@@ -1,0 +1,76 @@
+<QMBot>
+  ID=17461196
+</QMBot>
+
+<QMMaps>
+  map mp anfalas
+  map mp anorien
+  map mp belfalas
+  map mp black gate
+  map mp brown lands
+  map mp cair andros
+  map mp central ithilien
+  map mp crossroads
+  map mp dagorlad
+  map mp dead marshes
+  map mp druadan forest
+  map mp dunharrow
+  map mp east emnet
+  map mp east rohan
+  map mp eastfold
+  map mp eaves of fangorn
+  map mp emyn arnen
+  map mp emyn muil
+  map mp enedwaith
+  map mp fangorn
+  map mp fords of isen
+  map mp gap of rohan
+  map mp halifirien
+  map mp harlond
+  map mp harondor
+  map mp lebennin
+  map mp mirkwood
+  map mp mouths of entwash
+  map mp mt doom
+  map mp near harad
+  map mp northern ithilien
+  map mp nurn
+  map mp osgiliath
+  map mp pelargir
+  map mp rhun
+  map mp rohan
+  map mp southern ithilien
+  map mp west emnet
+  map mp westfold
+  map mp wold
+</QMMaps>
+
+<Manglers>
+  mangler1.generals.ea.com:4321
+  mangler2.generals.ea.com:4321
+  mangler3.generals.ea.com:4321
+  mangler4.generals.ea.com:4321
+</Manglers>
+
+<PingServers>
+  211.233.72.38
+  211.13.230.102
+  159.153.224.10
+  159.153.176.3
+  211.72.252.17
+  12.161.70.198
+</PingServers>
+
+<PingDuration>
+  reps = 1
+  timeout = 1000
+  low = 100
+  med = 400
+</PingDuration>
+
+<Ladders>
+</Ladders>
+
+<Custom>
+  restricted = 1
+</Custom>

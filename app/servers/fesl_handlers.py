@@ -24,6 +24,7 @@ from app.db.crud import (
 from app.db.database import get_session
 from app.models.fesl_types import (
     GAME_FEATURE_ID_MAP,
+    GAMES_WITHOUT_MEMCHECK,
     SUBDOMAIN_MAP,
     AddSubAccountClient,
     DomainPartition,
@@ -100,6 +101,9 @@ class FeslHandlers:
             curTime=time_buff,
             domainPartition=domain_partition,
         )
+
+        if active_game in GAMES_WITHOUT_MEMCHECK:
+            return [hello_response]
 
         # Order matters: Hello first (uses client's packet number), then MemCheck (server-initiated, packet 0)
         return [hello_response, memcheck_response]

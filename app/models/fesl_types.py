@@ -9,6 +9,7 @@ class GameType:
     CNC3 = "cnc3"
     KANESWRATH = "cnc3ep1"
     RA3 = "cncra3"
+    BFME = "bfme"
 
 
 # clientString -> GameType
@@ -16,7 +17,11 @@ CLIENT_STRING_MAP = {
     "cnc3": GameType.CNC3,
     "cnc3-ep1-pc": GameType.KANESWRATH,
     "cncra3-pc": GameType.RA3,
+    "bfme": GameType.BFME,
 }
+
+# The FESL client of these games has no MemCheck command.
+GAMES_WITHOUT_MEMCHECK = {GameType.BFME}
 
 # GameType -> subDomain for Hello response
 SUBDOMAIN_MAP = {
@@ -30,6 +35,7 @@ GAME_FEATURE_ID_MAP = {
     GameType.CNC3: 2588,
     GameType.KANESWRATH: None,  # TODO: find KW gameFeatureId
     GameType.RA3: 6014,
+    GameType.BFME: None,
 }
 
 # GameType -> gamekeys config dict key
@@ -37,6 +43,7 @@ GAMEKEY_MAP = {
     GameType.CNC3: "cnc3pc",
     GameType.KANESWRATH: "cnc3ep1pc",
     GameType.RA3: "cncra3pc",
+    GameType.BFME: "lotrbme",
 }
 
 # GameSpy game name -> gamekeys config dict key
@@ -54,6 +61,7 @@ GAMESPY_GAME_KEY_MAP = {
     "cnc3ep1pc": "cnc3ep1pc",
     "ccgenerals": "ccgenerals",
     "ccgenzh": "ccgenzh",
+    "lotrbme": "lotrbme",
 }
 
 

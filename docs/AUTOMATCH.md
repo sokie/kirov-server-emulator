@@ -1,6 +1,6 @@
 # Automatch Protocol
 
-Automatch is the automated matchmaking system used by Red Alert 3 and Command & Conquer Generals / Zero Hour. It works via virtual IRC bots that sit in game channels on the Peerchat server. Players send search requests to the bot via `PRIVMSG`, and the bot responds with match results when compatible opponents are found.
+Automatch is the automated matchmaking system used by Red Alert 3, Command & Conquer Generals / Zero Hour and The Battle for Middle-earth. It works via virtual IRC bots that sit in game channels on the Peerchat server. Players send search requests to the bot via `PRIVMSG`, and the bot responds with match results when compatible opponents are found.
 
 Kane's Wrath and Tiberium Wars use no bot; see [Kane's Wrath and Tiberium Wars QuickMatch](#kanes-wrath-and-tiberium-wars-quickmatch).
 
@@ -12,6 +12,7 @@ Each game has a dedicated bot with a fixed IRC identity:
 |------|-------------|-------------|------------|----------------|
 | Red Alert 3 | `anpwcjnybr2008` | `XDqGfsuOsX\|167408418` | `#GSP!redalert3pc` | 10s |
 | Generals / ZH | `qmbot` | `X1fsaFv1DX\|17461195` | `#GPG!597`, `#GPG!392` | 2s |
+| Battle for Middle-earth | `bfmeqmbot` | `X1fsaFv1DX\|17461196` | `#GPG!662` | 2s |
 
 The bot registers in IRC state as a virtual client (no real socket) and joins its channels on server startup. It appears in NAMES lists and responds to WHO/GETCKEY like any other user.
 
@@ -263,6 +264,34 @@ For team games (NumPlayers 4, 6, or 8), the algorithm uses greedy team formation
 3. Find `N/2` players for team B where each has fitness > 0 with every member of team A
 4. Check map compatibility across all players
 5. If successful, send `MBOT:MATCHED`; otherwise try the next seed
+
+## Battle for Middle-earth QuickMatch
+
+The Battle for Middle-earth (`lotrbfme.exe` 1.03) uses the Generals matchbot protocol with these differences:
+
+- The game finds the bot by profile ID, not by nickname. It joins the group room named `QuickMatch`
+  (`#GPG!662`), lists the players in it, and takes the player whose profile ID is the `<QMBot>` ID in
+  `static/servserv/lotrbfme/config.txt`.
+- CINFO also carries `PingMax` and `CMD`.
+- `Points` is the player's ladder rank, and `PointsMin`/`PointsMax` are the ranks the player accepts: the rank
+  plus or minus an eighth of the ladder, as in Kane's Wrath. They are not point percentages. Without ladder data
+  the game sends `-1`, `2147483647` and `2147483647`. A rank below 1 counts as the top of the player's own
+  window, and two players meet when each rank lies in the other's window, or after a widen.
+- The bot matches only players with the same `EXE` and `INI` checksums, so players on different patches do not
+  meet.
+- `MBOT:MATCHED` has six fields per player: `{nick} {ip} {side} {color} {nat} {rank}`. The game reads six
+  tokens per player, so with five it reads the next player's nickname as the sixth field. `rank` is the
+  player's ladder rank on the loading screen; a value below 1 shows "Ladder rank unavailable". The bot sends
+  the player's `Points`.
+- The QuickMatch screen has no map choice. The pool is `<QMMaps>` in `config.txt`: the 40 official
+  `map mp ...` maps in `maps.big`. The game keeps the maps that it has and that hold exactly `NumPlayers`
+  players, and sets one `Maps` bit for each. `mapIdx` counts the same maps in `config.txt` order, so the pool
+  must only hold maps that every install has. The official maps give 9 maps for 1v1, 18 for 2v2, 6 for 3v3
+  and 4 for 4v4.
+- The game puts each player in a team by slot order: the first `NumPlayers / 2` players against the rest.
+- After the match the players negotiate NAT with each other through peerchat `NAT/` UTMs, as in Generals.
+- The game reads `MBOT:POOLSIZE` only from room messages, as `<ladder> <size>` pairs. The bot sends it in
+  private, so the game does not show the pool size. Generals reads it the same way.
 
 ## Kane's Wrath and Tiberium Wars QuickMatch
 

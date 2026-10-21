@@ -48,9 +48,12 @@ class GeneralsGameFactory(GameFactory):
             return None
         if not isinstance(player, GeneralsPlayer):
             return None
+        self._widen(player)
+        return "MBOT:WIDENINGSEARCH"
+
+    def _widen(self, player: GeneralsPlayer):
         player.widened = True
         player.map_bitset = "1" * len(player.map_bitset)
-        return "MBOT:WIDENINGSEARCH"
 
     def build_player(self, nickname: str, profile_id: int, infos: dict[str, str]) -> GeneralsPlayer:
         pseudo_pings: list[int] = []
@@ -89,8 +92,7 @@ class GeneralsGameFactory(GameFactory):
                 continue
             if player.time_to_widen > 0 and player.time_to_widen <= now:
                 player.time_to_widen = 0
-                player.map_bitset = "1" * len(player.map_bitset)
-                player.widened = True
+                self._widen(player)
                 messages.append((nick, "MBOT:WIDENINGSEARCH"))
         return messages
 
@@ -115,6 +117,9 @@ class GeneralsGameFactory(GameFactory):
 
         return results or None
 
+    def _fitness(self, p1: GeneralsPlayer, p2: GeneralsPlayer) -> float:
+        return _compute_fitness(p1, p2)
+
     def _match_1v1(self, pool: list[GeneralsPlayer]) -> tuple[list[BasePlayer], str] | None:
         if len(pool) < 2:
             return None
@@ -124,7 +129,7 @@ class GeneralsGameFactory(GameFactory):
 
         for i in range(len(pool)):
             for j in range(i + 1, len(pool)):
-                fitness = _compute_fitness(pool[i], pool[j])
+                fitness = self._fitness(pool[i], pool[j])
                 if fitness > best_fitness:
                     best_fitness = fitness
                     best_pair = (pool[i], pool[j])
@@ -151,7 +156,7 @@ class GeneralsGameFactory(GameFactory):
             for j in range(i + 1, len(pool)):
                 if len(team_a) >= team_size:
                     break
-                if _compute_fitness(pool[i], pool[j]) > 0:
+                if self._fitness(pool[i], pool[j]) > 0:
                     team_a.append(pool[j])
 
             if len(team_a) != team_size:
@@ -163,7 +168,7 @@ class GeneralsGameFactory(GameFactory):
                     continue
                 if len(team_b) >= team_size:
                     break
-                if all(_compute_fitness(a, candidate) > 0 for a in team_a):
+                if all(self._fitness(a, candidate) > 0 for a in team_a):
                     team_b.append(candidate)
 
             if len(team_b) != team_size:

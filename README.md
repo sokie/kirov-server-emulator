@@ -9,6 +9,7 @@ An open-source server emulator for the Command & Conquer series, implementing th
 - **Command & Conquer: Red Alert 3** (RA3)
 - **Command & Conquer: Generals**
 - **Command & Conquer: Generals Zero Hour**
+- **The Lord of the Rings: The Battle for Middle-earth** (BFME)
 
 ## Project Goals
 
@@ -96,7 +97,8 @@ Then edit `config.json` and set your per-game keys. Each supported game requires
       "cnc3ep1pc": "YOUR_KW_GAME_KEY",
       "cncra3pc": "YOUR_RA3_GAME_KEY",
       "ccgenerals": "YOUR_GENERALS_GAME_KEY",
-      "ccgenzh": "YOUR_ZEROHOUR_GAME_KEY"
+      "ccgenzh": "YOUR_ZEROHOUR_GAME_KEY",
+      "lotrbme": "YOUR_BFME_GAME_KEY"
     }
   }
 }

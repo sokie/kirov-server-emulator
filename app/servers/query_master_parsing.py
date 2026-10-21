@@ -732,6 +732,31 @@ def _create_kw_rooms() -> list:
     ]
 
 
+def _create_bfme_rooms() -> list:
+    return [
+        RoomEntry(room_id=662, hostname="QuickMatch", room_type=0),
+        RoomEntry(room_id=660, hostname="LobbyRoom1", room_type=1),
+        RoomEntry(room_id=661, hostname="LobbyRoom2", room_type=1),
+        RoomEntry(room_id=1002, hostname="LobbyRoom3", room_type=1),
+        RoomEntry(room_id=1003, hostname="LobbyRoom4", room_type=1),
+        RoomEntry(room_id=1004, hostname="LobbyRoom5", room_type=1),
+        RoomEntry(room_id=1005, hostname="LobbyRoom6", room_type=1),
+        RoomEntry(room_id=1006, hostname="LobbyRoom7", room_type=1),
+        RoomEntry(room_id=1007, hostname="LobbyRoom8", room_type=1),
+        RoomEntry(room_id=1008, hostname="LobbyRoom9", room_type=1),
+        RoomEntry(room_id=1009, hostname="ChatRoom1", room_type=2),
+        RoomEntry(room_id=1010, hostname="ChatRoom2", room_type=2),
+        RoomEntry(room_id=1011, hostname="ChatRoom3", room_type=2),
+        RoomEntry(room_id=1012, hostname="ChatRoom4", room_type=2),
+        RoomEntry(room_id=1013, hostname="ChatRoom5", room_type=2),
+        RoomEntry(room_id=1014, hostname="ChatRoom6", room_type=2),
+        RoomEntry(room_id=1015, hostname="ChatRoom7", room_type=2),
+        RoomEntry(room_id=1016, hostname="ChatRoom8", room_type=2),
+        RoomEntry(room_id=1017, hostname="ChatRoom9", room_type=2),
+        RoomEntry(room_id=1018, hostname="ChatRoom10", room_type=2),
+    ]
+
+
 def _create_ra3_rooms() -> list:
     return [
         RoomEntry(room_id=2177, hostname="ChatRoom1", room_type=1),
@@ -795,6 +820,7 @@ def create_rooms_by_game() -> dict[str, list]:
         "cc3tibwars": _create_cnc3_rooms(),
         "cc3xp1": _create_kw_rooms(),
         "redalert3pc": _create_ra3_rooms(),
+        "lotrbme": _create_bfme_rooms(),
     }
 
 
